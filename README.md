@@ -1,58 +1,262 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# 泰拉时间线 · Terra Unified Timeline
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> 《明日方舟》统一事件时间表。整合主线、支线、活动剧情与官方设定集中记录的全部事件，
+> 按游戏内纪元（泰拉历）排序呈现，支持 AI 辅助梳理与多人协作校对。
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 这个项目要解决什么问题
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+《明日方舟》的世界观记录分散在主线章节、活动剧情、干员档案、官方设定集与访谈中，
+且**纪年粒度极不统一**——「1096年12月23日」「1097年冬」「1098年」「纪元前（年表未载）」
+会同时出现在同一份年表里，官方明写、设定集推断、社区考据彼此混杂，还经常互相矛盾。
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+现有wiki大多以「页面」为单位组织内容，于是「这条事件发生在什么时候」「这两条谁先发生」
+这类问题只能靠人翻资料去拼。本项目把时间线当作**一等公民**：
 
-## Learning Laravel
+- 时间是结构化字段，可排序、可检索、可做一致性检查
+- 每条时间都带**可信度**（已确证 / 推断 / 存疑），不把推断伪装成事实
+- AI 负责从原文里批量抽出候选，人负责判定——**AI 永远不能直接写进时间线**
+- 多人同时校对同一条目时，**不丢任何一方的修改**
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## 功能
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| 能力 | 说明 |
+| --- | --- |
+| **统一时间线** | 主线 / 支线 / 活动 / 设定集事件按泰拉历排序，纪元色带分组 |
+| **结构化条目** | 发生时间（游戏内纪元）、标题、简要描述、出处来源、相关人物与阵营 |
+| **多维检索** | 按时间区间（含跨年季节）、纪元、出处、载体类型、阵营（含子阵营）、人物、标签、状态、可信度筛选 + 全文搜索 |
+| **AI 辅助梳理** | 从剧情原文 / 设定集段落批量抽取事件候选，四层校验后进入待审队列 |
+| **人工增删改** | 完整 CRUD，含关系编辑、版本回滚、软删除与恢复 |
+| **标注与纠错** | 任何人（含未登录访客）可提交备注 / 纠错 / 存疑 / 复核，无需编辑权限 |
+| **协作安全** | 乐观锁 + 字段级三方合并 + 编辑租约 + 全量版本链 |
+| **一致性巡检** | 因果倒置、时代错位、出处矛盾、疑似重复、锚点失效，收敛式异常收件箱 |
+| **编辑权限** | 四级角色 + 出处归属 + 条目冻结/锁定 |
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## 快速开始
 
-## Agentic Development
+### 方式 A：Docker（本项目当前使用的环境）
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+项目在 `php_8.4.8` 容器中运行，MySQL 位于宿主机：
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+docker exec -w /Arknight php_8.4.8 php artisan migrate:fresh --seed
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+启动后访问 nginx 已配好的虚拟主机：**http://arknight.lancelot.com**
 
-## Contributing
+> **关于 `DB_HOST`**：代码跑在容器里，容器内的 `127.0.0.1` 是容器自身。
+> 因此 `.env` 必须写 `DB_HOST=host.docker.internal` 才能连到宿主机的 MySQL。
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### 方式 B：本机 PHP
 
-## Code of Conduct
+需要 PHP 8.3+ 与 Composer。**应用本身不需要 Node**——视图直接引用 `public/assets/` 下的
+手写 CSS/JS，没有 `@vite` 依赖。
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+composer install
+cp .env.example .env && php artisan key:generate
+php artisan migrate:fresh --seed
+php artisan serve
+```
 
-## Security Vulnerabilities
+> `composer setup` 会把上面的步骤串起来，但它末尾还包含 `npm run build`（Laravel 骨架自带，
+> 本项目未使用 Vite）。没有 Node 时忽略该步即可，或直接按上面四条命令执行。
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### 演示账号
+
+| 账号 | 密码 | 角色 |
+| --- | --- | --- |
+| `admin@terra.local` | `terra-admin` | 管理员 |
+| `reviewer@terra.local` | `terra-reviewer` | 审核员 |
+| `editor@terra.local` | `terra-editor` | 编辑者 |
+| `viewer@terra.local` | `terra-viewer` | 访客 |
+
+浏览时间线无需登录，直接打开首页即可。
+
+## 常用命令
+
+```bash
+php artisan migrate:fresh --seed          # 重建数据库 + 灌入起始语料
+php artisan test                          # 运行测试（95 项 / 270 断言）
+./vendor/bin/pint                         # 代码风格（Laravel 官方风格）
+
+php artisan timeline:scan                 # 全量一致性体检，结果汇入异常收件箱
+php artisan timeline:scan --rebuild       # 同时按纪元区间补全未归属条目的 era_id
+php artisan timeline:purge-locks          # 回收过期的编辑租约（定时任务已自动执行）
+```
+
+定时任务（见 `routes/console.php`）：`timeline:scan` 每小时、`timeline:purge-locks` 每 15 分钟，均带 `withoutOverlapping`。
+
+## 页面
+
+| 路径 | 作用 |
+| --- | --- |
+| `/` | 时间线。左侧多维筛选 + 纪元分组条目流 + 右侧条目抽屉（查看 / 编辑 / 标注 / 版本） |
+| `/sources` | 出处与语料库。录入剧情原文——这是 AI 抽取与引用定位的地基 |
+| `/sources/{slug}` | 单个出处：原文编辑 + 触发 AI 梳理 + 该出处条目清单 |
+| `/proposals` | AI 审核台。触发梳理、逐条核验引文、采纳 / 合并 / 驳回 |
+| `/anomalies` | 一致性收件箱。巡检产出的异常，可标记解决 / 忽略 / 全量体检 |
+| `/login` | 登录 |
+
+## 核心设计
+
+完整说明见 **[`docs/DESIGN.md`](docs/DESIGN.md)**。这里是四个最关键的决策。
+
+### 1. 时间用「区间 + 精度 + 可信度」，不用 datetime
+
+泰拉历不是可用历法。把「1097年冬」存成 `1097-12-01` 是**伪造精度**：看似整齐，
+但判断「1098年1月是否属于1097年冬」时会直接出错，而且用户无法察觉。
+
+```
+date_display          原始纪年文本，展示层只认它，绝不从索引反推
+start_index/end_index 网格索引 = year*372 + (month-1)*31 + (day-1)，单调递增
+date_precision        day / month / season / year / range / relative / unknown
+date_confidence       confirmed / inferred / disputed / unknown
+```
+
+- 精度不足只体现为「区间更宽」，语义始终正确（冬季跨年 → 月份允许 > 12）
+- 时间筛选按**区间重叠**而非包含，这是「1097年冬」能被「1098年1月」命中的前提
+- 精度为 `unknown` 的条目进入独立的「时间未定」泳道，不污染有序时间序列
+
+### 2. AI 只能写提案，不能写时间线
+
+> **铁律：AI 的任何输出都落在 `ai_proposals`，`events` 表只由人工放行后写入。**
+
+幻觉在产品层的表现不是报错，而是时间线上多出一条「看起来完全合理」的假事件，
+比缺失更难被发现。因此产出必须经过四层校验：
+
+| 层 | 内容 | 不通过的后果 |
+| --- | --- | --- |
+| L1 结构 | 必填字段非空、枚举合法 | 直接丢弃 |
+| L2 时间可解析 | `date_display` 必须解析出网格索引 | 禁止直接入库 |
+| L3 **出处可定位** | 每条引文须能在原文中定位（容忍空白标点，**不容忍改写**） | 硬闸门 |
+| L4 一致性 | 时代错位 / 疑似重复 / 锚点失效 | 阻断级禁止入库 |
+
+闸门分两级，防止「顺手改个字段就把幻觉内容放进去」：
+
+- **硬闸门**——缺可定位出处。不可被 `overrides` 绕过，必须显式确认，且审核记录留下免责痕迹
+- **软闸门**——时间不可解析、一致性阻断。可补正字段后放行
+
+采纳后 revision 的 `origin = ai`、`user_id = 审核人`，「谁为这条 AI 内容负责」永远有答案。
+
+### 3. 多人编辑：冲突分三层，三种机制分别解决
+
+| 层次 | 机制 |
+| --- | --- |
+| **结构层** | 排序是**派生量**（查询时按索引计算），表里没有 `prev/next` 链表字段。并发插入无需协调，分页天然稳定 |
+| **字段层** | 乐观锁 CAS（`WHERE version = ?`）+ 字段级三方合并：对方独有改动**自动并入**，只把真正打架的字段交人裁决 |
+| **语义层** | 收敛式巡检。因果倒置、时代错位、出处矛盾等规则写入后立即体检 + 定时全量巡检；本轮未复现的告警自动销案 |
+
+补充两点：
+
+- **编辑租约是软锁**（5 分钟，可续租）。硬锁会产生僵尸锁（关掉标签页就永久锁死），
+  而数据安全已由乐观锁保证——即使软锁被绕过也不会丢更新
+- **基线不可用时（版本快照已裁剪）把所有不一致判为冲突**，而不是乐观假设「只有我方改了」，
+  绝不静默覆盖他人已确认的内容
+
+### 4. 权限：读全开放，「看提案」≠「放行提案」
+
+| 能力 | viewer | editor | reviewer | admin |
+| --- | :-: | :-: | :-: | :-: |
+| 浏览 / 检索 | ✔ | ✔ | ✔ | ✔ |
+| 提交标注（含未登录访客） | ✔ | ✔ | ✔ | ✔ |
+| 增删改条目 | — | ✔ | ✔ | ✔ |
+| 发起 AI 梳理 | — | ✔ | ✔ | ✔ |
+| **采纳 / 合并 / 驳回 AI 提案** | — | — | ✔ | ✔ |
+| 标记已校验、裁定争议、锁定条目 | — | — | ✔ | ✔ |
+| 回滚版本、处置一致性异常 | — | — | ✔ | ✔ |
+
+角色之外还叠加：条目进入 `disputed` / `deprecated` 时正文冻结（editor 只能提交建议）、
+reviewer 锁定后 editor 完全不可写、出处归属（`source_user`）限制 editor 的改动范围。
+
+## 技术栈
+
+- **后端**：Laravel 13 · PHP 8.3+（本项目运行于 8.4）· MySQL
+- **前端**：Blade + 原生 CSS/JS（**零构建步骤**，不依赖 Node）
+- **测试**：PHPUnit 12（95 项 / 270 断言）
+- **AI**：驱动可插拔——离线规则抽取兜底，或任意兼容 OpenAI Chat Completions 的服务
+
+### AI 驱动配置
+
+```dotenv
+TIMELINE_AI_DRIVER=heuristic           # 默认。纯规则离线抽取，零依赖零成本
+# TIMELINE_AI_DRIVER=openai-compatible
+TIMELINE_AI_ENDPOINT=https://api.openai.com/v1/chat/completions
+TIMELINE_AI_KEY=
+TIMELINE_AI_MODEL=gpt-4o-mini
+```
+
+配置了 `openai-compatible` 但没填密钥时会**静默降级到规则抽取**而不是报错——
+AI 梳理是增强功能，它挂掉不该让整个站点不可用。
+
+其余阈值（疑似重复相似度、单日过载阈值、租约时长等）见 `config/timeline.php`。
+
+## 目录结构
+
+```
+app/
+├─ Enums/            角色、时间精度/可信度、条目状态、提案状态、异常类型…
+├─ Support/
+│   ├─ TerraDate.php        网格索引、区间语义、季节与年月边界
+│   ├─ TerraDateParser.php  纪年文本 → 区间（含纪元前年份与相对时间）
+│   └─ TextSimilarity.php   中文 2-gram 相似度 + 引用定位
+├─ Services/
+│   ├─ EventWriter.php                 唯一写入入口：CAS、三方合并、版本快照
+│   ├─ EventLockService.php            编辑租约（软锁）
+│   ├─ TimelineConsistencyChecker.php  规则巡检
+│   ├─ ProposalApplier.php             人工放行 AI 提案（两级闸门）
+│   └─ Ai/                             驱动抽象 / 规则抽取 / OpenAI 兼容 / 梳理流水线
+├─ Policies/         权限矩阵
+├─ Http/             Timeline / Event / AiProposal / Anomaly / Source / Auth 控制器与表单校验
+└─ Models/           Event, Era, Faction, Character, Source, Tag,
+                     EventRevision, Annotation, EventLock, AiProposal, TimelineAnomaly
+
+database/migrations/ 字典层 / 事件表 / 关系表 / 协作表 / 用户角色
+database/seeders/    起始语料（34 事件、7 纪元、20 阵营、33 人物、35 出处）
+docs/DESIGN.md       完整设计说明
+public/assets/       app.css, app.js（无构建步骤）
+resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录
+tests/               单元 + 功能测试
+```
+
+## ⚠️ 关于种子数据
+
+`TimelineSeeder` 灌入的是**起始语料，不是权威年表**。
+
+其中大量条目在社区考据中属于**由上下文推断**而非官方明写，因此：
+
+- 每条都带 `date_confidence`：官方文本明写记 `confirmed`，推断记 `inferred`，矛盾记 `disputed`
+- 推断条目的 `status` 为 `needs_review`，会在审核流程中被持续核对
+- 出处尽量精确到关卡号 / 章节，方便逐条溯源
+- 剧情原文只在少数出处中预置示例段落，用于演示「AI 梳理 → 提案 → 人工放行」的完整链路
+
+**换句话说：这份数据本身就是产品要解决的问题的样本——它需要被考据者继续纠错。**
+
+## 已知边界
+
+诚实列出当前没有做的事，避免被误读为「已解决」：
+
+- **不做正文级内容冲突的自动合并**：两人都重写了 `details` 时只能人工裁决
+- **没有实时协同编辑**（无 OT / CRDT），靠乐观锁 + 合并而非实时同步
+- **相对时间只解决了「解析与标记」**：锚点自动回填尚未实现，`precision = relative` 的条目会先进入「时间未定」并告警，等人工指定锚点
+- **巡检是规则式的**，不是语义推理：能发现「结果早于起因」，但发现不了「起因与结果其实无关」
+- **前端零构建是有意取舍**：部署简单、无 Node 依赖，代价是没有组件化与类型检查
+
+## 测试
+
+```bash
+php artisan test
+```
+
+覆盖重点：
+
+- **时间解析边界**：精度退化、跨年季节、纪元前年份、相对时间不误判为绝对年份、全角数字、索引往返
+- **协作不变量**：不丢更新、字段级冲突、非重叠改动自动合并、冲突裁决后双方输入都在、版本链只增不改、回滚不覆盖历史
+- **权限与冻结**：角色能力边界、条目冻结、条目锁定、出处范围限制、访客可标注但不可编辑
+- **AI 闸门**：AI 产出不落 events、四层校验记录、缺出处不可被 overrides 绕过、显式免责可放行、重复提案识别、驳回需理由
+- **检索语义**：区间重叠（跨年季节）、未定位排序、子阵营包含、多条件组合、缩放宽表
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT
