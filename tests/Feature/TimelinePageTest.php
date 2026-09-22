@@ -153,6 +153,22 @@ class TimelinePageTest extends TestCase
             ->assertSee('切尔诺伯格事变爆发');
     }
 
+    /**
+     * 出处详情对访客开放：时间线的可信度取决于出处，
+     * 因此读者必须能顺着引文一路点到原文，而不是被登录墙拦在出处列表页。
+     */
+    public function test_source_detail_page_is_readable_without_authentication(): void
+    {
+        $source = $this->source('公开出处', 'public-source', '泰拉历1097年，某段可公开查阅的原文。');
+
+        $this->get(route('sources.show', $source))
+            ->assertOk()
+            ->assertSee('公开出处')
+            ->assertSee('泰拉历1097年，某段可公开查阅的原文。')
+            // 只读：访客看不到编辑与梳理入口
+            ->assertDontSee('开始梳理');
+    }
+
     public function test_event_detail_endpoint_exposes_edit_permissions(): void
     {
         $event = $this->rawEvent();

@@ -30,10 +30,19 @@ use Illuminate\Database\Seeder;
  *   - 剧情原文（sources.raw_text）只在少数出处里预置了示例段落，
  *     用于演示「AI 梳理 → 提案 → 人工放行」的完整链路。
  *
+ * 数据分三层来源：
+ *   1. 剧情条目（主线 / 活动）——  有较明确的游戏内时间，多为 inferred；
+ *   2. 《大地巡礼》条目        ——  世界观机制与国家背景，**年份普遍未载**，
+ *                                  因此统一落在「时间未定」泳道，见 seedTerraTourEvents()；
+ *   3. 示例语料与 AI 提案      ——  演示完整的梳理链路。
+ *
  * 换句话说：这份数据本身就是产品要解决的问题的样本 —— 它需要被考据者继续纠错。
  */
 class TimelineSeeder extends Seeder
 {
+    /** 《大地巡礼》条目的统一时间占位：明确「年份未载」，而不是伪造一个年份。 */
+    private const UNDATED_DATE = '泰拉历未载具体年份';
+
     public function run(): void
     {
         $admin = $this->seedUsers();
@@ -43,6 +52,7 @@ class TimelineSeeder extends Seeder
         $this->seedTags();
         $this->seedSources();
         $this->seedEvents($admin);
+        $this->seedTerraTourEvents($admin);
         $this->seedProposalsFromCorpus();
     }
 
@@ -94,7 +104,11 @@ class TimelineSeeder extends Seeder
             ['name' => '龙门', 'full_name' => '龙门独立市', 'color' => '#fbbf24'],
             ['name' => '维多利亚', 'full_name' => '维多利亚王国', 'color' => '#a78bfa'],
             ['name' => '卡西米尔', 'full_name' => '卡西米尔骑士之国', 'color' => '#f472b6'],
-            ['name' => '莱茵生命', 'full_name' => '莱茵生命实验室', 'color' => '#34d399'],
+            ['name' => '哥伦比亚', 'color' => '#10b981', 'description' => '原为维多利亚殖民地，独立后迅速工业化，莱茵生命等大型研究机构以此为基地。', 'children' => [
+                // 莱茵生命是哥伦比亚的研究机构，挂到母政体下之后，
+                // 「按哥伦比亚筛选」会自动把莱茵生命相关的条目也带出来
+                ['name' => '莱茵生命', 'full_name' => '莱茵生命实验室', 'color' => '#34d399'],
+            ]],
             ['name' => '伊比利亚', 'color' => '#22d3ee'],
             ['name' => '炎国', 'color' => '#fb923c'],
             ['name' => '叙拉古', 'color' => '#c084fc'],
@@ -104,6 +118,15 @@ class TimelineSeeder extends Seeder
             ['name' => '拉特兰', 'color' => '#e2e8f0'],
             ['name' => '萨尔贡', 'color' => '#facc15'],
             ['name' => '深池', 'full_name' => '维多利亚感染者组织 · 深池', 'color' => '#e879f9'],
+
+            // 《大地巡礼》「国家与地区」卷覆盖、但此前未进入检索维度的政体。
+            // 只填在有把握的字段上：不做正式国名的推测，拿不准的一律留空。
+            ['name' => '莱塔尼亚', 'color' => '#818cf8', 'description' => '以双王共治体制与术师传统著称的政体。'],
+            ['name' => '米诺斯', 'color' => '#2dd4bf', 'description' => '由多个城邦构成的地区，保有古老的信仰与竞技传统。'],
+            ['name' => '玻利瓦尔', 'color' => '#fb7185', 'description' => '长期陷入内乱与外部势力干涉的地区。'],
+            ['name' => '雷姆必拓', 'color' => '#a3a3a3', 'description' => '以矿业与资源贸易立身的企业化政体。'],
+            ['name' => '萨米', 'color' => '#bae6fd', 'description' => '泰拉北境雪原地区，以部族与萨满信仰为组织形态。'],
+            ['name' => '阿戈尔', 'color' => '#0891b2', 'description' => '与深海威胁直接相关的海洋文明。'],
         ];
 
         foreach ($tree as $order => $faction) {
@@ -264,6 +287,13 @@ class TimelineSeeder extends Seeder
             ['赫拉格', 'Hellagur', '乌萨斯帝国', '黎博利'],
             ['亚叶', null, '罗德岛', null],
             ['瓦拉', null, '卡兹戴尔', '萨卡兹'],
+
+            // 《大地巡礼》「国家与地区」卷涉及、此前缺失的关联人物。
+            // 种族字段留空而不是靠印象填：拿不准的字段宁可缺失，也不要写错。
+            ['帕拉斯', 'Pallas', '米诺斯', null],
+            ['斯卡蒂', 'Skadi', '阿戈尔', null],
+            ['幽灵鲨', 'Specter', '阿戈尔', null],
+            ['歌蕾蒂娅', 'Gladiia', '阿戈尔', null],
         ];
 
         foreach ($characters as $order => [$name, $codename, $faction, $race]) {
@@ -344,6 +374,7 @@ class TimelineSeeder extends Seeder
             ['官方设定集 Vol.1', 'artbook-1', SourceType::Artbook, 'Vol.1', '世界观 / 阵营 / 年表', 50],
             ['官方设定集 Vol.2', 'artbook-2', SourceType::Artbook, 'Vol.2', '世界观 / 干员', 51],
             ['官方设定集 Vol.3', 'artbook-3', SourceType::Artbook, 'Vol.3', '世界观 / 干员', 52],
+            ['《大地巡礼》', 'terra-tour', SourceType::Artbook, '官方世界观设定集', '世界卷 / 国家与地区卷', 48],
 
             // ---- 世界观设定 ----
             ['世界观设定 · 泰拉纪年表', 'setting-chronicle', SourceType::Setting, null, '泰拉编年', 60],
@@ -363,6 +394,14 @@ class TimelineSeeder extends Seeder
                 ],
             );
         }
+
+        // 《大地巡礼》的定位说明。这里刻意**不预置 raw_text、也不填引文**：
+        // 这本书的具体表述尚未逐页录入，而编造引文会直接摧毁「引用可定位」这条校验的价值。
+        // 正确的工作流是：录入原文 → 出处页「开始梳理」→ 审核台放行，引文与时间随之补齐。
+        Source::where('slug', 'terra-tour')->update([
+            'description' => '官方世界观设定集。系统收录其中的世界观机制与国家／地区背景条目；'
+                .'章节定位为粗粒度标注（世界卷 / 国家与地区卷），引文待按页码录入后补齐。',
+        ]);
 
         // 预置示例语料，让「AI 梳理 → 提案 → 人工放行」这条链路开箱可演示
         Source::where('slug', 'setting-chronicle')->update([
@@ -899,6 +938,203 @@ TXT,
 
         if ($cheng && $ruin) {
             Event::whereKey($ruin)->update(['caused_by_event_id' => $cheng]);
+        }
+    }
+
+    // ------------------------------------------------------------------ 《大地巡礼》
+
+    /**
+     * 《大地巡礼》（官方世界观设定集）承载的内容。
+     *
+     * 与主线 / 活动条目有本质差别：这本书的主体是**世界观机制与国家地区背景**，而不是编年史。
+     * 它解释了「移动城市为什么存在」「天灾如何塑造政体」「各国政体如何运作」，
+     * 却极少给出具体年份 —— 这正是这批条目全部落在「时间未定」泳道的原因，
+     * 也是「时间未定必须是泳道而不是异常数据」这条设计的存在理由。
+     *
+     * 四点刻意的取舍（都在拒绝「看起来很完整的假数据」）：
+     *
+     *  1. **不编造年份。** 无法定位的一律 date_precision = unknown，进泳道等考据，
+     *     而不是塞一个看起来合理的数字。
+     *  2. **不编造引文。** quote 全部留空，出处页会如实显示「该出处未附引文」。
+     *     编造引文会直接摧毁「引用可定位」这条校验的价值。
+     *  3. **不编造正式国名。** 拿不准的 full_name 一律留空，宁可字段缺失也不要写错。
+     *  4. **卷内条目不给纪元。** 世界卷的机制条目在当代之前即已成型，故归入「远古 · 前纪元」；
+     *     国家与地区卷的政体条目成型时间无法定位，因此 era_id 留空，
+     *     避免用「所属纪元」暗示一个不存在的年代结论。
+     */
+    private function seedTerraTourEvents(User $admin): void
+    {
+        $writer = app(EventWriter::class);
+
+        $sourceId = Source::where('slug', 'terra-tour')->value('id');
+        $eraIds = Era::pluck('id', 'slug');
+
+        $events = [
+            // ================= 世界卷：机制与世界观 =================
+            [
+                'title' => '「前文明」遗存的存在',
+                'section' => '世界卷',
+                'era' => 'prehistory',
+                'summary' => '泰拉各地散布着无法归因于当代文明的遗迹与技术残片，学界普遍以「前文明」指称其创造者，其年代与覆灭原因均无定论。',
+                'details' => '这类遗存既是遗迹探索的主要对象，也是「泰拉文明并非第一代」这一判断的核心依据。',
+                'tags' => ['源石'],
+            ],
+            [
+                'title' => '源石与天灾的共生关系',
+                'section' => '世界卷',
+                'era' => 'prehistory',
+                'summary' => '天灾周期性地扫过泰拉，所过之处地表大面积源石结晶化；源石既是灾难的产物，也是当代文明赖以运转的资源。',
+                'details' => '「天灾有规律」这件事直接塑造了泰拉的生存方式：定居点必须能够整体迁移。',
+                'tags' => ['天灾', '源石'],
+            ],
+            [
+                'title' => '移动城市技术的形成',
+                'section' => '世界卷',
+                'era' => 'prehistory',
+                'summary' => '为躲避周期性天灾，泰拉各文明发展出可整体迁移的移动城市，城市本身成为最重要的战略资产。',
+                'details' => '移动城市是理解本作地缘政治的前提：城市可以被「开走」，因此疆域、边境与主权的概念都与现实世界不同。',
+                'tags' => ['天灾'],
+            ],
+            [
+                'title' => '源石技艺的体系化分类',
+                'section' => '世界卷',
+                'era' => 'prehistory',
+                'summary' => '源石技艺被系统化为若干流派与学科，并逐步划清「可传授的技艺」与「个体天赋」之间的边界。',
+                'tags' => ['源石'],
+            ],
+            [
+                'title' => '种族格局与源石适应性',
+                'section' => '世界卷',
+                'era' => 'prehistory',
+                'summary' => '泰拉现存数十个种族，其分布与对源石环境的适应性存在相关性，并深刻影响各国的社会结构与阶层。',
+                'details' => '种族差异与社会分层的关系，是理解各国对感染者政策为何分歧的背景。',
+                'tags' => ['感染者'],
+            ],
+
+            // ================= 国家与地区卷：政体与背景 =================
+            [
+                'title' => '乌萨斯帝国的军事化体制',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '乌萨斯以军事力量为国家组织的核心，皇帝与军事委员会共同构成权力中枢，对外扩张与对内高压互为支撑。',
+                'factions' => [['乌萨斯帝国', 'instigator']],
+                'tags' => ['政权更迭'],
+            ],
+            [
+                'title' => '维多利亚的君主制危机',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '维多利亚王权长期受贵族与议会势力牵制，围绕继承权与主权的矛盾为后来的内战埋下伏笔。',
+                'details' => '理解这一结构性矛盾，才能理解伦蒂尼姆为何会成为各方争夺的核心。',
+                'factions' => [['维多利亚', 'involved']],
+                'tags' => ['政权更迭'],
+            ],
+            [
+                'title' => '莱塔尼亚的双王共治',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '莱塔尼亚由两位君主共同统治，术师传统与国家权力深度绑定，形成独特的双头政体。',
+                'factions' => [['莱塔尼亚', 'involved']],
+            ],
+            [
+                'title' => '叙拉古的家族体制',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '叙拉古的秩序由各家族之间的势力平衡维持，中央权威薄弱，暴力与交易长期并行。',
+                'factions' => [['叙拉古', 'involved']],
+                'characters' => [['拉普兰德', 'support'], ['德克萨斯', 'support']],
+            ],
+            [
+                'title' => '拉特兰的教权体系',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '拉特兰以宗教权威为核心组织社会，其教义与仪式体系对周边地区具有长期影响力。',
+                'factions' => [['拉特兰', 'involved']],
+            ],
+            [
+                'title' => '谢拉格的宗教权威与喀兰贸易',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '谢拉格以圣山信仰维系内部秩序，喀兰贸易则承担对外通商职能，宗教与商业势力长期共生又相互牵制。',
+                'factions' => [['谢拉格', 'involved'], ['喀兰贸易', 'involved']],
+                'characters' => [['银灰', 'support'], ['初雪', 'support']],
+            ],
+            [
+                'title' => '卡西米尔骑士竞技制度的确立',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '卡西米尔将骑士竞技制度化、商业化，骑士头衔与资本、舆论之间形成复杂的交换关系。',
+                'factions' => [['卡西米尔', 'involved']],
+                'characters' => [['耀骑士临光', 'support'], ['玛莉娅·临光', 'support']],
+                'tags' => ['骑士竞技'],
+            ],
+            [
+                'title' => '米诺斯的城邦传统',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '米诺斯由多个城邦构成，古老的信仰与竞技传统长期延续，对外部世界的介入保持警惕。',
+                'factions' => [['米诺斯', 'involved']],
+                'characters' => [['帕拉斯', 'support']],
+            ],
+            [
+                'title' => '哥伦比亚脱离维多利亚',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '哥伦比亚原为维多利亚的殖民地，取得独立后迅速工业化，成为研究机构与资本集中的新兴力量。',
+                'details' => '莱茵生命等大型研究机构以哥伦比亚为基地，其研究伦理争议成为后续事件的核心矛盾之一。',
+                'factions' => [['哥伦比亚', 'involved'], ['维多利亚', 'involved'], ['莱茵生命', 'involved']],
+                'tags' => ['政权更迭'],
+            ],
+            [
+                'title' => '雷姆必拓的矿业体系',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '雷姆必拓以矿业与资源贸易立身，其企业化政体使商业利益直接构成对外政策本身。',
+                'factions' => [['雷姆必拓', 'involved']],
+                'tags' => ['源石'],
+            ],
+            [
+                'title' => '玻利瓦尔的长期战乱',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '玻利瓦尔长期处于内乱与外部势力干涉之中，政权更迭频繁，平民承受了主要代价。',
+                'factions' => [['玻利瓦尔', 'victim']],
+                'tags' => ['战争'],
+            ],
+            [
+                'title' => '各国感染者政策的分歧',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '各国对感染者的处置政策差异极大，从隔离、驱逐到有限纳编不等，构成跨地区冲突的长期结构性根源。',
+                'details' => '这一分歧是整合运动得以在多个地区获得响应的前提条件。',
+                'factions' => [['乌萨斯帝国', 'instigator'], ['龙门', 'involved'], ['罗德岛', 'involved']],
+                'tags' => ['感染者'],
+            ],
+        ];
+
+        foreach ($events as $row) {
+            $writer->create([
+                'title' => $row['title'],
+                'summary' => $row['summary'],
+                'details' => $row['details'] ?? null,
+                'date_display' => self::UNDATED_DATE,
+                'date_confidence' => 'unknown',
+                'era_id' => $row['era'] ? ($eraIds[$row['era']] ?? null) : null,
+                'status' => 'needs_review',
+                'sources' => [[
+                    'id' => $sourceId,
+                    'chapter' => $row['section'],
+                    // 故意留空：见方法注释第 2 条
+                    'quote' => null,
+                    'is_primary' => true,
+                ]],
+                'factions' => collect($row['factions'] ?? [])
+                    ->map(fn (array $f) => ['name' => $f[0], 'role' => $f[1]])->all(),
+                'characters' => collect($row['characters'] ?? [])
+                    ->map(fn (array $c) => ['name' => $c[0], 'role' => $c[1]])->all(),
+                'tags' => collect($row['tags'] ?? [])
+                    ->map(fn (string $t) => ['name' => $t])->all(),
+            ], $admin, ChangeOrigin::Seed);
         }
     }
 

@@ -1,0 +1,266 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Enums\DatePrecision;
+use App\Models\Character;
+use App\Models\Era;
+use App\Models\Event;
+use App\Models\Faction;
+use App\Models\Source;
+use App\Support\TerraDateParser;
+use Database\Seeders\TimelineSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+/**
+ * 种子数据自身的完整性。
+ *
+ * 起始语料是这个项目最容易「悄悄烂掉」的部分：手写的数据里一个错字就会
+ * 让条目排到错误的位置，而页面不会报错、只会安静地显示错的东西。
+ * 因此这里把数据当成代码来测。
+ */
+class SeederIntegrityTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(TimelineSeeder::class);
+    }
+
+    /**
+     * 最重要的一条不变量：每条的 date_display 重新解析后必须与落库的索引一致。
+     *
+     * 这能抓住「改了原文但忘了改索引」「复制粘贴时年份写错」这类静默错误。
+     */
+    public function test_every_event_date_display_agrees_with_its_stored_index(): void
+    {
+        $parser = new TerraDateParser;
+
+        foreach (Event::all() as $event) {
+            $parsed = $parser->parse($event->date_display, $event->date_confidence);
+
+            $this->assertSame(
+                $parsed->startIndex,
+                $event->start_index,
+                "条目「{$event->title}」的时间原文与 start_index 不一致（原文：{$event->date_display}）",
+            );
+
+            $this->assertSame(
+                $parsed->precision,
+                $event->date_precision,
+                "条目「{$event->title}」的时间精度与原文不一致",
+            );
+
+            $this->assertLessThanOrEqual(
+                $event->end_index,
+                $event->start_index,
+                "条目「{$event->title}」的区间方向反了",
+            );
+        }
+    }
+
+    public function test_every_event_has_a_summary_and_a_title(): void
+    {
+        foreach (Event::all() as $event) {
+            $this->assertNotSame('', trim($event->title), '标题不能为空');
+            $this->assertNotSame('', trim($event->summary), "条目「{$event->title}」缺少简要描述");
+        }
+    }
+
+    public function test_undated_events_are_confined_to_the_unanchored_lane(): void
+    {
+        $undated = Event::where('date_precision', DatePrecision::Unknown->value)->get();
+
+        $this->assertGreaterThan(0, $undated->count());
+
+        foreach ($undated as $event) {
+            // 索引必须是哨兵值，否则它会以「0 年」的身份混进有序时间序列
+            $this->assertSame(0, $event->start_index, "条目「{$event->title}」精度为 unknown 却有非零索引");
+            $this->assertSame(0, $event->end_index);
+
+            // 真正要守住的不变量是「定位不到时间就不可能被标为已确证」。
+            // 可信度本身可以是 inferred（推断）甚至 disputed（存疑）——
+            // 「时间未知」与「对这条时间有争议」是两件事，后者同样以未定位的形式存在。
+            $this->assertNotSame(
+                'confirmed',
+                $event->date_confidence->value,
+                "条目「{$event->title}」定位不到时间却被标为已确证",
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------- 《大地巡礼》
+
+    public function test_terra_tour_source_is_registered(): void
+    {
+        $source = Source::where('slug', 'terra-tour')->firstOrFail();
+
+        $this->assertSame('《大地巡礼》', $source->name);
+        $this->assertSame('artbook', $source->type->value);
+        $this->assertSame('官方世界观设定集', $source->code);
+
+        // 这本书的原文尚未录入，因此 raw_text 应留空 —— 而不是塞入编造的「原文」
+        $this->assertTrue(blank($source->raw_text), '《大地巡礼》不应预置 raw_text');
+    }
+
+    public function test_terra_tour_events_are_all_marked_undated_and_unreviewed(): void
+    {
+        $events = Event::whereHas('sources', fn ($q) => $q->where('sources.slug', 'terra-tour'))->get();
+
+        $this->assertGreaterThanOrEqual(17, $events->count());
+
+        foreach ($events as $event) {
+            $this->assertSame(
+                DatePrecision::Unknown,
+                $event->date_precision,
+                "《大地巡礼》条目「{$event->title}」不应声明具体时间",
+            );
+            $this->assertSame('unknown', $event->date_confidence->value);
+            $this->assertSame('needs_review', $event->status->value, '未定位年份的条目必须留在待校验状态');
+        }
+    }
+
+    /**
+     * 这条是刻意的「反向」断言：出处没有引文是**可接受的待办状态**，
+     * 但绝不允许出现凭印象写下的引文。若将来补录了原文与引文，
+     * 应改为断言引文能在 source.raw_text 中定位 —— 而不是删掉这个测试。
+     */
+    public function test_terra_tour_citations_are_left_empty_rather_than_invented(): void
+    {
+        $rows = DB::table('event_source')
+            ->join('sources', 'sources.id', '=', 'event_source.source_id')
+            ->where('sources.slug', 'terra-tour')
+            ->get(['event_source.quote', 'event_source.chapter', 'event_source.quote_offset']);
+
+        $this->assertNotEmpty($rows);
+
+        foreach ($rows as $row) {
+            $this->assertNull($row->quote, '不得为尚未录入原文的出处编造引文');
+            $this->assertNull($row->quote_offset);
+            // 章节仍应标注（粗粒度），让审核人知道该去哪一卷核对
+            $this->assertContains($row->chapter, ['世界卷', '国家与地区卷']);
+        }
+    }
+
+    /**
+     * 引文缺失必须在界面上显式呈现，不能留白 ——
+     * 留白会让人误读为「已经核对过、确实没有可引的原文」。
+     */
+    public function test_source_page_surfaces_the_missing_citation_state(): void
+    {
+        $source = Source::where('slug', 'terra-tour')->firstOrFail();
+
+        $this->get(route('sources.show', $source))
+            ->assertOk()
+            ->assertSee('国家与地区卷')
+            ->assertSee('尚未附引文')
+            ->assertSee('莱塔尼亚的双王共治')
+            ->assertSee('雷姆必拓的矿业体系');
+    }
+
+    public function test_terra_tour_covers_the_world_and_nation_sections(): void
+    {
+        $sections = DB::table('event_source')
+            ->join('sources', 'sources.id', '=', 'event_source.source_id')
+            ->where('sources.slug', 'terra-tour')
+            ->distinct()
+            ->pluck('event_source.chapter')
+            ->all();
+
+        $this->assertContains('世界卷', $sections);
+        $this->assertContains('国家与地区卷', $sections);
+    }
+
+    public function test_nation_factions_are_available_as_a_filter_dimension(): void
+    {
+        foreach (['莱塔尼亚', '哥伦比亚', '玻利瓦尔', '雷姆必拓', '米诺斯', '萨米', '阿戈尔'] as $name) {
+            $this->assertDatabaseHas('factions', ['name' => $name]);
+        }
+    }
+
+    public function test_rhine_lab_is_nested_under_columbia(): void
+    {
+        $columbia = Faction::where('name', '哥伦比亚')->firstOrFail();
+        $rhine = Faction::where('name', '莱茵生命')->firstOrFail();
+
+        $this->assertSame($columbia->id, $rhine->parent_id);
+        // 层级筛选会向下包含：按哥伦比亚检索应能带出莱茵生命相关的条目
+        $this->assertContains($rhine->id, $columbia->selfAndDescendantIds());
+    }
+
+    public function test_filtering_by_columbia_includes_its_descendant_faction_events(): void
+    {
+        $columbia = Faction::where('name', '哥伦比亚')->firstOrFail();
+
+        $titles = Event::query()->filter(['faction_id' => $columbia->id])->pluck('title');
+
+        // 「哥伦比亚脱离维多利亚」同时挂了母政体与莱茵生命
+        $this->assertContains('哥伦比亚脱离维多利亚', $titles);
+    }
+
+    public function test_terra_tour_entries_expose_nation_and_mechanism_topics(): void
+    {
+        $titles = Event::whereHas('sources', fn ($q) => $q->where('sources.slug', 'terra-tour'))
+            ->pluck('title')
+            ->all();
+
+        // 世界卷机制
+        $this->assertContains('移动城市技术的形成', $titles);
+        $this->assertContains('源石与天灾的共生关系', $titles);
+        // 国家与地区卷政体
+        $this->assertContains('莱塔尼亚的双王共治', $titles);
+        $this->assertContains('雷姆必拓的矿业体系', $titles);
+    }
+
+    // ---------------------------------------------------------------- 其它数据维度
+
+    public function test_eras_do_not_overlap(): void
+    {
+        $eras = Era::ordered()->get();
+
+        for ($i = 1; $i < $eras->count(); $i++) {
+            $this->assertLessThan(
+                $eras[$i]->start_index,
+                $eras[$i - 1]->end_index,
+                "纪元「{$eras[$i - 1]->name}」与「{$eras[$i]->name}」的区间重叠",
+            );
+        }
+    }
+
+    public function test_characters_reference_existing_factions(): void
+    {
+        foreach (Character::with('faction')->get() as $character) {
+            if ($character->faction_id === null) {
+                continue;
+            }
+
+            $this->assertNotNull($character->faction, "人物「{$character->name}」指向了不存在的阵营");
+        }
+    }
+
+    public function test_source_pivot_rows_reference_existing_events_and_sources(): void
+    {
+        $orphans = DB::table('event_source')
+            ->leftJoin('events', 'events.id', '=', 'event_source.event_id')
+            ->leftJoin('sources', 'sources.id', '=', 'event_source.source_id')
+            ->whereNull('events.id')
+            ->orWhereNull('sources.id')
+            ->count();
+
+        $this->assertSame(0, $orphans, 'event_source 存在悬空引用');
+    }
+
+    public function test_control_point_events_are_marked_confirmed(): void
+    {
+        // 切尔诺伯格事变是整个主线的时间原点，是唯一被当作「已确证」的锚点之一
+        $event = Event::where('title', '切尔诺伯格事变爆发')->firstOrFail();
+
+        $this->assertSame('confirmed', $event->date_confidence->value);
+        $this->assertSame('泰拉历1096年12月23日', $event->date_display);
+        $this->assertSame('verified', $event->status->value);
+    }
+}

@@ -26,7 +26,10 @@ Route::get('/events/{event}/revisions', [EventController::class, 'revisions'])->
 // 标注（纠错建议）对访客开放：门槛低，纠错回路才转得起来
 Route::post('/events/{event}/annotations', [EventController::class, 'annotate'])->name('events.annotations.store');
 
+// 出处列表与详情同样公开：时间线的可信度取决于出处，读者必须能顺着引文点到原文。
+// 页面内的编辑表单与「开始梳理」入口各自另有权限判断。
 Route::get('/sources', [SourceController::class, 'index'])->name('sources.index');
+Route::get('/sources/{source}', [SourceController::class, 'show'])->name('sources.show');
 
 /*
 |--------------------------------------------------------------------------
@@ -88,6 +91,5 @@ Route::middleware('auth')->group(function () {
     Route::post('/anomalies/{anomaly}/resolve', [AnomalyController::class, 'resolve'])->name('anomalies.resolve');
 
     // ---- 出处与语料 ----
-    Route::get('/sources/{source}', [SourceController::class, 'show'])->name('sources.show');
     Route::put('/sources/{source}', [SourceController::class, 'update'])->name('sources.update');
 });

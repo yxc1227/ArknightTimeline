@@ -97,11 +97,24 @@
                         @if ($event->date_confidence !== \App\Enums\DateConfidence::Confirmed)
                             <span class="badge badge--warn">{{ $event->date_confidence->label() }}</span>
                         @endif
+                        @php $pivot = $event->pivot; @endphp
+                        {{-- 章节 / 关卡号：告诉审核人该去出处的哪个位置核对 --}}
+                        @if ($pivot?->chapter)
+                            <span class="chip">{{ $pivot->chapter }}</span>
+                        @endif
+                        @if ($pivot?->stage_code)
+                            <span class="chip mono">{{ $pivot->stage_code }}</span>
+                        @endif
                     </div>
                     <p class="muted small" style="margin:6px 0 0">{{ $event->summary }}</p>
-                    @php $pivot = $event->pivot; @endphp
                     @if ($pivot?->quote)
                         <div class="quote" style="margin-top:8px">{{ $pivot->quote }}</div>
+                    @else
+                        {{-- 引文缺失是**真实的待办状态**，必须显式呈现而不是留白。
+                             留白会让人误以为「已核对过、无引文可引」。 --}}
+                        <div class="faint small" style="margin-top:8px">
+                            该出处尚未附引文 —— 待录入原文后补齐，或直接标注说明依据。
+                        </div>
                     @endif
                 </div>
             @empty
