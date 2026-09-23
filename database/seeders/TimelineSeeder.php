@@ -6,6 +6,7 @@ use App\Enums\ChangeOrigin;
 use App\Enums\EventStatus;
 use App\Enums\IdentityProvider;
 use App\Enums\SourceType;
+use App\Enums\World;
 use App\Models\Character;
 use App\Models\Era;
 use App\Models\Event;
@@ -57,6 +58,8 @@ class TimelineSeeder extends Seeder
         $this->seedSources();
         $this->seedEvents($admin);
         $this->seedTerraTourEvents($admin);
+        // 塔卫二与泰拉的条目分别灌入，纪元、出处与索引各自成体系
+        $this->seedTalosEvents($admin);
         $this->seedProposalsFromCorpus();
     }
 
@@ -189,6 +192,32 @@ class TimelineSeeder extends Seeder
             ['name' => '雷姆必拓', 'color' => '#a3a3a3', 'description' => '以矿业与资源贸易立身的企业化政体。'],
             ['name' => '萨米', 'color' => '#bae6fd', 'description' => '泰拉北境雪原地区，以部族与萨满信仰为组织形态。'],
             ['name' => '阿戈尔', 'color' => '#0891b2', 'description' => '与深海威胁直接相关的海洋文明。'],
+
+            /*
+             * ---- 塔卫二（《明日方舟：终末地》）----
+             *
+             * 阵营词典是**跨世界共享**的，刻意没有 world 列：罗德岛这类组织
+             * 同时存在于两个世界的历史里（终末地工业由罗德岛等协同组建），
+             * 强行按世界切分反而会把同一个组织拆成两份。
+             */
+            [
+                'name' => '终末地工业',
+                'full_name' => '终末地工业 · Endfield Industries',
+                'color' => '#57c7d4',
+                'description' => '塔卫二上最大的技术承包商，由罗德岛制药公司与其他合作方协同组建，'
+                    .'承担开拓、协议回收与重建工业体系的使命。总部为轨道飞行器「帝江号」。',
+                'children' => [
+                    [
+                        'name' => '协议回收部门',
+                        'color' => '#6fc3d4',
+                        'description' => '管理员直接带领的一线部门，负责回收塔卫二上失落的「协议」。',
+                    ],
+                ],
+            ],
+            ['name' => '联盟工团', 'color' => '#8a9aa8', 'description' => '塔卫二上的生产与开拓组织，四号谷地最初由其选定为生产开拓区域。'],
+            ['name' => '天使', 'color' => '#e2e8f0', 'description' => '塔卫二的主要敌对势力，第一次与第二次天使战争均与其进犯有关。'],
+            ['name' => '裂地者', 'color' => '#f87171', 'description' => '雅各布·迈森手下的匪帮，后被文明环带摧毁。社区资料中亦写作「掠地者」，两种写法并存。'],
+            ['name' => '文明环带', 'color' => '#7dd3fc', 'description' => '塔卫二上的人类聚居带，四号谷地位于其边缘地区。'],
         ];
 
         foreach ($tree as $order => $faction) {
@@ -301,6 +330,78 @@ class TimelineSeeder extends Seeder
                 ['slug' => $era['slug']],
                 [
                     'name' => $era['name'],
+                    'world' => ($era['world'] ?? World::Terra)->value,
+                    'subtitle' => $era['subtitle'],
+                    'date_label' => $era['date_label'],
+                    'start_index' => $era['start'],
+                    'end_index' => $era['end'],
+                    'description' => $era['description'] ?? null,
+                    'color' => $era['color'],
+                    'sort_order' => $order,
+                ],
+            );
+        }
+
+        $this->seedTalosEras();
+    }
+
+    /**
+     * 塔卫二的纪元。
+     *
+     * 与泰拉的纪元**必须分开存储**，因为两套纪年的索引数值不可比较：
+     * 泰拉的「远古 · 前纪元」覆盖 -186000 ~ 371627，而塔罗斯历 1-15 年的索引
+     * 只有 372 ~ 5951 —— 落在里面。少了世界维度，纪元自动归属会把
+     * 塔卫二的事件静默塞进泰拉的远古纪元。
+     *
+     * 划分依据是塔罗斯历的叙事阶段，区间端点取自社区整理中相对一致的年份；
+     * 第二次天使战争的起始年社区未给出确切数字（只知道在 90 年之后），
+     * 因此第三个纪元从 90 年起算，并在说明里如实标注这一点。
+     */
+    private function seedTalosEras(): void
+    {
+        $eras = [
+            [
+                'name' => '开拓与第一次天使战争',
+                'slug' => 'talos-1-15',
+                'subtitle' => '星门开启 · 人类南迁',
+                'date_label' => '塔罗斯历 1 年 — 15 年',
+                'start' => TerraDate::toIndex(1),
+                'end' => TerraDate::toIndex(15, 12, 31),
+                'color' => '#3f6b7a',
+                'description' => '泰拉先民穿过星门抵达塔卫二「开拓」，随后与天使爆发第一次战争，'
+                    .'前期人类失去北极地区并被迫南迁，后期重整势力完成抵抗。',
+            ],
+            [
+                'name' => '战后重建与谷地开发',
+                'slug' => 'talos-16-89',
+                'subtitle' => '聚落成型 · 四号谷地',
+                'date_label' => '塔罗斯历 16 年 — 89 年',
+                'start' => TerraDate::toIndex(16),
+                'end' => TerraDate::toIndex(89, 12, 31),
+                'color' => '#5596a6',
+                'description' => '第一次战争结束后的重建期：聚落建立、四号谷地开发、'
+                    .'供能高地超域试验场落成。社区整理中的年份多为推断。',
+            ],
+            [
+                'name' => '第二次天使战争与终末地重启',
+                'slug' => 'talos-90-152',
+                'subtitle' => '管理员苏醒',
+                'date_label' => '塔罗斯历 90 年 — 152 年',
+                'start' => TerraDate::toIndex(90),
+                'end' => TerraDate::toIndex(152, 12, 31),
+                'color' => '#6fc3d4',
+                'description' => '该纪元起点取自 90 年（供能高地试验场建立），'
+                    .'但第二次天使战争的确切起始年社区尚未给出 —— 这是一个待考的边界，'
+                    .'不要把它当成已知事实。纪元终点为管理员在帝江号苏醒的 152 年。',
+            ],
+        ];
+
+        foreach ($eras as $order => $era) {
+            Era::updateOrCreate(
+                ['slug' => $era['slug']],
+                [
+                    'name' => $era['name'],
+                    'world' => World::Talos->value,
                     'subtitle' => $era['subtitle'],
                     'date_label' => $era['date_label'],
                     'start_index' => $era['start'],
@@ -360,6 +461,15 @@ class TimelineSeeder extends Seeder
             ['斯卡蒂', 'Skadi', '阿戈尔', null],
             ['幽灵鲨', 'Specter', '阿戈尔', null],
             ['歌蕾蒂娅', 'Gladiia', '阿戈尔', null],
+
+            // ---- 塔卫二（《明日方舟：终末地》）----
+            // 代号与种族一律留空：社区资料给的是中文名与转写，没有可靠出处，
+            // 按本文件既有原则「拿不准的字段宁可缺失，也不要写错」处理。
+            // 管理员与佩丽卡的英文写法在社区里就有多种转写，同样不猜。
+            ['管理员', null, '终末地工业', null],
+            ['佩丽卡', null, '终末地工业', null],
+            ['陈千语', null, '终末地工业', null],
+            ['阿伯莉', null, '联盟工团', null],
         ];
 
         foreach ($characters as $order => [$name, $codename, $faction, $race]) {
@@ -385,6 +495,9 @@ class TimelineSeeder extends Seeder
             ['条约', '#38bdf8'], ['灾害', '#fbbf24'], ['内战', '#fb923c'],
             ['骑士竞技', '#f472b6'], ['感染者', '#34d399'], ['天灾', '#e879f9'],
             ['源石', '#22d3ee'], ['萨卡兹', '#c084fc'], ['政权更迭', '#94a3b8'],
+            // ---- 塔卫二 ----
+            // 标签与阵营一样是跨世界的横切概念，不做世界隔离
+            ['星门', '#7dd3fc'], ['协议', '#57c7d4'], ['开拓', '#a3e635'],
         ];
 
         foreach ($tags as [$name, $color]) {
@@ -447,11 +560,23 @@ class TimelineSeeder extends Seeder
             ['世界观设定 · 源石与天灾', 'setting-originium', SourceType::Setting, null, '源石学', 61],
         ];
 
-        foreach ($sources as [$name, $slug, $type, $code, $chapter, $order]) {
+        /*
+         * 第 7 项是世界，缺省泰拉 —— 既有条目保持 6 元组写法不必改动。
+         *
+         * 这里刻意写成先解构 6 项、再单独取第 7 项，而不是在 foreach 的解构里写默认值：
+         * `foreach ($rows as [$a, $b = 'x'])` 在 PHP 里是**编译期错误**
+         * （Assignments can only happen to writable values），
+         * 而 list() 的默认值语法只在普通赋值里成立。
+         */
+        foreach ($sources as $row) {
+            [$name, $slug, $type, $code, $chapter, $order] = $row;
+            $world = $row[6] ?? World::Terra;
+
             Source::updateOrCreate(
                 ['slug' => $slug],
                 [
                     'name' => $name,
+                    'world' => ($world instanceof World ? $world : World::Terra)->value,
                     'type' => $type->value,
                     'code' => $code,
                     'chapter' => $chapter,
@@ -460,6 +585,38 @@ class TimelineSeeder extends Seeder
                 ],
             );
         }
+
+        /*
+         * ---- 塔卫二的出处 ----
+         *
+         * 两份都不预置 raw_text，理由与《大地巡礼》完全相同：
+         * 游戏内文本尚未录入，而编造引文会直接摧毁「引用可定位」的价值。
+         *
+         * 关键在于**把二级来源标出来**：塔卫二的时间结论目前来自玩家社区整理，
+         * 不是官方原文。把它当作官方出处，等于给整条时间线盖了一个假的确认章。
+         */
+        Source::updateOrCreate(['slug' => 'talos-canon'], [
+            'name' => '《明日方舟：终末地》游戏内文本',
+            'world' => World::Talos->value,
+            'type' => SourceType::Setting->value,
+            'code' => 'ZMD',
+            'chapter' => '待录入',
+            'release_order' => 200,
+            'description' => '塔卫二的官方资料入口（世界观、剧情与游戏内文本）。'
+                .'原文尚未逐条录入，因此引用一律留空 —— 录入后可走「开始梳理」补全。',
+        ]);
+
+        Source::updateOrCreate(['slug' => 'talos-survey'], [
+            'name' => '塔卫二年表（社区考据整理）',
+            'world' => World::Talos->value,
+            'type' => SourceType::Other->value,
+            'code' => 'SURVEY',
+            'chapter' => '社区整理',
+            'release_order' => 201,
+            'description' => '玩家社区汇总的塔罗斯历年表（NGA / 贴吧 / 哔哩哔哩等）。
+                **这是二级来源，不是官方文本**：本仓库中塔卫二条目的年份与可信度
+                均以它为依据，因此那些条目一律标记为「推断」并等待用游戏内原文重新核验。',
+        ]);
 
         // 《大地巡礼》的定位说明。这里刻意**不预置 raw_text、也不填引文**：
         // 这本书的具体表述尚未逐页录入，而编造引文会直接摧毁「引用可定位」这条校验的价值。
@@ -1211,6 +1368,201 @@ TXT,
      *
      * 这里刻意使用默认驱动（未配置密钥时是离线规则抽取），因此不依赖任何外部服务。
      */
+    /**
+     * 塔卫二（《明日方舟：终末地》）的条目。
+     *
+     * 与泰拉部分的关键差别在**资料来源**：塔卫二的年表目前只存在于玩家社区的整理里，
+     * 游戏内文本尚未逐条录入本仓库。因此这批条目：
+     *
+     *  1. 一律 `date_confidence = inferred`（社区自己就标注为推测的记 `disputed`），
+     *     状态落在 needs_review —— 可信度字段存在的意义就是让这种情况如实表达，
+     *     而不是把社区推断包装成「已确证」；
+     *  2. **引文全部留空**。社区整理是二级来源，把它当引文写进 event_source.quote，
+     *     会直接摧毁「引用可定位」这条校验的价值；
+     *  3. 年份取社区整理中相对一致的数字，有分歧或不确切的写进 details 里说明，
+     *     而不是挑一个好看的数字了事。
+     *
+     * 换句话说：这批数据要表达的不是「塔卫二发生过什么」，而是
+     * 「目前我们据什么认为它发生过什么，以及这个依据有多硬」。
+     */
+    private function seedTalosEvents(User $admin): void
+    {
+        $writer = app(EventWriter::class);
+
+        $events = [
+            [
+                'title' => '星门开启，泰拉先民抵达塔卫二',
+                'date' => '塔罗斯历 1 年',
+                'era' => 'talos-1-15',
+                'confidence' => 'inferred',
+                'summary' => '部分泰拉的神民与先民穿过星门抵达塔卫二，开始在这颗卫星上拓荒定居，史称「开拓」。'
+                    .'后世知道内情的人则称其为「回归」。',
+                'details' => '塔罗斯历以这一年为元年，因此「开拓 152 年」等价于「塔罗斯历 152 年」。'
+                    .'两个名称的分歧本身就是一条线索：塔卫二并非全然陌生的土地。'
+                    .'该结论目前只来自社区整理，尚无游戏内原文核对。',
+                'location' => '塔卫二',
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['终末地工业', 'involved']],
+                'tags' => ['星门', '开拓'],
+            ],
+            [
+                'title' => '第一次天使战争爆发',
+                'date' => '塔罗斯历 5 年',
+                'era' => 'talos-1-15',
+                'confidence' => 'inferred',
+                'summary' => '天使的进犯摧毁星门附近的城市，并完全占据北极地区，人类被迫向南方迁移。',
+                'details' => '社区整理把第一次天使战争划分为 5—11 年前后两段，本条目记的是爆发年份。'
+                    .'「锚点」被摧毁与星门附近城市失守是同一段叙述里的两件事，因果关系尚无定论。',
+                'location' => '塔卫二 · 北极地区',
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['天使', 'opponent'], ['文明环带', 'victim']],
+                'tags' => ['战争', '天灾'],
+            ],
+            [
+                'title' => '人类势力重组，第一次天使战争结束',
+                'date' => '塔罗斯历 11 年',
+                'era' => 'talos-1-15',
+                'confidence' => 'inferred',
+                'summary' => '管理员重整人类势力，对天使的进犯形成有效抵抗，第一次天使战争在此后结束。',
+                'details' => '战争的确切结束年份社区未给出统一说法（资料多写作「11—15 年」这一段），'
+                    .'本条只记「11 年发生重组」这一较为一致的节点。',
+                'location' => null,
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['终末地工业', 'involved'], ['天使', 'opponent']],
+                'characters' => [['管理员', 'involved']],
+                'tags' => ['战争'],
+            ],
+            [
+                'title' => '清波寨建立',
+                'date' => '塔罗斯历 16 年',
+                'era' => 'talos-16-89',
+                'confidence' => 'inferred',
+                'summary' => '第一次天使战争结束后，南迁人群在塔卫二上建立起新的聚落，清波寨是其中之一。',
+                'details' => '社区整理把它系在 16—17 年之间，本条取起始年。',
+                'location' => '清波寨',
+                'sources' => [['talos-survey', null, null]],
+                'tags' => ['开拓'],
+            ],
+            [
+                'title' => '四号谷地开始开发',
+                'date' => '塔罗斯历 70 年',
+                'era' => 'talos-16-89',
+                'confidence' => 'disputed',
+                'summary' => '联盟工团在边缘地区选定的生产开拓区域开始发展，管理员在此种下源石大树。',
+                'details' => '整理者本人把这一年标注为**推测**，且「种下源石大树」与「谷地开始发展」'
+                    .'是否为同一年并无把握，因此本条目标记为存疑，等待原文核对。',
+                'location' => '四号谷地',
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['联盟工团', 'involved']],
+                'characters' => [['管理员', 'involved']],
+                'tags' => ['开拓', '源石'],
+            ],
+            [
+                'title' => '四号谷地遭天使集群袭击',
+                'date' => '塔罗斯历 75 年',
+                'era' => 'talos-16-89',
+                'confidence' => 'inferred',
+                'summary' => '四号谷地遭受天使集群袭击，阿伯莉在袭击中牺牲，同期采石场接近竣工。',
+                'details' => '与上年一条一样，年份来自同一份社区整理，尚未与游戏内原文核对。',
+                'location' => '四号谷地',
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['天使', 'opponent'], ['联盟工团', 'victim']],
+                'characters' => [['阿伯莉', 'victim']],
+                'tags' => ['战争'],
+            ],
+            [
+                'title' => '供能高地超域试验场建立',
+                'date' => '塔罗斯历 90 年',
+                'era' => 'talos-90-152',
+                'confidence' => 'inferred',
+                'summary' => '供能高地上的超域试验场落成，成为此后塔卫二技术体系的关键设施之一。',
+                'details' => '「超域」一词的准确含义在社区资料中尚无一致解释，本条只记录设施建立这一事件。',
+                'location' => '供能高地',
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['终末地工业', 'involved']],
+                'tags' => ['协议'],
+            ],
+            [
+                'title' => '「裂地者」得名',
+                'date' => '塔罗斯历 90 年',
+                'era' => 'talos-90-152',
+                'confidence' => 'disputed',
+                'summary' => '雅各布·迈森将其手下的匪帮命名为「裂地者」，该势力后被文明环带摧毁。',
+                'details' => '两种分歧都记在这里：一是名称在社区资料中同时写作「裂地者」与「掠地者」；'
+                    .'二是「摧毁」的具体时间未定，只知道在 90 年之后。'
+                    .'纪元归属只说明它落在这一段区间里，不代表年份精确。',
+                'location' => null,
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['裂地者', 'involved'], ['文明环带', 'involved']],
+                'tags' => ['内战'],
+            ],
+            [
+                'title' => '管理员在帝江号上苏醒',
+                'date' => '塔罗斯历 152 年',
+                'era' => 'talos-90-152',
+                'confidence' => 'inferred',
+                'summary' => '第二次天使战争后陷入沉睡的管理员于塔罗斯历 152 年在轨道飞行器「帝江号」上苏醒，'
+                    .'但失去了记忆。',
+                'details' => '「第二次天使战争后沉睡」与「152 年苏醒」之间究竟隔了多久，'
+                    .'社区资料没有给出可核对的数字 —— 这条时间差本身就是待考的内容。',
+                'location' => '帝江号',
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['终末地工业', 'involved']],
+                'characters' => [['管理员', 'involved']],
+                'tags' => ['协议'],
+            ],
+            [
+                'title' => '终末地工业重启，于四号谷地建立工业基地',
+                'date' => '塔罗斯历 152 年',
+                'era' => 'talos-90-152',
+                'confidence' => 'inferred',
+                'summary' => '终末地工业重新运转，以四号谷地为据点建立工业基地，'
+                    .'由协议回收部门的管理员带队对抗天使与掠地者。',
+                'details' => '这一条与「管理员苏醒」同年，是《终末地》主线叙事的起点。'
+                    .'本仓库把它记为当前时间线的端点：塔卫二的条目都在这之前。',
+                'location' => '四号谷地',
+                'sources' => [['talos-survey', null, null]],
+                'factions' => [['终末地工业', 'involved'], ['天使', 'opponent'], ['裂地者', 'opponent']],
+                'characters' => [['管理员', 'involved'], ['佩丽卡', 'involved'], ['陈千语', 'involved']],
+                'tags' => ['开拓', '协议'],
+            ],
+        ];
+
+        foreach ($events as $data) {
+            // 纪元按世界查：跨世界的 slug 即便存在，也不该被这条时间线取用
+            $eraId = Era::ofWorld(World::Talos)->where('slug', $data['era'])->value('id');
+
+            $payload = [
+                'world' => World::Talos->value,
+                'title' => $data['title'],
+                'summary' => $data['summary'],
+                'details' => $data['details'] ?? null,
+                'location' => $data['location'] ?? null,
+                'date_display' => $data['date'],
+                'date_precision' => $data['precision'] ?? null,
+                'date_confidence' => $data['confidence'],
+                'era_id' => $eraId,
+                'sort_seq' => $data['sort_seq'] ?? 0,
+                // 非 confirmed 一律 needs_review：这批条目等的就是原文核对
+                'status' => $data['status'] ?? EventStatus::NeedsReview->value,
+                'start_index' => null,
+                'end_index' => null,
+                'sources' => collect($data['sources'] ?? [])->map(fn ($s) => [
+                    'id' => Source::where('slug', $s[0])->value('id'),
+                    'stage_code' => $s[1] ?? null,
+                    // 引文一律留空：二级来源不是引文，见本方法的类注释
+                    'quote' => null,
+                    'is_primary' => false,
+                ])->filter(fn ($s) => $s['id'])->values()->all(),
+                'characters' => collect($data['characters'] ?? [])->map(fn ($c) => ['name' => $c[0], 'role' => $c[1]])->all(),
+                'factions' => collect($data['factions'] ?? [])->map(fn ($f) => ['name' => $f[0], 'role' => $f[1]])->all(),
+                'tags' => collect($data['tags'] ?? [])->map(fn ($t) => ['name' => $t])->all(),
+            ];
+
+            $writer->create($payload, $admin, ChangeOrigin::Seed);
+        }
+    }
+
     private function seedProposalsFromCorpus(): void
     {
         $source = Source::where('slug', 'setting-chronicle')->first();

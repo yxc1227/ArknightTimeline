@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\SourceType;
+use App\Enums\World;
 use App\Models\Era;
 use App\Models\Source;
 use Illuminate\Http\JsonResponse;
@@ -29,9 +30,12 @@ class SourceController extends Controller
             ->withQueryString();
 
         return view('sources.index', [
+            // 语料库列表刻意不按世界过滤：出处是「我们手上有哪些资料」，
+            // 两个世界的资料同屏可见才便于盘点（行内会标出各自的世界）
             'sources' => $sources,
             'types' => SourceType::options(),
-            'eras' => Era::ordered()->get(),
+            'worlds' => World::options(),
+            'eras' => Era::ofWorld(World::fromRequest($request->string('world')->value()))->ordered()->get(),
             'canEdit' => $request->user()?->canEditEvents() ?? false,
         ]);
     }
@@ -40,7 +44,8 @@ class SourceController extends Controller
     {
         return view('sources.show', [
             'source' => $source->load(['events' => fn ($q) => $q->timelineOrder()->with('era')]),
-            'eras' => Era::ordered()->get(),
+            // 单个出处的纪元下拉按该出处自身的世界收敛
+            'eras' => Era::ofWorld($source->world)->ordered()->get(),
         ]);
     }
 

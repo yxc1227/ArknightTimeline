@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
+use App\Enums\EventStatus;
+use App\Enums\World;
 use App\Models\Character;
 use App\Models\Era;
 use App\Models\Event;
@@ -220,16 +223,79 @@ class SeederIntegrityTest extends TestCase
 
     // ---------------------------------------------------------------- 其它数据维度
 
-    public function test_eras_do_not_overlap(): void
+    /**
+     * 纪元区间在**各自的世界内**不重叠。
+     *
+     * 必须逐世界判定：纪元区间是纪年网格上的数值区间，只在同一纪年体系内可比。
+     * 塔罗斯历 1-15 年的索引（372 ~ 5951）就落在泰拉「远古 · 前纪元」
+     * （-186000 ~ 371627）的范围内 —— 跨世界比较不仅会误报，而且会把
+     * 纪元自动归属引向错误的结论。
+     */
+    public function test_eras_do_not_overlap_within_each_world(): void
     {
-        $eras = Era::ordered()->get();
+        foreach (World::cases() as $world) {
+            $eras = Era::ofWorld($world)->ordered()->get();
 
-        for ($i = 1; $i < $eras->count(); $i++) {
-            $this->assertLessThan(
-                $eras[$i]->start_index,
-                $eras[$i - 1]->end_index,
-                "纪元「{$eras[$i - 1]->name}」与「{$eras[$i]->name}」的区间重叠",
+            for ($i = 1; $i < $eras->count(); $i++) {
+                $this->assertLessThan(
+                    $eras[$i]->start_index,
+                    $eras[$i - 1]->end_index,
+                    "{$world->label()}：纪元「{$eras[$i - 1]->name}」与「{$eras[$i]->name}」的区间重叠",
+                );
+            }
+        }
+
+        // 反空过：两个世界都必须真的有纪元，否则上面那个循环会「什么也没检查」地通过
+        $this->assertGreaterThan(0, Era::ofWorld(World::Terra)->count());
+        $this->assertGreaterThan(0, Era::ofWorld(World::Talos)->count());
+    }
+
+    /**
+     * 塔卫二的条目必须落在塔卫二的纪元里。
+     *
+     * 这是世界维度存在的**主要原因**：泰拉的「远古 · 前纪元」覆盖 -186000 ~ 371627，
+     * 而塔罗斯历 5 年的索引只有 1860 —— 少了世界条件，它会被静默归入泰拉纪元。
+     */
+    public function test_talos_events_are_never_assigned_to_terra_eras(): void
+    {
+        $misplaced = Event::query()
+            ->where('world', World::Talos->value)
+            ->whereNotNull('era_id')
+            ->whereHas('era', fn ($q) => $q->where('world', '!=', World::Talos->value))
+            ->count();
+
+        $this->assertSame(0, $misplaced, '有塔卫二条目被归入了泰拉纪元');
+
+        // 反空过：塔卫二的条目确实存在，且确实拿到了纪元
+        $this->assertSame(10, Event::where('world', World::Talos->value)->count());
+        $this->assertSame(
+            10,
+            Event::where('world', World::Talos->value)->whereNotNull('era_id')->count(),
+        );
+    }
+
+    /**
+     * 塔卫二的条目是**社区考据**，不是官方原文。
+     *
+     * 因此它们必须全部落在「推断 / 存疑」档并且没有引文 ——
+     * 一旦有人把社区整理当成官方出处填了引文，「引用可定位」这条校验就失去意义了。
+     */
+    public function test_talos_entries_are_marked_as_inferred_and_carry_no_quotes(): void
+    {
+        $events = Event::where('world', World::Talos->value)->with('sources')->get();
+
+        foreach ($events as $event) {
+            $this->assertContains(
+                $event->date_confidence,
+                [DateConfidence::Inferred, DateConfidence::Disputed],
+                "塔卫二条目「{$event->title}」的可信度不应高于「推断」",
             );
+
+            $this->assertSame(EventStatus::NeedsReview, $event->status, "塔卫二条目「{$event->title}」应处于待复核");
+
+            foreach ($event->sources as $source) {
+                $this->assertNull($source->pivot->quote, "塔卫二条目「{$event->title}」不应附引文（来源是社区整理）");
+            }
         }
     }
 

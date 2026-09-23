@@ -3,13 +3,15 @@
 namespace App\Models;
 
 use App\Enums\SourceType;
+use App\Enums\World;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'name', 'slug', 'type', 'code', 'chapter',
+    'name', 'slug', 'world', 'type', 'code', 'chapter',
     'release_order', 'release_date', 'description', 'raw_text',
 ])]
 class Source extends Model
@@ -18,7 +20,20 @@ class Source extends Model
     {
         return [
             'type' => SourceType::class,
+            'world' => World::class,
         ];
+    }
+
+    /**
+     * 按世界过滤。
+     *
+     * 注意这**不是**引用完整性约束：跨世界引用是允许的
+     * （一份泰拉设定集完全可以记到塔卫二的事），因此没有「出处必须与事件同世界」这条不变量。
+     * 本列只用来回答「这份出处主要讲哪个世界」，供筛选与分组使用。
+     */
+    public function scopeOfWorld(Builder $query, World|string $world): Builder
+    {
+        return $query->where('world', $world instanceof World ? $world->value : $world);
     }
 
     public function events(): BelongsToMany
@@ -49,6 +64,7 @@ class Source extends Model
             'id' => $this->id,
             'name' => $this->name,
             'slug' => $this->slug,
+            'world' => $this->world instanceof World ? $this->world->value : World::default()->value,
             'type' => $this->type->value,
             'type_label' => $this->type->label(),
             'code' => $this->code,

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', '时间线 · 泰拉统一事件年表')
+@section('title', '时间线 · '.$activeWorld->label().'统一事件年表')
 @section('page', 'timeline')
 
 @php
@@ -12,6 +12,27 @@
 @section('content')
     {{-- ============================ 筛选侧栏 ============================ --}}
     <aside class="sidebar" id="filters">
+        {{--
+            世界切换器。
+            用服务端渲染的链接而不是 JS 切换：世界决定了纪元分组、选项字典与时间轴刻度，
+            它必须在首屏渲染时就确定 —— 前端切换会让这些内容先以错误的世界渲染一次。
+        --}}
+        <div class="world-switch">
+            @foreach ($worlds as $world)
+                @php $isActive = $activeWorld->value === $world['value']; @endphp
+
+                <a class="world-switch__item" href="{{ route('timeline.index', ['world' => $world['value']]) }}"
+                   data-active="{{ $isActive ? '1' : '0' }}"
+                   style="--world-accent: {{ $world['accent'] }}"
+                   title="{{ $world['description'] }}">
+                    <span class="world-switch__label">{{ $world['label'] }}</span>
+                    <span class="world-switch__meta mono">{{ $world['english'] }} · {{ $world['calendar'] }}</span>
+                </a>
+            @endforeach
+        </div>
+
+        <p class="world-switch__tagline faint small">{{ $activeWorld->tagline() }}</p>
+
         {{-- 头部固定：标题、重置、关键词输入不随筛选组滚动 --}}
         <div class="sidebar__head">
             <div class="filter-head">

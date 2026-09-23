@@ -156,6 +156,16 @@
             editing: false,
         };
 
+        /**
+         * 当前世界的历法名。
+         *
+         * 塔卫二用塔罗斯历而非泰拉历 —— 在它的条目上写「泰拉历」是错误信息，
+         * 而这个错误只会出现在提示文案里，不会有人报错，只会有人被误导。
+         */
+        function calendar() {
+            return APP.worldCalendar || '泰拉历';
+        }
+
         /* ---------------- 数据 */
 
         function queryString() {
@@ -167,6 +177,15 @@
                 if (Array.isArray(value)) value.forEach((v) => params.append(`${key}[]`, v));
                 else params.set(key, String(value));
             });
+
+            /*
+             * 世界是**页面级上下文**，不是可清除的筛选项。
+             *
+             * 因此它不放进 state.filters（那会被「重置」按钮抹掉，
+             * 导致用户在塔卫二视图里点一下重置就被送回泰拉），
+             * 而是每次请求都显式带上。
+             */
+            if (APP.world) params.set('world', APP.world);
 
             params.set('page', String(state.page));
             params.set('per_page', String(state.perPage));
@@ -250,7 +269,7 @@
                 const items = groups.get(key);
 
                 if (key === 'unanchored') {
-                    return band('时间未定', '未能在文本中定位到泰拉历区间，等待人工补全', '#5c7189', items.length)
+                    return band('时间未定', `未能在文本中定位到${calendar()}区间，等待人工补全`, '#5c7189', items.length)
                         + items.map(card).join('');
                 }
 
@@ -673,7 +692,7 @@
                     <div class="row">
                         <div class="field">
                             <label>游戏内纪元时间（原文）*</label>
-                            <input type="text" name="date_display" value="${esc(event.date.display)}" placeholder="泰拉历1096年12月23日 / 1097年冬 / 时间未定">
+                            <input type="text" name="date_display" value="${esc(event.date.display)}" placeholder="${esc(calendar())}1096年12月23日 / 1097年冬 / 时间未定">
                             <div class="faint small" style="margin-top:4px">保留原始表述，系统会自动解析排序区间；无法解析的会归入「时间未定」。</div>
                         </div>
                         <div class="field" style="max-width:150px">
@@ -1290,7 +1309,8 @@
             if (soft.length) {
                 const corrected = prompt(
                     `需补正以下问题后才能采纳：\n\n${soft.join('\n')}\n\n`
-                    + '请输入修正后的「游戏内纪元时间」原文（示例：泰拉历1099年12月），留空则放弃：',
+                    // 示例不带历法名：这个弹窗同时服务泰拉与塔卫二，写死哪一个都会在另一个世界里说错话
+                    + '请输入修正后的「游戏内纪元时间」原文（示例：1099年12月），留空则放弃：',
                 );
 
                 if (!corrected) return;

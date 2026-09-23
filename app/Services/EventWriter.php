@@ -7,11 +7,13 @@ use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
 use App\Enums\EventStatus;
 use App\Enums\RevisionAction;
+use App\Enums\World;
 use App\Exceptions\EditConflictException;
 use App\Exceptions\WriteDeniedException;
 use App\Models\AiProposal;
 use App\Models\Annotation;
 use App\Models\Character;
+use App\Models\Era;
 use App\Models\Event;
 use App\Models\EventRevision;
 use App\Models\Faction;
@@ -79,6 +81,60 @@ final class EventWriter
     ) {
     }
 
+    // ------------------------------------------------------------------ 世界一致性
+
+    /**
+     * 纪元必须与条目属于同一个世界。
+     *
+     * 「跨世界比较无意义」的直接推论：`Era::coversIndex()` 会拿塔罗斯历的索引
+     * 去和泰拉纪元的区间比较，那个比较**有结果，但结果没有意义** ——
+     * 于是时代错位校验会变成一台随机报警器。
+     */
+    private function assertEraBelongsToWorld(?int $eraId, World $world): void
+    {
+        if ($eraId === null) {
+            return;
+        }
+
+        $era = Era::find($eraId);
+
+        if ($era === null) {
+            return; // 不存在的纪元交给外键约束去拒绝
+        }
+
+        $eraWorld = $era->world instanceof World ? $era->world : World::default();
+
+        if ($eraWorld !== $world) {
+            throw new WriteDeniedException(sprintf(
+                '纪元「%s」属于%s，不能用在%s的条目上 —— 两个世界的纪年数值不可比较。',
+                $era->name,
+                $eraWorld->label(),
+                $world->label(),
+            ), 'era_world_mismatch');
+        }
+    }
+
+    /**
+     * 条目不可改换世界。
+     *
+     * 换世界等于换一套纪年：它的 `start_index`、纪元归属、出处引用会同时失去意义。
+     * 正确做法是新建条目，而不是就地改写一个可能已被别人引用的条目。
+     * 因此这里显式拒绝（而不是静默忽略字段），让调用方知道自己的意图没有被执行。
+     */
+    private function assertWorldUnchanged(Event $event, array $data): void
+    {
+        if (! filled($data['world'] ?? null)) {
+            return;
+        }
+
+        if (World::fromRequest($data['world']) !== $event->world()) {
+            throw new WriteDeniedException(
+                '条目的世界不可更改：换一个世界等于换一套纪年，它的时间索引与纪元归属都会失效。请新建条目。',
+                'world_immutable',
+            );
+        }
+    }
+
     // ------------------------------------------------------------------ 创建
 
     /**
@@ -97,10 +153,15 @@ final class EventWriter
 
         $data = $this->normalizeDate($data);
 
-        $event = DB::transaction(function () use ($data, $actor, $origin, $proposal, $ip) {
+        $world = World::fromRequest($data['world'] ?? null);
+        $this->assertEraBelongsToWorld($data['era_id'] ?? null, $world);
+
+        $event = DB::transaction(function () use ($data, $actor, $origin, $proposal, $ip, $world) {
             /** @var Event $event */
             $event = Event::create([
                 ...Arr::only($data, self::EDITABLE_FIELDS),
+                // 世界不在 EDITABLE_FIELDS 里：它只能在创建时确定，见 assertWorldUnchanged
+                'world' => $world->value,
                 'slug' => $this->uniqueSlug($data['title']),
                 'version' => 1,
                 'created_by' => $actor->id,
@@ -153,6 +214,9 @@ final class EventWriter
         $this->assertCanWrite($event, $actor);
 
         $data = $this->normalizeDate($data, $event->fresh());
+
+        $this->assertWorldUnchanged($event, $data);
+        $this->assertEraBelongsToWorld($data['era_id'] ?? null, $event->world());
 
         $base = $this->snapshotAtVersion($event->id, $expectedVersion);
 

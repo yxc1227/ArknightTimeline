@@ -147,8 +147,14 @@ final readonly class TerraDate
         return $index >= $this->startIndex && $index <= $this->endIndex;
     }
 
-    /** 供界面显示的粗粒度回溯标签，例如「约 1097 年 12 月」。 */
-    public static function describeIndex(int $index): string
+    /**
+     * 供界面显示的粗粒度回溯标签，例如「约 泰拉历 1097 年 12 月」。
+     *
+     * 历法名由调用方传入：网格索引是通用算术，但它的**含义**取决于所属世界 ——
+     * 同一个 1860 在泰拉与塔卫二分别代表什么，只有调用方知道。
+     * 缺省值保留泰拉历，是为了兼容既有调用点。
+     */
+    public static function describeIndex(int $index, string $calendarLabel = '泰拉历'): string
     {
         if ($index === self::UNKNOWN_INDEX) {
             return '时间未定';
@@ -157,7 +163,7 @@ final readonly class TerraDate
         $parts = self::fromIndex($index);
         $month = (($parts['month'] - 1) % 12) + 1;
 
-        return sprintf('约 泰拉历 %d 年 %d 月', $parts['year'], $month);
+        return sprintf('约 %s %d 年 %d 月', $calendarLabel, $parts['year'], $month);
     }
 
     /**

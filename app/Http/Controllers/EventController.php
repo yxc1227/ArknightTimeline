@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\World;
 use App\Exceptions\EditConflictException;
 use App\Exceptions\WriteDeniedException;
 use App\Http\Requests\StoreAnnotationRequest;
@@ -41,7 +42,9 @@ class EventController extends Controller
             'anomalies' => $event->openAnomalies()->with(['event', 'relatedEvent'])->get()->map(fn ($a) => $a->toApiArray()),
             'permissions' => $this->permissions($request, $event),
             'reference' => [
-                'eras' => Era::ordered()->get(['id', 'name', 'slug']),
+                // 纪元选项按条目自身的世界收敛：给泰拉条目列出塔罗斯历的纪元，
+                // 只会诱使用户选出一个跨世界的归属，然后被 EventWriter 拒绝
+                'eras' => Era::ofWorld($event->world())->ordered()->get(['id', 'name', 'slug']),
                 'sources' => Source::orderBy('name')->get(['id', 'name', 'type', 'code']),
                 'characters' => Character::orderBy('name')->limit(600)->get(['id', 'name', 'codename']),
                 'factions' => Faction::orderBy('name')->get(['id', 'name', 'color']),

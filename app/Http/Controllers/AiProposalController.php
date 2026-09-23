@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ProposalStatus;
+use App\Enums\World;
 use App\Exceptions\WriteDeniedException;
 use App\Http\Requests\SynthesizeRequest;
 use App\Models\AiProposal;
@@ -49,7 +50,8 @@ class AiProposalController extends Controller
                 'rejected' => AiProposal::where('status', ProposalStatus::Rejected->value)->count(),
             ],
             'sources' => Source::orderBy('name')->get(),
-            'eras' => Era::ordered()->get(),
+            // 纪元选项按当前世界收敛：跨世界的纪元区间不可比较，列出来只是干扰
+            'eras' => Era::ofWorld(World::fromRequest($request->string('world')->value()))->ordered()->get(),
             'canReview' => $request->user()->canReview(),
         ]);
     }

@@ -6,6 +6,7 @@ use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
 use App\Enums\EventStatus;
 use App\Enums\SourceType;
+use App\Enums\World;
 use App\Models\Character;
 use App\Models\Era;
 use App\Models\Event;
@@ -14,6 +15,7 @@ use App\Models\Source;
 use App\Models\Tag;
 use App\Services\TimelineConsistencyChecker;
 use App\Support\TerraDate;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -24,14 +26,23 @@ class TimelineController extends Controller
     {
     }
 
-    /** 主界面：时间线。筛选条件全部由前端驱动，服务端只负责首屏与选项字典。 */
+    /**
+     * 主界面：时间线。筛选条件全部由前端驱动，服务端只负责首屏与选项字典。
+     *
+     * 世界是唯一一个**必须由服务端先确定**的维度：纪元分组、选项字典与异常统计
+     * 都要跟着它走，而它们都发生在首屏渲染阶段。
+     */
     public function index(Request $request): View
     {
+        $world = World::fromRequest($request->string('world')->value());
+
         return view('timeline.index', [
-            'filterOptions' => $this->filterOptions(),
-            'eras' => Era::ordered()->get(),
+            'filterOptions' => $this->dictionaries($world),
+            'worlds' => World::switcherOptions(),
+            'activeWorld' => $world,
+            'eras' => Era::ofWorld($world)->ordered()->get(),
             'activeEra' => $request->query('era'),
-            'anomalySummary' => $this->checker->openSummary(),
+            'anomalySummary' => $this->checker->openSummary($world),
         ]);
     }
 
@@ -109,17 +120,42 @@ class TimelineController extends Controller
             ->all();
     }
 
-    /** 筛选字典。一次性下发，避免每个下拉框都发一次请求。 */
-    public function filterOptions(): array
+    /** 筛选字典（按当前世界）。一次性下发，避免每个下拉框都发一次请求。 */
+    public function filterOptions(Request $request): array
     {
+        return $this->dictionaries(World::fromRequest($request->string('world')->value()));
+    }
+
+    /**
+     * 选项字典的具体组装。
+     *
+     * 世界相关的三件事必须跟着世界走：**纪元**（区间不可跨世界比较）、
+     * **出处**（版本号与章节属于各自的资料体系）、以及**阵营/人物**
+     * （按「在这个世界里出现过」收敛 —— 罗德岛这类跨世界的组织会自然出现在两边，
+     * 而整合运动不会出现在塔卫二的筛选里，选择后 0 结果的空筛选没有意义）。
+     *
+     * 标签保持全局：它是跨世界的横切概念（天灾、源石），刻意不做世界隔离。
+     *
+     * @return array<string, mixed>
+     */
+    private function dictionaries(World $world): array
+    {
+        // 「在这个世界里出现过」——用于阵营与人物这类共享字典的收敛
+        $appearsInWorld = fn (Builder $q) => $q->ofWorld($world);
+
         return [
-            'eras' => Era::ordered()->get()->map(fn (Era $e) => $e->toApiArray()),
-            'factions' => Faction::orderBy('sort_order')->get()->map(fn (Faction $f) => [
-                ...$f->toApiArray(),
-                'depth' => 0,
-            ]),
-            'characters' => Character::orderBy('sort_order')->limit(400)->get()->map(fn (Character $c) => $c->toApiArray()),
-            'sources' => Source::orderBy('type')->orderBy('release_order')->get()->map(fn (Source $s) => $s->toApiArray()),
+            'world' => $world->value,
+            'worlds' => World::switcherOptions(),
+            'eras' => Era::ofWorld($world)->ordered()->get()->map(fn (Era $e) => $e->toApiArray()),
+            'factions' => Faction::whereHas('events', $appearsInWorld)
+                ->orderBy('sort_order')->get()->map(fn (Faction $f) => [
+                    ...$f->toApiArray(),
+                    'depth' => 0,
+                ]),
+            'characters' => Character::whereHas('events', $appearsInWorld)
+                ->orderBy('sort_order')->limit(400)->get()->map(fn (Character $c) => $c->toApiArray()),
+            'sources' => Source::ofWorld($world)
+                ->orderBy('type')->orderBy('release_order')->get()->map(fn (Source $s) => $s->toApiArray()),
             'tags' => Tag::orderBy('name')->get()->map(fn (Tag $t) => $t->toApiArray()),
             'enums' => [
                 'statuses' => EventStatus::options(),
@@ -128,7 +164,7 @@ class TimelineController extends Controller
                 'source_types' => SourceType::options(),
                 'precision_options' => collect(DatePrecision::cases())->mapWithKeys(fn ($c) => [$c->value => $c->label()])->all(),
             ],
-            'era_bands' => Era::ordered()->get()->map(fn (Era $e) => [
+            'era_bands' => Era::ofWorld($world)->ordered()->get()->map(fn (Era $e) => [
                 'slug' => $e->slug,
                 'name' => $e->name,
                 'color' => $e->color,
@@ -139,6 +175,7 @@ class TimelineController extends Controller
             'scale' => [
                 'unknown_index' => TerraDate::UNKNOWN_INDEX,
                 'decade_step' => TerraDate::DAYS_PER_YEAR * 10,
+                'calendar' => $world->calendarLabel(),
             ],
         ];
     }
@@ -147,6 +184,8 @@ class TimelineController extends Controller
     private function extractFilters(Request $request): array
     {
         return array_filter([
+            // 世界永远存在（缺省泰拉），不参与「空值即忽略」的过滤 —— 它是一条隔离边界
+            'world' => World::fromRequest($request->string('world')->value())->value,
             'q' => $request->string('q')->trim()->value(),
             'era_id' => $request->integer('era_id') ?: null,
             'status' => $request->string('status')->value() ?: null,

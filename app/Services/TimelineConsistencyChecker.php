@@ -7,6 +7,7 @@ use App\Enums\AnomalyType;
 use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
 use App\Models\AiProposal;
+use App\Enums\World;
 use App\Models\Era;
 use App\Models\Event;
 use App\Models\TimelineAnomaly;
@@ -124,7 +125,10 @@ final class TimelineConsistencyChecker
         }
 
         // 疑似重复（与既有条目 + 同批次其他提案）
+        // 世界取自提案所属出处：跨世界的「相似」不是重复，泰拉与塔卫二的
+        // 索引也不可比较，混在一起比对只会产出假阳性
         $duplicate = $this->findDuplicateForCandidate(
+            $proposal->source?->world ?? World::default(),
             $proposal->title,
             $proposal->start_index,
             $proposal->end_index,
@@ -263,7 +267,10 @@ final class TimelineConsistencyChecker
         }
 
         // 6) 单日过载：同一时间点上堆积过多条目，通常意味着存在拆分错误
+        //    必须限定在世界内：索引相同只说明「在各自的纪年里落在同一天」，
+        //    泰拉历 1097 年与塔罗斯历 1097 年毫无关系，跨世界计数是纯粹的噪声
         $sameMoment = Event::where('id', '!=', $event->id)
+            ->ofWorld($event->world())
             ->where('start_index', $event->start_index)
             ->count();
 
@@ -281,10 +288,25 @@ final class TimelineConsistencyChecker
     /** 在既有条目中寻找疑似重复。 */
     private function findDuplicate(Event $event, float $threshold): ?Event
     {
-        return $this->findDuplicateForCandidate($event->title, $event->start_index, $event->end_index, $event->id, $threshold);
+        return $this->findDuplicateForCandidate(
+            $event->world(),
+            $event->title,
+            $event->start_index,
+            $event->end_index,
+            $event->id,
+            $threshold,
+        );
     }
 
+    /**
+     * 在既有条目中寻找疑似重复。
+     *
+     * 世界是**第一个参数**，因为它同时决定了两件事：候选集的范围，
+     * 以及「索引相同」是否有意义。泰拉历 1097 年与塔罗斯历 5 年在数值上
+     * 天差地别，但两个世界的区间重叠判定本身就不成立 —— 跨世界比对只会产出假阳性。
+     */
     private function findDuplicateForCandidate(
+        World $world,
         string $title,
         ?int $startIndex,
         ?int $endIndex,
@@ -301,6 +323,7 @@ final class TimelineConsistencyChecker
 
         // 先用低成本的索引条件把候选集压小（时间区间重叠），再做昂贵的相似度计算。
         $candidates = Event::query()
+            ->ofWorld($world)
             ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->where('end_index', '>=', $startIndex - TerraDate::DAYS_PER_YEAR)
             ->where('start_index', '<=', $endIndex + TerraDate::DAYS_PER_YEAR)
@@ -348,13 +371,22 @@ final class TimelineConsistencyChecker
     }
 
     /** 全量重算事件索引（例如批量调整了纪元区间之后）。 */
+    /**
+     * 按纪元区间补全未归属条目的 era_id。
+     *
+     * **必须逐世界进行**：纪元区间只在同一纪年体系内可比。
+     * 泰拉第一个纪元「远古 · 前纪元」的区间是 -186000 ~ 371627，
+     * 而塔罗斯历 5 年的索引只有 1860 —— 少了世界条件，
+     * 塔卫二的事件会被静默归进泰拉的「远古 · 前纪元」，且不报任何错。
+     */
     public function reindexEraAssignments(): int
     {
-        $eras = \App\Models\Era::ordered()->get();
+        $eras = Era::ordered()->get();
         $updated = 0;
 
         foreach ($eras as $era) {
             $updated += Event::whereNull('era_id')
+                ->ofWorld($era->world)
                 ->whereBetween('start_index', [$era->start_index, $era->end_index])
                 ->update(['era_id' => $era->id]);
         }
@@ -363,10 +395,36 @@ final class TimelineConsistencyChecker
     }
 
     /** 统计当前未处置的异常，用于导航角标。 */
-    public function openSummary(): array
+    /**
+     * 未处理异常的分级统计。
+     *
+     * 传入世界时按该世界统计：异常自身不带世界字段，它的世界来自所属条目。
+     * 不传则统计全部（导航栏角标用的就是这个口径）。
+     *
+     * @return array<string, int>
+     */
+    public function openSummary(?World $world = null): array
     {
-        return DB::table('timeline_anomalies')
-            ->where('status', 'open')
+        /*
+         * 表名一律交给查询构造器去加前缀：
+         * 本项目用 DB_PREFIX 给所有表加了前缀（默认 arknight_），
+         * 而 selectRaw / groupBy 里的**原生字符串不会被加前缀** ——
+         * 写成 `timeline_anomalies.severity` 在 MySQL 上尚能靠别名蒙混，
+         * 在 SQLite 上直接报 "no such column"。
+         *
+         * join 之后必须限定 `timeline_anomalies.status`：events 表也有 status 列，
+         * 不加限定就是歧义列（而这个前缀由构造器负责补上）。
+         */
+        $query = DB::table('timeline_anomalies')
+            ->where('timeline_anomalies.status', 'open');
+
+        if ($world !== null) {
+            $query->join('events', 'events.id', '=', 'timeline_anomalies.event_id')
+                ->where('events.world', $world->value);
+        }
+
+        return $query
+            // severity 只有异常表有，不会歧义
             ->selectRaw('severity, count(*) as total')
             ->groupBy('severity')
             ->pluck('total', 'severity')

@@ -1623,3 +1623,58 @@ img.avatar {
     .dropzone { flex-direction: column; align-items: flex-start; }
     .provider-card__head { align-items: flex-start; }
 }
+
+/* ---------------------------------------------------------------- 世界切换器 */
+
+/*
+ * 世界（泰拉 / 塔卫二）不是普通筛选项，而是时间线的**前提**：
+ * 两套纪年的索引数值不可比较，纪元分组、选项字典与时间轴刻度都要跟着它走。
+ * 因此它在视觉上位于筛选栏之前、且用整块可点的分段控件表达「这是一个层级切换」。
+ */
+.world-switch {
+    display: flex;
+    gap: 1px;
+    padding: 10px 10px 0;
+    background: var(--bg-raised);
+}
+
+.world-switch__item {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+    background: var(--bg-input);
+    color: var(--text-dim);
+    text-decoration: none;
+    transition: border-color .15s, background .15s, color .15s;
+}
+
+.world-switch__item:hover { background: var(--bg-panel); color: var(--text); text-decoration: none; }
+
+/* 选中态用该世界的标识色标出底部与左侧：一眼看出现在在哪个世界 */
+.world-switch__item[data-active='1'] {
+    border-bottom-color: var(--world-accent, var(--accent));
+    border-left-color: var(--world-accent, var(--accent));
+    background: var(--bg-panel);
+    color: var(--text);
+}
+
+.world-switch__label { font-size: 13px; letter-spacing: .02em; }
+
+.world-switch__item[data-active='1'] .world-switch__label { color: var(--world-accent, var(--accent)); }
+
+.world-switch__meta {
+    font-size: 10px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.world-switch__tagline { padding: 7px 12px 0; margin: 0; }

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
 use App\Enums\EventStatus;
+use App\Enums\World;
 use App\Support\TerraDate;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -25,7 +26,7 @@ use Illuminate\Support\Str;
  *    因此并发插入不会破坏时间线拓扑。
  */
 #[Fillable([
-    'title', 'slug', 'summary', 'details', 'location',
+    'world', 'title', 'slug', 'summary', 'details', 'location',
     'date_display', 'start_index', 'end_index', 'date_precision', 'date_confidence',
     'era_id', 'sort_seq', 'parent_event_id', 'caused_by_event_id',
     'status', 'version', 'is_locked', 'created_by', 'updated_by',
@@ -38,6 +39,7 @@ class Event extends Model
     protected function casts(): array
     {
         return [
+            'world' => World::class,
             'start_index' => 'integer',
             'end_index' => 'integer',
             'sort_seq' => 'integer',
@@ -48,6 +50,24 @@ class Event extends Model
             'status' => EventStatus::class,
             'verified_at' => 'datetime',
         ];
+    }
+
+    /** 所属世界。空值按缺省世界处理 —— 历史行与未指定世界的写入都落在泰拉。 */
+    public function world(): World
+    {
+        return $this->world instanceof World ? $this->world : World::default();
+    }
+
+    /**
+     * 按世界过滤。
+     *
+     * 不可为空：`start_index` 是没有量纲的整数网格，跨世界的数值比较毫无意义，
+     * 而错误的结果看起来完全正常。把世界设成必填参数，
+     * 是为了让「忘记按世界隔离」在调用点就写不出来。
+     */
+    public function scopeOfWorld(Builder $query, World|string $world): Builder
+    {
+        return $query->where('world', $world instanceof World ? $world->value : $world);
     }
 
     // ---------------------------------------------------------------- 关系
@@ -166,7 +186,17 @@ class Event extends Model
      */
     public function scopeFilter(Builder $query, array $filters): Builder
     {
+        /*
+         * 世界永远排在最前面，且**不允许缺省**。
+         *
+         * 它不是一个普通的筛选项：`start_index` 只在同一纪年体系内可比，
+         * 少了这一条，泰拉历 1097 年（索引 405,702）与塔罗斯历 5 年（索引 1,860）
+         * 会被排进同一条序列，分页与年代分布统计随之整体失真 —— 而且不报错。
+         */
+        $world = World::fromRequest($filters['world'] ?? null);
+
         return $query
+            ->where('world', $world->value)
             ->when(filled($filters['q'] ?? null), function (Builder $q) use ($filters) {
                 $term = '%'.Str::lower(trim((string) $filters['q'])).'%';
                 $q->where(function (Builder $inner) use ($term) {
@@ -249,6 +279,8 @@ class Event extends Model
     {
         return [
             'id' => $this->id,
+            'world' => $this->world()->value,
+            'world_label' => $this->world()->label(),
             'title' => $this->title,
             'slug' => $this->slug,
             'summary' => $this->summary,
@@ -262,7 +294,10 @@ class Event extends Model
                 'confidence_label' => $this->date_confidence->label(),
                 'start_index' => $this->start_index,
                 'end_index' => $this->end_index,
-                'hint' => $this->isUnanchored() ? '时间未定' : TerraDate::describeIndex($this->start_index),
+                // 回溯文案要带本世界的历法名，塔卫二与泰拉的纪年不是同一套
+                'hint' => $this->isUnanchored()
+                    ? '时间未定'
+                    : TerraDate::describeIndex($this->start_index, $this->world()->calendarLabel()),
             ],
             'era' => $this->relationLoaded('era') && $this->era ? $this->era->toApiArray() : null,
             'status' => [
