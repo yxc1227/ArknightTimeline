@@ -37,7 +37,7 @@ use Illuminate\Database\Seeder;
  *
  * 数据分三层来源：
  *   1. 剧情条目（主线 / 活动）——  有较明确的游戏内时间，多为 inferred；
- *   2. 《大地巡礼》条目        ——  世界观机制与国家背景，**年份普遍未载**，
+ *   2. 《大地巡旅》条目        ——  世界观机制与国家背景，**年份普遍未载**，
  *                                  因此统一落在「时间未定」泳道，见 seedTerraTourEvents()；
  *   3. 示例语料与 AI 提案      ——  演示完整的梳理链路。
  *
@@ -45,7 +45,7 @@ use Illuminate\Database\Seeder;
  */
 class TimelineSeeder extends Seeder
 {
-    /** 《大地巡礼》条目的统一时间占位：明确「年份未载」，而不是伪造一个年份。 */
+    /** 《大地巡旅》条目的统一时间占位：明确「年份未载」，而不是伪造一个年份。 */
     private const UNDATED_DATE = '泰拉历未载具体年份';
 
     public function run(): void
@@ -184,7 +184,7 @@ class TimelineSeeder extends Seeder
             ['name' => '萨尔贡', 'color' => '#facc15'],
             ['name' => '深池', 'full_name' => '维多利亚感染者组织 · 深池', 'color' => '#e879f9'],
 
-            // 《大地巡礼》「国家与地区」卷覆盖、但此前未进入检索维度的政体。
+            // 《大地巡旅》「国家与地区」卷覆盖、但此前未进入检索维度的政体。
             // 只填在有把握的字段上：不做正式国名的推测，拿不准的一律留空。
             ['name' => '莱塔尼亚', 'color' => '#818cf8', 'description' => '以双王共治体制与术师传统著称的政体。'],
             ['name' => '米诺斯', 'color' => '#2dd4bf', 'description' => '由多个城邦构成的地区，保有古老的信仰与竞技传统。'],
@@ -455,7 +455,7 @@ class TimelineSeeder extends Seeder
             ['亚叶', null, '罗德岛', null],
             ['瓦拉', null, '卡兹戴尔', '萨卡兹'],
 
-            // 《大地巡礼》「国家与地区」卷涉及、此前缺失的关联人物。
+            // 《大地巡旅》「国家与地区」卷涉及、此前缺失的关联人物。
             // 种族字段留空而不是靠印象填：拿不准的字段宁可缺失，也不要写错。
             ['帕拉斯', 'Pallas', '米诺斯', null],
             ['斯卡蒂', 'Skadi', '阿戈尔', null, '阿戈尔出身，与深海威胁相关的干员。'],
@@ -569,7 +569,7 @@ class TimelineSeeder extends Seeder
             ['官方设定集 Vol.1', 'artbook-1', SourceType::Artbook, 'Vol.1', '世界观 / 阵营 / 年表', 50],
             ['官方设定集 Vol.2', 'artbook-2', SourceType::Artbook, 'Vol.2', '世界观 / 干员', 51],
             ['官方设定集 Vol.3', 'artbook-3', SourceType::Artbook, 'Vol.3', '世界观 / 干员', 52],
-            ['《大地巡礼》', 'terra-tour', SourceType::Artbook, '官方世界观设定集', '世界卷 / 国家与地区卷', 48],
+            ['《大地巡旅》', 'terra-tour', SourceType::Artbook, '官方世界观设定集', '世界卷 / 国家与地区卷 / 泰拉纪年', 48],
 
             // ---- 世界观设定 ----
             ['世界观设定 · 泰拉纪年表', 'setting-chronicle', SourceType::Setting, null, '泰拉编年', 60],
@@ -605,7 +605,7 @@ class TimelineSeeder extends Seeder
         /*
          * ---- 塔卫二的出处 ----
          *
-         * 两份都不预置 raw_text，理由与《大地巡礼》完全相同：
+         * 两份都不预置 raw_text，理由与《大地巡旅》完全相同：
          * 游戏内文本尚未录入，而编造引文会直接摧毁「引用可定位」的价值。
          *
          * 关键在于**把二级来源标出来**：塔卫二的时间结论目前来自玩家社区整理，
@@ -634,7 +634,7 @@ class TimelineSeeder extends Seeder
                 均以它为依据，因此那些条目一律标记为「推断」并等待用游戏内原文重新核验。',
         ]);
 
-        // 《大地巡礼》的定位说明。这里刻意**不预置 raw_text、也不填引文**：
+        // 《大地巡旅》的定位说明。这里刻意**不预置 raw_text、也不填引文**：
         // 这本书的具体表述尚未逐页录入，而编造引文会直接摧毁「引用可定位」这条校验的价值。
         // 正确的工作流是：录入原文 → 出处页「开始梳理」→ 审核台放行，引文与时间随之补齐。
         Source::where('slug', 'terra-tour')->update([
@@ -703,6 +703,130 @@ TXT,
                 'factions' => [['萨尔贡', 'involved']],
                 'tags' => ['源石'],
             ],
+
+            // ===== 《大地巡旅》年表：797 – 999（附录「泰拉纪年」） =====
+            /*
+             * 《大地巡旅》书末附有官方年表，作者声明仅收录「明确存在的大事件」——
+             * 这是全书里唯一成体系的**带年份**材料，因此这批条目敢标 confirmed/verified，
+             * 且引文逐字取自年表原文（年表注：[] 为凯尔希补充）。
+             */
+            [
+                'title' => '七城联邦建成第一座现代移动城市',
+                'date' => '泰拉历797年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '七城联邦建成泰拉历史上第一座现代移动城市，「整体迁移以躲避天灾」自此成为泰拉城市的标准形态。',
+                'location' => null,
+                'sources' => [['terra-tour', null, '797 七城联邦建成泰拉历史上第一座现代移动城市', '泰拉纪年']],
+                'tags' => ['天灾'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '炎国首次派出驻外信使',
+                'date' => '泰拉历845年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '炎国首次向泰拉各国派出信使进行外交活动，开启了泰拉诸国交往的新局面。',
+                'location' => null,
+                'sources' => [['terra-tour', null, '845 炎国首次向泰拉各国派出信使进行外交活动，开启了泰拉诸国交往的新局面', '泰拉纪年']],
+                'factions' => [['炎国', 'instigator']],
+                'tags' => ['外交'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '玻利瓦尔主导权开始脱离伊比利亚',
+                'date' => '泰拉历885年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '玻利瓦尔的主导权开始从伊比利亚向外转移，这一进程最终导向玻利瓦尔的独立建国。',
+                'location' => null,
+                'sources' => [['terra-tour', null, '885 玻利瓦尔主导权开始从伊比利亚向外转移', '泰拉纪年']],
+                'factions' => [['伊比利亚', 'involved'], ['玻利瓦尔', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '莱塔尼亚控制下的玻利瓦尔国成立',
+                'date' => '泰拉历897年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '莱塔尼亚控制的玻利瓦尔国成立，玻利瓦尔进入被外国势力主导的时期。',
+                'location' => null,
+                'sources' => [['terra-tour', null, '897 莱塔尼亚控制的玻利瓦尔国成立', '泰拉纪年']],
+                'factions' => [['莱塔尼亚', 'instigator'], ['玻利瓦尔', 'victim']],
+                'tags' => ['政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '三国联军进攻卡兹戴尔失败',
+                'date' => '泰拉历898年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '三国联军进攻卡兹戴尔失败，卡兹戴尔战争议会随后成立。',
+                'details' => '年表未载明「三国」具体所指，不臆测。',
+                'location' => '卡兹戴尔',
+                'sources' => [['terra-tour', null, '898 三国联军进攻卡兹戴尔失败，卡兹戴尔战争议会成立', '泰拉纪年']],
+                'factions' => [['卡兹戴尔', 'victim']],
+                'tags' => ['战争'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '伊比利亚人与「岛民」相遇',
+                'date' => '泰拉历913年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '伊比利亚人与来自海洋的「岛民」相遇，两大文明的接触自此开始。',
+                'details' => '「岛民」即阿戈尔人；这次相遇为伊比利亚随后的黄金时代埋下伏笔。',
+                'location' => '伊比利亚沿海',
+                'sources' => [['terra-tour', null, '913 伊比利亚人与“岛民” 相遇', '泰拉纪年']],
+                'factions' => [['伊比利亚', 'involved'], ['阿戈尔', 'involved']],
+                'tags' => ['外交'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '伊比利亚进入黄金时代',
+                'date' => '泰拉历930年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '伊比利亚走向黄金时代，成为「第二个将土地与城塞喻作黄金的国家」。',
+                'location' => '伊比利亚',
+                'sources' => [['terra-tour', null, '930 伊比利亚走向黄金时代', '泰拉纪年']],
+                'factions' => [['伊比利亚', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '巫王赫尔昏佐伦即位',
+                'date' => '泰拉历969年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '莱塔尼亚巫王赫尔昏佐伦即位，莱塔尼亚进入巫王时代。',
+                'location' => '莱塔尼亚',
+                'sources' => [['terra-tour', null, '969 莱塔尼亚巫王赫尔昏佐伦即位', '泰拉纪年']],
+                'factions' => [['莱塔尼亚', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '叙拉古脱离莱塔尼亚',
+                'date' => '泰拉历969年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '叙拉古正式脱离莱塔尼亚。',
+                'location' => '叙拉古',
+                'sources' => [['terra-tour', null, '969 叙拉古正式脱离莱塔尼亚', '泰拉纪年']],
+                'factions' => [['叙拉古', 'protagonist'], ['莱塔尼亚', 'involved']],
+                'tags' => ['政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '维多利亚发现并命名哥伦比亚',
+                'date' => '泰拉历990年',
+                'era' => 'prehistory',
+                'confidence' => 'confirmed',
+                'summary' => '一片全新的地区由维多利亚首次发现，并被命名为「哥伦比亚」。',
+                'location' => '哥伦比亚',
+                'sources' => [['terra-tour', null, '990 一片全新的地区由维多利亚首次发现，并被命名为“哥伦比亚”', '泰拉纪年']],
+                'factions' => [['维多利亚', 'instigator'], ['哥伦比亚', 'involved']],
+                'status' => 'verified',
+            ],
             [
                 'title' => '大静谧（伊比利亚）',
                 'date' => '泰拉历1038年',
@@ -743,6 +867,213 @@ TXT,
                 'status' => 'verified',
             ],
 
+            // ===== 《大地巡旅》年表：1016 – 1091（附录「泰拉纪年」） =====
+            [
+                'title' => '哥伦比亚独立战争',
+                'date' => '泰拉历1016年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '哥伦比亚为脱离维多利亚爆发独立战争。',
+                'details' => '年表记为 1016 – 1019 年，此处取起始年定位，区间见原文。',
+                'location' => '哥伦比亚',
+                'sources' => [['terra-tour', null, '1016-1019 哥伦比亚独立战争', '泰拉纪年']],
+                'factions' => [['哥伦比亚', 'protagonist'], ['维多利亚', 'instigator']],
+                'tags' => ['战争', '政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '高卢－莱塔尼亚战争与四国战争',
+                'date' => '泰拉历1029年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '高卢与莱塔尼亚交战，并演变为牵涉多国的四国战争。',
+                'details' => '年表记为 1029 – 1031 年。本书后记称，四国战争导致农业技术发展带来的人口剧增几乎一朝被抹除。',
+                'location' => '高卢 / 莱塔尼亚',
+                'sources' => [['terra-tour', null, '1029-1031 高卢－莱塔尼亚战争与四国战争', '泰拉纪年']],
+                'factions' => [['高卢', 'instigator'], ['莱塔尼亚', 'victim']],
+                'tags' => ['战争'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '卡兹戴尔军事委员会成立',
+                'date' => '泰拉历1031年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '卡兹戴尔战争议会改组为卡兹戴尔军事委员会。',
+                'location' => '卡兹戴尔',
+                'sources' => [['terra-tour', null, '1031 卡兹戴尔战争议会改组为卡兹戴尔军事委员会', '泰拉纪年']],
+                'factions' => [['卡兹戴尔', 'involved']],
+                'tags' => ['政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '叙拉古城邦联合议事会成立',
+                'date' => '泰拉历1039年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '叙拉古城邦联合议事会成立，家族体制获得一个名义上的共同议事机构。',
+                'location' => '叙拉古',
+                'sources' => [['terra-tour', null, '1039 叙拉古城邦联合议事会成立', '泰拉纪年']],
+                'factions' => [['叙拉古', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '哥伦比亚组建玻利瓦尔联合政府',
+                'date' => '泰拉历1047年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '哥伦比亚对玻利瓦尔的介入达到顶峰，其后组建玻利瓦尔联合政府。',
+                'location' => '玻利瓦尔',
+                'sources' => [['terra-tour', null, '1047 哥伦比亚对玻利瓦尔的介入达到顶峰，后组建玻利瓦尔联合政府', '泰拉纪年']],
+                'factions' => [['哥伦比亚', 'instigator'], ['玻利瓦尔', 'victim']],
+                'tags' => ['政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '玻利瓦尔自治运动',
+                'date' => '泰拉历1050年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '玻利瓦尔爆发自治运动，反抗外部势力的主导。',
+                'location' => '玻利瓦尔',
+                'sources' => [['terra-tour', null, '1050 玻利瓦尔爆发了自治运动', '泰拉纪年']],
+                'factions' => [['玻利瓦尔', 'protagonist']],
+                'tags' => ['政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '第十次乌萨斯－卡西米尔战争结束',
+                'date' => '泰拉历1062年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '第十次乌萨斯－卡西米尔战争结束，绵延近百年的乌卡纷争到此告一段落。',
+                'location' => '乌萨斯－卡西米尔边境',
+                'sources' => [['terra-tour', null, '1062 第十次乌萨斯－卡西米尔战争结束，代表着绵延了近百年的乌卡纷争到此结束', '泰拉纪年']],
+                'factions' => [['乌萨斯帝国', 'involved'], ['卡西米尔', 'involved']],
+                'tags' => ['战争'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '伊万杰利斯塔一世就任拉特兰教宗',
+                'date' => '泰拉历1063年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '拉特兰的伊万杰利斯塔一世成为新一代拉特兰教宗。',
+                'location' => '拉特兰',
+                'sources' => [['terra-tour', null, '1063 拉特兰的伊万杰利斯塔一世成为新一代拉特兰教宗', '泰拉纪年']],
+                'factions' => [['拉特兰', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '维多利亚皇帝阿利斯泰尔被处绞刑',
+                'date' => '泰拉历1072年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '维多利亚皇帝阿利斯泰尔被执行绞刑，维多利亚王权自此落入贵族与议会之手。',
+                'location' => '维多利亚',
+                'sources' => [['terra-tour', null, '1072 维多利亚皇帝阿利斯泰尔被执行绞刑', '泰拉纪年']],
+                'factions' => [['维多利亚', 'victim']],
+                'tags' => ['政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '乌萨斯皇帝弗拉基米尔·伊凡诺维奇驾崩',
+                'date' => '泰拉历1073年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '乌萨斯皇帝弗拉基米尔·伊凡诺维奇驾崩，帝位更替随即引发动荡。',
+                'location' => '乌萨斯',
+                'sources' => [['terra-tour', null, '1073 乌萨斯皇帝弗拉基米尔·伊凡诺维奇驾崩', '泰拉纪年']],
+                'factions' => [['乌萨斯帝国', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '乌萨斯「大叛乱」',
+                'date' => '泰拉历1074年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '乌萨斯爆发「大叛乱」，帝国陷入内乱。',
+                'details' => '年表记为 1074 – 1076 年，此处取起始年定位。',
+                'location' => '乌萨斯',
+                'sources' => [['terra-tour', null, '1074-1076 乌萨斯“大叛乱”', '泰拉纪年']],
+                'factions' => [['乌萨斯帝国', 'victim']],
+                'tags' => ['内战'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '巫王被推翻，双子女皇时代开始',
+                'date' => '泰拉历1077年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '巫王被推翻，莱塔尼亚进入双子女皇的时代。',
+                'location' => '莱塔尼亚',
+                'sources' => [['terra-tour', null, '1077 巫王被推翻，莱塔尼亚进入双子女皇的时代', '泰拉纪年']],
+                'factions' => [['莱塔尼亚', 'involved']],
+                'tags' => ['政权更迭'],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '阿米娅出生',
+                'date' => '泰拉历1083年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '阿米娅出生。',
+                'details' => '年表注：[] 为凯尔希补充。',
+                'location' => null,
+                'sources' => [['terra-tour', null, '[1083年 阿米娅出生]', '泰拉纪年']],
+                'characters' => [['阿米娅', 'protagonist']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '「罗德岛」号主体修缮完成',
+                'date' => '泰拉历1089年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '「罗德岛」号主体修缮工作完成。',
+                'details' => '年表注：[] 为凯尔希补充。',
+                'location' => null,
+                'sources' => [['terra-tour', null, '[1089年 “罗德岛”号主体修缮工作完成]', '泰拉纪年']],
+                'factions' => [['罗德岛', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '博士在「罗德岛」号苏醒',
+                'date' => '泰拉历1090年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '「博士」在「罗德岛」号苏醒。',
+                'details' => '年表注：[] 为凯尔希补充。这与 1096 年切尔诺伯格的第二次「苏醒」是两回事。',
+                'location' => '罗德岛',
+                'sources' => [['terra-tour', null, '[1090年 “博士”在“罗德岛”号苏醒]', '泰拉纪年']],
+                'factions' => [['罗德岛', 'involved']],
+                'characters' => [['博士', 'protagonist']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '阿米娅与博士踏上旅程',
+                'date' => '泰拉历1090年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '阿米娅与「博士」一起踏上旅程。',
+                'details' => '年表注：[] 为凯尔希补充。',
+                'location' => null,
+                'sources' => [['terra-tour', null, '[1090年 阿米娅与“博士”一起踏上旅程]', '泰拉纪年']],
+                'characters' => [['阿米娅', 'protagonist'], ['博士', 'protagonist']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '谢拉格对外开放',
+                'date' => '泰拉历1091年',
+                'era' => 'era-1000-1093',
+                'confidence' => 'confirmed',
+                'summary' => '谢拉格对外开放，结束了长期与大地保持距离的封闭状态。',
+                'location' => '谢拉格',
+                'sources' => [['terra-tour', null, '1091 谢拉格对外开放', '泰拉纪年']],
+                'factions' => [['谢拉格', 'involved']],
+                'tags' => ['外交'],
+                'status' => 'verified',
+            ],
+
             // ===== 1094 – 1095 =====
             [
                 'title' => '巴别塔解体与罗德岛成立',
@@ -770,6 +1101,58 @@ TXT,
                 'factions' => [['罗德岛', 'involved']],
                 'characters' => [['博士', 'protagonist'], ['凯尔希', 'support']],
                 'tags' => [],
+            ],
+
+            // ===== 《大地巡旅》年表：1094 – 1099（附录「泰拉纪年」） =====
+            [
+                'title' => '博士被放入「石棺」',
+                'date' => '泰拉历1094年',
+                'era' => 'era-1094-1095',
+                'confidence' => 'confirmed',
+                'summary' => '「博士」被放入「石棺」。',
+                'details' => '年表注：[] 为凯尔希补充。注意：现有条目「博士进入石棺沉睡」记为 1095 年，与本书年表的 1094 年存在出入，留待一致性巡检收敛。',
+                'location' => '切尔诺伯格',
+                'sources' => [['terra-tour', null, '[1094年 “博士”被放入“石棺”]', '泰拉纪年']],
+                'factions' => [['罗德岛', 'involved']],
+                'characters' => [['博士', 'protagonist'], ['凯尔希', 'support']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '博士第二次「苏醒」',
+                'date' => '泰拉历1096年',
+                'era' => 'era-1096-1097',
+                'confidence' => 'confirmed',
+                'summary' => '「博士」第二次「苏醒」。',
+                'details' => '年表注：[] 为凯尔希补充。即切尔诺伯格事变当日自石棺被罗德岛小队唤醒之事，与 1090 年的首次苏醒是两回事。',
+                'location' => '切尔诺伯格',
+                'sources' => [['terra-tour', null, '[1096年 “博士”第二次“苏醒”]', '泰拉纪年']],
+                'factions' => [['罗德岛', 'involved']],
+                'characters' => [['博士', 'protagonist']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '维多利亚事件',
+                'date' => '泰拉历1098年',
+                'era' => 'era-1098-1099',
+                'confidence' => 'confirmed',
+                'summary' => '《大地巡旅》年表在 1098 年记有「维多利亚事件」，未作展开。',
+                'details' => '年表原文仅此一行；其具体所指需比对其他出处后确认，不臆测。',
+                'location' => '维多利亚',
+                'sources' => [['terra-tour', null, '1098 维多利亚事件', '泰拉纪年']],
+                'factions' => [['维多利亚', 'involved']],
+                'status' => 'verified',
+            ],
+            [
+                'title' => '第一届拉特兰万国峰会',
+                'date' => '泰拉历1099年',
+                'era' => 'era-1098-1099',
+                'confidence' => 'confirmed',
+                'summary' => '第一届拉特兰万国峰会召开，各国往来与通讯随之便利。',
+                'location' => '拉特兰',
+                'sources' => [['terra-tour', null, '1099 第一届拉特兰万国峰会', '泰拉纪年']],
+                'factions' => [['拉特兰', 'instigator']],
+                'tags' => ['外交'],
+                'status' => 'verified',
             ],
 
             // ===== 1096 年 12 月 =====
@@ -1158,7 +1541,10 @@ TXT,
                     'id' => Source::where('slug', $s[0])->value('id'),
                     'stage_code' => $s[1] ?? null,
                     'quote' => $s[2] ?? null,
-                    'is_primary' => false,
+                    // 第 4 个元素是章节（书籍类出处用）。给了章节，说明该出处就是
+                    // 条目的主要来源 —— 与 seedTerraTourEvents 对《大地巡旅》的处理一致
+                    'chapter' => $s[3] ?? null,
+                    'is_primary' => ($s[3] ?? null) !== null,
                 ])->filter(fn ($s) => $s['id'])->values()->all(),
                 'characters' => collect($data['characters'] ?? [])->map(fn ($c) => ['name' => $c[0], 'role' => $c[1]])->all(),
                 'factions' => collect($data['factions'] ?? [])->map(fn ($f) => ['name' => $f[0], 'role' => $f[1]])->all(),
@@ -1180,15 +1566,18 @@ TXT,
         }
     }
 
-    // ------------------------------------------------------------------ 《大地巡礼》
+    // ------------------------------------------------------------------ 《大地巡旅》
 
     /**
-     * 《大地巡礼》（官方世界观设定集）承载的内容。
+     * 《大地巡旅》（官方世界观设定集）承载的内容。
      *
      * 与主线 / 活动条目有本质差别：这本书的主体是**世界观机制与国家地区背景**，而不是编年史。
      * 它解释了「移动城市为什么存在」「天灾如何塑造政体」「各国政体如何运作」，
      * 却极少给出具体年份 —— 这正是这批条目全部落在「时间未定」泳道的原因，
      * 也是「时间未定必须是泳道而不是异常数据」这条设计的存在理由。
+     *
+     * 例外是书末附录「泰拉纪年」：那是全书唯一成体系的带年份材料，
+     * 已作为带引文的条目进入 seedEvents()，不走本方法。
      *
      * 四点刻意的取舍（都在拒绝「看起来很完整的假数据」）：
      *
@@ -1348,6 +1737,69 @@ TXT,
                 'details' => '这一分歧是整合运动得以在多个地区获得响应的前提条件。',
                 'factions' => [['乌萨斯帝国', 'instigator'], ['龙门', 'involved'], ['罗德岛', 'involved']],
                 'tags' => ['感染者'],
+            ],
+
+            // ---- 本次据《大地巡旅》补齐的国家与地区（此前未立目） ----
+            [
+                'title' => '阿戈尔：「岛民」的海洋文明',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '阿戈尔是泰拉海洋一侧的文明，书中称其民众为「岛民」；泰拉历 913 年伊比利亚人与之相遇，此后伊比利亚的黄金时代与海外交往密不可分。',
+                'details' => '见年表「913 伊比利亚人与岛民相遇」与伊比利亚卷。大静谧之后，沿岸秩序由这两个文明共同定义。',
+                'factions' => [['阿戈尔', 'involved'], ['伊比利亚', 'involved']],
+                'tags' => ['外交'],
+            ],
+            [
+                'title' => '萨尔贡：难以尽述的南方大国',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '萨尔贡体量庞大、内部多样，作者在信中坦言因篇幅与内容敏感性删去了大部分相关章节；年表以萨尔贡「过去与未来之王」发现圣物之年为泰拉纪年元年。',
+                'details' => '泰拉纪年即以那一年记为元年 —— 换言之，萨尔贡与泰拉通行历法的关系比一般认知更紧密。',
+                'factions' => [['萨尔贡', 'involved']],
+            ],
+            [
+                'title' => '萨米：景区之外的北方古国',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '萨米是北方群山中的古老国度，近年以旅游宣传为外人所知；作者提醒，景区之外另有真实的萨米。',
+                'details' => '旅游热潮本身也是理解萨米与外界关系的材料：哥伦比亚旅行社的歌词成了许多人对它的第一印象。',
+                'factions' => [['萨米', 'involved']],
+            ],
+            [
+                'title' => '炎国：体量与含蓄并存的东方大国',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '炎国人口约三亿，主管户籍财政的户部可能是泰拉最繁重的行政机关；在维多利亚人的认知里，炎国常常只意味着龙门口岸与来自东方的茶叶。',
+                'details' => '龙门是进入炎国的必经中转站，也是两国认知落差最集中的地方。',
+                'factions' => [['炎国', 'involved'], ['龙门', 'involved']],
+            ],
+            [
+                'title' => '极东：两大实体夹缝中的东国',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '极东处于乌萨斯与炎国两大地缘政治实体的夹缝之间；1072 年其联合信使团到访伦蒂尼姆而未获承诺，血峰战役的结果与随后的乌萨斯「大叛乱」改变了这一格局。',
+                'details' => '信使团成员高川知彦的经历说明，外交承诺的缺席与国内的官僚倾轧同样扼住了这个国家的转机。',
+                'factions' => [['极东', 'involved'], ['维多利亚', 'involved'], ['乌萨斯帝国', 'involved']],
+                'tags' => ['外交'],
+            ],
+            [
+                'title' => '卡兹戴尔：内战中的流动学校',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '1086 年卡兹戴尔内战中，萨卡兹的流动学校毁于炮火，师生带着课本在战地流亡；教育与历史记忆成为萨卡兹维系自身认同的方式。',
+                'details' => '「卡兹戴尔历史上第八所，恐怕也是最后一所流动学校」—— 教师雷·坦卡的记述是这一卷里最直接的战时教育样本。',
+                'factions' => [['卡兹戴尔', 'victim']],
+                'characters' => [['特蕾西娅', 'support']],
+                'tags' => ['内战', '萨卡兹'],
+            ],
+            [
+                'title' => '高卢的遗产',
+                'section' => '国家与地区卷',
+                'era' => null,
+                'summary' => '四国战争后高卢不复往日大国地位；其改革失败的经验与战争记忆，仍是理解莱塔尼亚、维多利亚现状的背景。',
+                'details' => '书中与作者信件均以高卢为参照：四国战争的人口代价、以及「改革失败的高卢人自己也没有使用这样的一套制度」，都在提示这段遗产的分量。',
+                'factions' => [['高卢', 'involved'], ['莱塔尼亚', 'involved'], ['维多利亚', 'involved']],
+                'tags' => ['战争'],
             ],
         ];
 

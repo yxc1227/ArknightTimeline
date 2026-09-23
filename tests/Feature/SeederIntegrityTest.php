@@ -98,23 +98,34 @@ class SeederIntegrityTest extends TestCase
         }
     }
 
-    // ---------------------------------------------------------------- 《大地巡礼》
+    // ---------------------------------------------------------------- 《大地巡旅》
 
     public function test_terra_tour_source_is_registered(): void
     {
         $source = Source::where('slug', 'terra-tour')->firstOrFail();
 
-        $this->assertSame('《大地巡礼》', $source->name);
+        $this->assertSame('《大地巡旅》', $source->name);
         $this->assertSame('artbook', $source->type->value);
         $this->assertSame('官方世界观设定集', $source->code);
 
-        // 这本书的原文尚未录入，因此 raw_text 应留空 —— 而不是塞入编造的「原文」
-        $this->assertTrue(blank($source->raw_text), '《大地巡礼》不应预置 raw_text');
+        // 这本书的原文尚未整卷录入，因此 raw_text 应留空 —— 而不是塞入编造的「原文」
+        $this->assertTrue(blank($source->raw_text), '《大地巡旅》不应预置 raw_text');
     }
 
-    public function test_terra_tour_events_are_all_marked_undated_and_unreviewed(): void
+    /**
+     * 散文卷（世界卷 / 国家与地区卷）的主体是机制与政体描述，年份普遍未载 ——
+     * 这批条目必须停留在「时间未定」泳道。
+     */
+    public function test_terra_tour_prose_entries_are_marked_undated_and_unreviewed(): void
     {
-        $events = Event::whereHas('sources', fn ($q) => $q->where('sources.slug', 'terra-tour'))->get();
+        // chapter 是 event_source 的 pivot 字段，不能走 whereHas —— 直接查中间表取事件 id
+        $proseEventIds = DB::table('event_source')
+            ->join('sources', 'sources.id', '=', 'event_source.source_id')
+            ->where('sources.slug', 'terra-tour')
+            ->whereIn('event_source.chapter', ['世界卷', '国家与地区卷'])
+            ->pluck('event_source.event_id');
+
+        $events = Event::whereIn('id', $proseEventIds)->get();
 
         $this->assertGreaterThanOrEqual(17, $events->count());
 
@@ -122,7 +133,7 @@ class SeederIntegrityTest extends TestCase
             $this->assertSame(
                 DatePrecision::Unknown,
                 $event->date_precision,
-                "《大地巡礼》条目「{$event->title}」不应声明具体时间",
+                "《大地巡旅》散文卷条目「{$event->title}」不应声明具体时间",
             );
             $this->assertSame('unknown', $event->date_confidence->value);
             $this->assertSame('needs_review', $event->status->value, '未定位年份的条目必须留在待校验状态');
@@ -130,11 +141,37 @@ class SeederIntegrityTest extends TestCase
     }
 
     /**
-     * 这条是刻意的「反向」断言：出处没有引文是**可接受的待办状态**，
-     * 但绝不允许出现凭印象写下的引文。若将来补录了原文与引文，
-     * 应改为断言引文能在 source.raw_text 中定位 —— 而不是删掉这个测试。
+     * 例外：书末附录「泰拉纪年」是全书唯一成体系的带年份材料。
+     * 这批条目必须**带年份、带逐字引文**，且可信度落在已确证档 ——
+     * 反过来讲，谁要是给散文卷条目编了年份或引文，上一条测试会拦下来。
      */
-    public function test_terra_tour_citations_are_left_empty_rather_than_invented(): void
+    public function test_terra_tour_chronicle_entries_are_dated_and_quoted(): void
+    {
+        $rows = DB::table('event_source')
+            ->join('sources', 'sources.id', '=', 'event_source.source_id')
+            ->join('events', 'events.id', '=', 'event_source.event_id')
+            ->where('sources.slug', 'terra-tour')
+            ->where('event_source.chapter', '泰拉纪年')
+            ->get(['events.title', 'events.date_display', 'events.date_confidence', 'events.date_precision',
+                'events.status', 'event_source.quote', 'event_source.quote_offset']);
+
+        $this->assertGreaterThan(20, $rows->count(), '《大地巡旅》年表条目数量异常');
+
+        foreach ($rows as $row) {
+            $this->assertNotSame(DatePrecision::Unknown->value, $row->date_precision, "年表条目「{$row->title}」必须可定位时间");
+            $this->assertSame('confirmed', $row->date_confidence, "年表条目「{$row->title}」应标为已确证");
+            $this->assertSame('verified', $row->status, "年表条目「{$row->title}」应处于已确证状态");
+            $this->assertNotNull($row->quote, "年表条目「{$row->title}」必须附年表原文引文");
+            $this->assertNull($row->quote_offset);
+        }
+    }
+
+    /**
+     * 引文规则按卷拆开：散文卷的出处没有引文是**可接受的待办状态**，
+     * 但绝不允许凭印象写引文；年表卷的引文则必须逐字取自原文，
+     * 且以年份数字开头 —— 这是「引用可定位」在这本书上的落地形态。
+     */
+    public function test_terra_tour_citations_follow_the_per_section_rules(): void
     {
         $rows = DB::table('event_source')
             ->join('sources', 'sources.id', '=', 'event_source.source_id')
@@ -144,10 +181,16 @@ class SeederIntegrityTest extends TestCase
         $this->assertNotEmpty($rows);
 
         foreach ($rows as $row) {
-            $this->assertNull($row->quote, '不得为尚未录入原文的出处编造引文');
             $this->assertNull($row->quote_offset);
-            // 章节仍应标注（粗粒度），让审核人知道该去哪一卷核对
-            $this->assertContains($row->chapter, ['世界卷', '国家与地区卷']);
+
+            if ($row->chapter === '泰拉纪年') {
+                // 引文形如「797 七城联邦建成……」/「[1083年 阿米娅出生]」，以年份数字或凯尔希补充标记开头
+                $this->assertMatchesRegularExpression('/^(\d{3,4}|\[)\s*\d{0,4}/u', (string) $row->quote,
+                    "年表引文应以年份数字开头：{$row->quote}");
+            } else {
+                $this->assertNull($row->quote, '不得为尚未录入原文的散文卷出处编造引文');
+                $this->assertContains($row->chapter, ['世界卷', '国家与地区卷']);
+            }
         }
     }
 
@@ -178,6 +221,8 @@ class SeederIntegrityTest extends TestCase
 
         $this->assertContains('世界卷', $sections);
         $this->assertContains('国家与地区卷', $sections);
+        // 书末附录「泰拉纪年」的条目在 seedEvents() 里，同样挂 terra-tour 出处
+        $this->assertContains('泰拉纪年', $sections);
     }
 
     public function test_nation_factions_are_available_as_a_filter_dimension(): void
