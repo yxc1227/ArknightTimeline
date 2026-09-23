@@ -15,6 +15,7 @@ use App\Models\Tag;
 use App\Models\TimelineAnomaly;
 use App\Models\User;
 use App\Models\UserActivityLog;
+use App\Models\UserIdentity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -43,6 +44,7 @@ class ModelAttributeCollisionTest extends TestCase
     private const MODELS = [
         User::class,
         UserActivityLog::class,
+        UserIdentity::class,
         Event::class,
         EventRevision::class,
         EventLock::class,

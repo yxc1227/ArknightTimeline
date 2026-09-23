@@ -9,6 +9,8 @@ use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\User;
 use App\Models\UserActivityLog;
+use App\Models\UserIdentity;
+use App\Services\Identity\IdentityManager;
 use App\Services\UserManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,6 +31,7 @@ class UserController extends Controller
 
     public function __construct(
         private readonly UserManager $manager,
+        private readonly IdentityManager $identities,
     ) {}
 
     /** 用户列表：搜索 + 筛选 + 排序 + 分页。 */
@@ -45,6 +48,9 @@ class UserController extends Controller
         $direction = $request->string('direction')->value() ?: 'desc';
 
         $query = User::query()
+            // 一并取出身份绑定：头像可能来自外部渠道，
+            // 不预载的话列表每行都会多一次查询
+            ->with('identities')
             ->search($filters['q'])
             ->ofRole($filters['role'])
             ->ofStatus($filters['status']);
@@ -68,7 +74,7 @@ class UserController extends Controller
         ]);
     }
 
-    /** 用户详情：基本资料 + 贡献统计 + 操作日志。 */
+    /** 用户详情：基本资料 + 贡献统计 + 外部身份 + 操作日志。 */
     public function show(Request $request, User $user): View
     {
         return view('admin.users.show', [
@@ -82,6 +88,9 @@ class UserController extends Controller
                 'logs' => $user->activityLogs()->count(),
             ],
             'ownedSources' => $user->sources()->orderBy('name')->get(),
+            // 身份绑定：管理员要在这里核验用户的自助登记
+            'identities' => $user->identities()->with('verifier')->get(),
+            'pendingIdentities' => $user->identities()->pending()->count(),
             'logs' => $user->activityLogs()
                 ->with('actor')
                 ->orderByDesc('created_at')
@@ -89,6 +98,56 @@ class UserController extends Controller
                 ->paginate(20, ['*'], 'logs_page')
                 ->withQueryString(),
         ]);
+    }
+
+    /* ------------------------------------------------------------------ 外部身份核验 */
+
+    /** 核验通过用户自助登记的外部账号。 */
+    public function verifyIdentity(Request $request, User $user, UserIdentity $identity): JsonResponse
+    {
+        Gate::authorize('verify', $identity);
+
+        $this->assertIdentityBelongsTo($user, $identity);
+
+        $verified = $this->identities->verify($identity, $request->user());
+
+        return response()->json([
+            'message' => sprintf('%s「%s」已核验。', $verified->label(), $verified->displayAccount()),
+            'identity' => $verified->toApiArray(),
+        ]);
+    }
+
+    /** 驳回自助登记（该绑定会被删除，操作记入日志）。 */
+    public function rejectIdentity(Request $request, User $user, UserIdentity $identity): JsonResponse
+    {
+        Gate::authorize('reject', $identity);
+
+        $this->assertIdentityBelongsTo($user, $identity);
+
+        $validated = $request->validate([
+            'reason' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $label = $identity->label();
+        $account = $identity->displayAccount();
+
+        $this->identities->reject($identity, $request->user(), $validated['reason'] ?? null);
+
+        return response()->json([
+            'message' => sprintf('已驳回 %s「%s」的自助登记。', $label, $account),
+        ]);
+    }
+
+    /**
+     * 确认这条绑定确实属于路径里的账号。
+     *
+     * 路由是 /admin/users/{user}/identities/{identity}/...，
+     * 两个参数各自独立解析，若不做这一步，改一下 URL 里的 user 就能在
+     * A 的详情页上核验 B 的绑定 —— 权限判断本身是对的，但作用对象错了。
+     */
+    private function assertIdentityBelongsTo(User $user, UserIdentity $identity): void
+    {
+        abort_unless($identity->user_id === $user->getKey(), 404);
     }
 
     public function store(StoreUserRequest $request): JsonResponse

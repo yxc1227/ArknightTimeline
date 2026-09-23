@@ -1853,11 +1853,56 @@
 
         /* ---------------------------------------------------------- 装配 */
 
+        /**
+         * 核验 / 驳回用户自助登记的外部身份。
+         *
+         * 两个动作的 URL 形状一致，只有尾部动词不同，因此合并成一个函数 ——
+         * 分开写迟早会出现「驳回忘了带 reason」这类不一致。
+         */
+        async function runIdentityAction(kind, button) {
+            const userId = button.dataset.userId;
+            const identityId = kind === 'verify' ? button.dataset.verifyIdentity : button.dataset.rejectIdentity;
+            const account = button.dataset.account || '该绑定';
+
+            const isVerify = kind === 'verify';
+
+            const message = isVerify
+                ? `确认已与本人核对，并核验「${account}」？\n\n`
+                    + '核验后该绑定会显示为「已核验」——对外意味着更高的可信度，请确保确实核对过。'
+                : `确认驳回「${account}」的自助登记？\n\n`
+                    + '驳回会删除这条绑定，该外部账号将重新可被登记（操作记入日志）。';
+
+            if (!confirm(message)) return;
+
+            let reason = null;
+
+            if (!isVerify) {
+                reason = prompt('可填写驳回原因（会写入操作日志，可留空）：', '');
+                if (reason === null) return;
+            }
+
+            await withBusy(button, '处理中…', async () => {
+                const { ok, data } = await api(
+                    `${urls.users}/${userId}/identities/${identityId}/${kind}`,
+                    { method: 'POST', body: { reason } },
+                );
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '操作失败');
+                    return;
+                }
+
+                success(data.message);
+            });
+        }
+
         function bindActions() {
             // 事件委托：列表页与详情页共用同一套按钮，逐个绑定会有两处漏绑的风险
             document.addEventListener('click', (event) => {
                 const target = event.target.closest(
-                    '[data-new-user],[data-edit],[data-delete],[data-toggle],[data-reset],[data-restore],[data-bulk],[data-close-modal],[data-copy-password]',
+                    '[data-new-user],[data-edit],[data-delete],[data-toggle],[data-reset],[data-restore],'
+                    + '[data-bulk],[data-close-modal],[data-copy-password],'
+                    + '[data-verify-identity],[data-reject-identity]',
                 );
 
                 if (!target) return;
@@ -1875,6 +1920,9 @@
                     }
                     return;
                 }
+
+                if (target.dataset.verifyIdentity) { runIdentityAction('verify', target); return; }
+                if (target.dataset.rejectIdentity) { runIdentityAction('reject', target); return; }
 
                 if (target.dataset.toggle) { runToggle(target); return; }
                 if (target.dataset.delete) { runDelete(target); return; }
@@ -1926,6 +1974,152 @@
         return { boot };
     })();
 
+    /* ------------------------------------------------------------------ 个人账号设置 */
+
+    const Settings = (() => {
+        const urls = APP.urls || {};
+
+        /** 与账号管理模块同形的忙碌态包装：禁用按钮 + 转圈，避免重复提交。 */
+        async function withBusy(button, label, fn) {
+            if (!button) return fn();
+
+            const original = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = `<span class="spinner"></span> ${esc(label)}`;
+
+            try {
+                return await fn();
+            } finally {
+                button.disabled = false;
+                button.innerHTML = original;
+            }
+        }
+
+        /* ---------------------------------------------------------- 头像预览 */
+
+        /**
+         * 选中文件后就地预览。
+         *
+         * 用本地 object URL 而不是先上传再回显：用户能在花掉一次上传之前
+         * 就看到图片会被裁成什么样。同时在客户端挡掉明显不合规的文件，
+         * 省掉一次必然会失败的往返（服务端仍然会独立校验，这里只是体验优化）。
+         */
+        function bindAvatarPicker() {
+            const form = $('[data-avatar-form]');
+            const input = form && $('[data-avatar-input]', form);
+            const dropzone = form && $('[data-avatar-dropzone]', form);
+            const preview = form && $('.dropzone__preview', form);
+
+            if (!input || !preview) return;
+
+            let objectUrl = null;
+
+            input.addEventListener('change', () => {
+                const file = input.files && input.files[0];
+
+                if (!file) return;
+
+                const maxKb = Number(input.dataset.maxKb || 0);
+
+                if (!/^image\/(jpeg|png)$/.test(file.type)) {
+                    toast('只支持 JPG 与 PNG（SVG 可能携带脚本，因此不予接受）。', 'warn');
+                    input.value = '';
+                    return;
+                }
+
+                if (maxKb > 0 && file.size > maxKb * 1024) {
+                    toast(`图片超过 ${maxKb} KB，请换一张或先压缩。`, 'warn');
+                    input.value = '';
+                    return;
+                }
+
+                // 之前的预览 URL 要及时释放，否则连续换几次图会一直占着内存
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+
+                objectUrl = URL.createObjectURL(file);
+                preview.innerHTML = `<img class="avatar avatar--xl" src="${objectUrl}" alt="待上传的头像">`;
+                dropzone?.classList.add('is-filled');
+            });
+        }
+
+        /* ---------------------------------------------------------- 移除头像 / 解绑 */
+
+        async function removeAvatar(button) {
+            if (!confirm('确认移除头像？移除后会显示由昵称首字生成的方块，可随时重新上传。')) return;
+
+            await withBusy(button, '移除中…', async () => {
+                const { ok, data } = await api(urls.avatarDestroy, { method: 'DELETE' });
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '移除失败');
+                    return;
+                }
+
+                toast('头像已移除。', 'ok');
+                setTimeout(() => location.reload(), 600);
+            });
+        }
+
+        async function unlinkIdentity(button) {
+            const url = button.dataset.unlinkIdentity;
+            const label = button.dataset.providerLabel || '该渠道';
+            const isLastMethod = button.dataset.lastMethod === '1';
+
+            /*
+             * 只有一种登录方式时，服务端会拒绝解绑（这是刻意的不变量）。
+             * 这里仍然把请求发出去，而不是在客户端「猜到」结果后拦下：
+             * 规则只有一处定义（IdentityManager），前端只负责把话说清楚。
+             */
+            const message = isLastMethod
+                ? `「${label}」看起来是你目前唯一的登录方式。\n\n`
+                    + '服务端会拒绝这次解绑 —— 请先在上面设置一个登录密码，然后再回来解绑。'
+                : `确认解绑「${label}」？\n\n解绑后该渠道将无法再用于登录，可随时重新绑定。`;
+
+            if (!confirm(message)) return;
+
+            await withBusy(button, '解绑中…', async () => {
+                const { ok, data } = await api(url, { method: 'DELETE' });
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '解绑失败');
+                    return;
+                }
+
+                toast('已解绑。', 'ok');
+                setTimeout(() => location.reload(), 600);
+            });
+        }
+
+        function bindActions() {
+            document.addEventListener('click', (event) => {
+                const target = event.target.closest('[data-remove-avatar],[data-unlink-identity]');
+
+                if (!target) return;
+
+                if (target.hasAttribute('data-remove-avatar')) {
+                    removeAvatar(target);
+                    return;
+                }
+
+                unlinkIdentity(target);
+            });
+        }
+
+        function boot() {
+            // 先把上限写到 input 上，再绑定监听：让选文件时就能拦下明显超限的图片
+            // （必须在这之前写，否则首次 change 读到的还是空值）
+            const form = $('[data-avatar-form]');
+            const input = form && $('[data-avatar-input]', form);
+
+            if (input) input.dataset.maxKb = String(APP.avatarMaxKb || 0);
+
+            bindAvatarPicker();
+            bindActions();
+        }
+
+        return { boot };
+    })();
+
     /* ------------------------------------------------------------------ 分派 */
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1934,5 +2128,6 @@
         if (PAGE === 'anomalies') Anomalies.boot();
         if (PAGE === 'sources') Sources.boot();
         if (PAGE === 'users' || PAGE === 'user-show') Users.boot();
+        if (PAGE === 'settings') Settings.boot();
     });
 })();

@@ -22,7 +22,8 @@ class AiProposalController extends Controller
     public function __construct(
         private readonly AiEventSynthesizer $synthesizer,
         private readonly ProposalApplier $applier,
-    ) {}
+    ) {
+    }
 
     /** AI 审核台。 */
     public function index(Request $request): View

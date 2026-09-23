@@ -31,8 +31,9 @@
 | **标注与纠错** | 任何人（含未登录访客）可提交备注 / 纠错 / 存疑 / 复核，无需编辑权限 |
 | **协作安全** | 乐观锁 + 字段级三方合并 + 编辑租约 + 全量版本链 |
 | **一致性巡检** | 因果倒置、时代错位、出处矛盾、疑似重复、锚点失效，收敛式异常收件箱 |
-| **编辑权限** | 四级角色 + 出处归属 + 条目冻结/锁定 |
+| **编辑权限** | 四级角色（命名取自《明日方舟》世界观：预备干员 / 干员 / 精英干员 / 博士）+ 出处归属 + 条目冻结/锁定 |
 | **账号管理** | 列表搜索/筛选/排序/分页、增删改、重置密码、启用禁用、批量操作、操作日志（仅管理员） |
+| **账号体系** | 自助注册、昵称与登录名分离且各自全服唯一、头像上传、外部渠道注册与绑定、个人账号设置页 |
 
 ## 快速开始
 
@@ -66,13 +67,19 @@ php artisan serve
 
 ### 演示账号
 
-| 账号 | 密码 | 角色 |
-| --- | --- | --- |
-| `admin@terra.local` | `terra-admin` | 管理员 |
-| `reviewer@terra.local` | `terra-reviewer` | 审核员 |
-| `editor@terra.local` | `terra-editor` | 编辑者 |
-| `viewer@terra.local` | `terra-viewer` | 访客 |
-| `disabled@terra.local` | `terra-disabled` | 编辑者（**已禁用**，用于演示状态筛选，无法登录） |
+登录时**邮箱或登录名都可以**（两者都全服唯一，因此不存在歧义）。
+表里刻意让「登录名（ASCII）」与「昵称（中文）」不同，以便直接看出这两个字段是分离的：
+
+| 登录名 | 邮箱 | 密码 | 昵称 | 角色 |
+| --- | --- | --- | --- | --- |
+| `archivist` | `admin@terra.local` | `terra-admin` | 档案管理员 | 博士 |
+| `reviewer` | `reviewer@terra.local` | `terra-reviewer` | 考据审核员 | 精英干员 |
+| `editor` | `editor@terra.local` | `terra-editor` | 条目编辑者 | 干员 |
+| `reader` | `viewer@terra.local` | `terra-viewer` | 访客读者 | 预备干员 |
+| `suspended` | `disabled@terra.local` | `terra-disabled` | 停用示例账号 | 干员（**已禁用**，用于演示状态筛选，无法登录） |
+
+种子数据里还带了两条外部身份绑定样本（一条「已核验」、一条「待核验」），
+登录 `archivist` 后进 `/admin/users` 的账号详情即可看到核验入口。
 
 浏览时间线无需登录，直接打开首页即可。
 
@@ -80,7 +87,7 @@ php artisan serve
 
 ```bash
 php artisan migrate:fresh --seed          # 重建数据库 + 灌入起始语料
-php artisan test                          # 运行测试（166 项 / 1042 断言）
+php artisan test                          # 运行测试（243 项 / 1491 断言）
 ./vendor/bin/pint                         # 代码风格（Laravel 官方风格）
 
 php artisan timeline:scan                 # 全量一致性体检，结果汇入异常收件箱
@@ -100,8 +107,12 @@ php artisan timeline:purge-locks          # 回收过期的编辑租约（定时
 | `/proposals` | AI 审核台。触发梳理、逐条核验引文、采纳 / 合并 / 驳回 |
 | `/anomalies` | 一致性收件箱。巡检产出的异常，可标记解决 / 忽略 / 全量体检 |
 | `/admin/users` | 账号管理（仅管理员）。搜索/筛选/排序表格 + 批量操作 + 新建/编辑/重置密码弹窗 |
-| `/admin/users/{id}` | 账号详情。基本资料 + 贡献统计 + 操作日志（字段级前后值） |
-| `/login` | 登录 |
+| `/admin/users/{id}` | 账号详情。基本资料 + 贡献统计 + 外部身份绑定（含核验）+ 操作日志（字段级前后值） |
+| `/settings/profile` | 个人账号设置。头像上传/移除、改昵称、设置/修改密码、绑定与解绑外部渠道 |
+| `/login` | 登录（邮箱或登录名 + 密码，或通过外部渠道） |
+| `/register` | 自助注册。邮箱 + 密码 + 登录名 + 昵称；可用 `IDENTITY_REGISTRATION=false` 关闭 |
+| `/register/external` | 外部渠道注册的第二步：补全登录名 / 昵称 / 邮箱 |
+| `/avatars/{user}/{v?}` | 头像文件输出。由控制器受控输出（类型 / nosniff / 长期缓存），理由见 `docs/DESIGN.md` |
 
 ## 核心设计
 
@@ -161,7 +172,9 @@ date_confidence       confirmed / inferred / disputed / unknown
 
 ### 4. 权限：读全开放，「看提案」≠「放行提案」
 
-| 能力 | viewer | editor | reviewer | admin |
+表头第一行是枚举值，第二行是界面上的展示名（取自《明日方舟》世界观里的罗德岛编制序列）：
+
+| 能力 | viewer<br>预备干员 | editor<br>干员 | reviewer<br>精英干员 | admin<br>博士 |
 | --- | :-: | :-: | :-: | :-: |
 | 浏览 / 检索 | ✔ | ✔ | ✔ | ✔ |
 | 提交标注（含未登录访客） | ✔ | ✔ | ✔ | ✔ |

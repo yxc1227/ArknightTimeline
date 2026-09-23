@@ -1498,3 +1498,128 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
     .detail-grid { grid-template-columns: 1fr; }
     .row-actions { width: 100%; }
 }
+
+/* ==========================================================================
+   账号体系：头像 / 个人设置 / 外部身份
+   --------------------------------------------------------------------------
+   复用既有的面板、徽章、按钮与等宽标签体系，不引入新的视觉语言。
+   ========================================================================== */
+
+/* 成功态提示。既有的 alert 只有 warn / danger / info，而这里需要正反馈。 */
+.alert--ok {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+/* 全站一次性提示条：放在顶栏与内容之间，不参与 .shell 的 flex 布局 */
+.flash-bar { padding: 12px 18px 0; }
+.flash-bar .alert { margin: 0; }
+
+/* 阅读型页面（设置、详情）不需要筛选栏，用居中窄栏把行宽控制住 */
+.main--narrow { max-width: 960px; margin: 0 auto; }
+
+/* ---------------------------------------------------------------- 顶栏 */
+
+/* 头像 + 昵称作为一个整体可点击：这是进入「账号设置」的入口 */
+.userbox__me {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px 3px 3px;
+    border: 1px solid transparent;
+    color: var(--text);
+}
+
+.userbox__me:hover { border-color: var(--border-strong); background: var(--bg-panel); text-decoration: none; }
+
+/* ---------------------------------------------------------------- 头像 */
+
+/* <img> 版本：需要覆盖掉首字方块的 grid 居中，并保证任意原图都填满方块 */
+img.avatar {
+    display: block;
+    object-fit: cover;
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+    padding: 0;
+}
+
+.avatar--sm { width: 24px; height: 24px; flex-basis: 24px; font-size: 11px; }
+.avatar--xl { width: 72px; height: 72px; flex-basis: 72px; font-size: 28px; }
+
+/* 头像上传区：点击整块即选图，选中后就地预览 */
+.dropzone {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    border: 1px dashed var(--border-strong);
+    background: var(--bg-input);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+
+.dropzone:hover { border-color: var(--accent-line); background: var(--bg-raised); }
+.dropzone.is-filled { border-style: solid; border-color: var(--accent-line); }
+.dropzone__preview { display: flex; flex: 0 0 auto; }
+.dropzone__text { display: flex; flex-direction: column; gap: 3px; }
+
+/* ---------------------------------------------------------------- 外部渠道卡片 */
+
+/* 一个渠道一张卡：标题行是「标记 + 名称 + 状态」，下面是绑定状态或可用动作 */
+.provider-card {
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--border-strong);
+    background: var(--bg-raised);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+
+.provider-card__head {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+/* 渠道标记用等宽大写方块，与顶栏 brand__mark 同一语言 */
+.provider-card__mark {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    min-width: 26px;
+    padding: 4px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .06em;
+}
+
+/* 已绑定身份的信息行：账号标识 + 核验说明 + 绑定时间 */
+.identity-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border-left: 2px solid var(--border);
+    font-size: 12.5px;
+}
+
+/* 登录页上的渠道按钮组 */
+.provider-buttons { display: flex; flex-direction: column; gap: 7px; }
+.provider-buttons .btn { justify-content: flex-start; gap: 9px; }
+
+/* ---------------------------------------------------------------- 登录 / 注册卡片 */
+
+/* 注册补全资料的表单更长，用更宽的卡片避免每行都换行 */
+.login-card--wide { width: min(560px, 96vw); }
+
+@media (max-width: 640px) {
+    .dropzone { flex-direction: column; align-items: flex-start; }
+    .provider-card__head { align-items: flex-start; }
+}

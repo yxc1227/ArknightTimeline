@@ -45,7 +45,7 @@
 
                 <div class="field" style="margin-bottom:0">
                     <input type="search" name="q" value="{{ $filters['q'] }}"
-                           placeholder="用户名 / 显示名 / 邮箱" data-autosubmit>
+                           placeholder="登录名 / 昵称 / 邮箱" data-autosubmit>
                 </div>
             </div>
 
@@ -134,7 +134,12 @@
                         <th style="width:38px">
                             <input type="checkbox" id="select-all" aria-label="全选本页账号">
                         </th>
-                        <th>{!! $sortLink('name', 'User') !!}</th>
+                        {{-- 昵称与登录名是分离的两个标识，两个都可以排序 --}}
+                        <th style="width:230px">
+                            {!! $sortLink('nickname', 'User') !!}
+                            <span class="faint">/</span>
+                            {!! $sortLink('name', 'ID') !!}
+                        </th>
                         <th style="width:210px">{!! $sortLink('email', 'Email') !!}</th>
                         <th style="width:100px">{!! $sortLink('role', 'Role') !!}</th>
                         <th style="width:110px">{!! $sortLink('is_active', 'Status') !!}</th>
@@ -154,14 +159,18 @@
                             </td>
                             <td data-label="User">
                                 <div class="user-cell">
-                                    <span class="avatar" data-status="{{ $user->trashed() ? 'trashed' : $user->status()->value }}"
-                                          aria-hidden="true">{{ $user->initials() }}</span>
+                                    <x-avatar :user="$user" size="md"/>
+
                                     <div style="min-width:0">
                                         <a href="{{ route('admin.users.show', $user) }}" class="user-cell__name">
-                                            {{ $user->displayLabel() }}
+                                            {{ $user->nickname }}
                                         </a>
                                         <div class="faint small mono nowrap" style="overflow:hidden;text-overflow:ellipsis">
-                                            {{ $user->name }}@if ($isSelf) · SELF @endif
+                                            {{ $user->name }}
+                                            @if ($user->identities->isNotEmpty())
+                                                <span class="badge badge--muted">{{ $user->identities->count() }} LINKED</span>
+                                            @endif
+                                            @if ($isSelf) · SELF @endif
                                             @if ($user->trashed()) · DELETED @endif
                                         </div>
                                     </div>

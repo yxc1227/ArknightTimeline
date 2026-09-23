@@ -34,11 +34,22 @@ class LoginController extends Controller
 
         if (RateLimiter::tooManyAttempts($key, 8)) {
             throw ValidationException::withMessages([
-                'email' => '尝试过于频繁，请在 '.RateLimiter::availableIn($key).' 秒后重试。',
+                'identifier' => '尝试过于频繁，请在 '.RateLimiter::availableIn($key).' 秒后重试。',
             ]);
         }
 
-        $credentials = $request->validated();
+        $identifier = (string) $request->validated('identifier');
+
+        /*
+         * 邮箱与登录名都能用来登录。
+         *
+         * 两者都全服唯一，因此「含 @ 就当邮箱、否则当登录名」不存在歧义 ——
+         * 登录名的格式本身就把 @ 排除在外了（见 User::HANDLE_PATTERN）。
+         */
+        $credentials = [
+            str_contains($identifier, '@') ? 'email' : 'name' => mb_strtolower($identifier),
+            'password' => (string) $request->validated('password'),
+        ];
 
         /*
          * 用 validate() 而不是 attempt()：
@@ -50,7 +61,7 @@ class LoginController extends Controller
         if (! Auth::validate($credentials)) {
             RateLimiter::hit($key, 300);
 
-            throw ValidationException::withMessages(['email' => '邮箱或密码不正确。']);
+            throw ValidationException::withMessages(['identifier' => '邮箱（或登录名）与密码不正确。']);
         }
 
         /** @var User $user */
@@ -59,7 +70,7 @@ class LoginController extends Controller
         if (! $user->isActive()) {
             RateLimiter::hit($key, 300);
 
-            throw ValidationException::withMessages(['email' => '该账号已被禁用，请联系管理员。']);
+            throw ValidationException::withMessages(['identifier' => '该账号已被禁用，请联系管理员。']);
         }
 
         Auth::login($user, $request->boolean('remember'));

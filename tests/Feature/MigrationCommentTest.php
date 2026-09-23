@@ -32,7 +32,7 @@ class MigrationCommentTest extends TestCase
         'factions', 'eras', 'characters', 'sources', 'tags',
         'events', 'event_source', 'event_character', 'event_faction', 'event_tag',
         'event_revisions', 'annotations', 'event_locks', 'ai_proposals', 'timeline_anomalies',
-        'source_user', 'user_activity_logs',
+        'source_user', 'user_activity_logs', 'user_identities',
     ];
 
     /**

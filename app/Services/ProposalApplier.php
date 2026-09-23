@@ -24,7 +24,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class ProposalApplier
 {
-    public function __construct(private readonly EventWriter $writer) {}
+    public function __construct(private readonly EventWriter $writer)
+    {
+    }
 
     /**
      * 采纳提案，新建时间线条目。

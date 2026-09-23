@@ -2,8 +2,12 @@
 
 use App\Http\Controllers\AiProposalController;
 use App\Http\Controllers\AnomalyController;
+use App\Http\Controllers\Auth\IdentityController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\SourceController;
 use App\Http\Controllers\TimelineController;
 use App\Http\Controllers\UserController;
@@ -44,6 +48,55 @@ Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
 
 /*
 |--------------------------------------------------------------------------
+| 自助注册
+|--------------------------------------------------------------------------
+| 两条并存的注册路径：网页表单（邮箱 + 密码）与外部渠道。
+| 它们共用同一份命名校验与同一套不变量（见 UserManager::register*）。
+|
+| POST 上的 throttle 是公开注册入口的第一道闸门：没有它，一个脚本
+| 就能以每秒几十个的速度建号。限流按 IP，10 次 / 分钟足够正常人纠错。
+| 「是否开放注册」由 config/identity.php 的开关决定，控制器里判断。
+*/
+
+Route::get('/register', [RegisterController::class, 'show'])->name('register');
+Route::post('/register', [RegisterController::class, 'store'])
+    ->middleware('throttle:10,1')
+    ->name('register.store');
+
+/*
+|--------------------------------------------------------------------------
+| 外部身份（鹰角通行证等）
+|--------------------------------------------------------------------------
+| 授权跳转与回调必须是公开路由：回调发生在用户从对方站点跳回来的那一刻，
+| 此时浏览器可能还没有本站的会话（首次登录就是这样）。
+| 因此这里的安全性不靠 auth 中间件，而靠 state 的一次性校验
+| （见 IdentityManager::consumeState）。
+|
+| 「补全资料」两步走是刻意的：外部渠道只证明「他是某个外部账号的持有者」，
+| 而登录名 / 昵称 / 邮箱是本站的命名空间，必须由本人在第二步当场选定。
+*/
+
+Route::get('/auth/{provider}/redirect', [IdentityController::class, 'redirect'])->name('identity.redirect');
+Route::get('/auth/{provider}/callback', [IdentityController::class, 'callback'])->name('identity.callback');
+
+Route::get('/register/external', [IdentityController::class, 'registerForm'])->name('identity.register.form');
+Route::post('/register/external', [IdentityController::class, 'registerStore'])->name('identity.register.store');
+
+/*
+|--------------------------------------------------------------------------
+| 头像
+|--------------------------------------------------------------------------
+| 公开可读：头像会出现在时间线的标注与版本记录旁边，与「用户名可见」是同一层信息。
+| 由控制器受控输出而不是交给 web 服务器托管 —— 少一个 storage:link 的部署步骤，
+| 同时把 Content-Type 与 nosniff 握在自己手里。
+*/
+
+Route::get('/avatars/{user}/{v?}', [AvatarController::class, 'show'])
+    ->where('v', '[A-Za-z0-9]+')
+    ->name('avatars.show');
+
+/*
+|--------------------------------------------------------------------------
 | 已登录区域
 |--------------------------------------------------------------------------
 | `active` 中间件在每个请求上复核账号状态：Laravel 的 session guard 只在
@@ -51,6 +104,24 @@ Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
 */
 
 Route::middleware(['auth', 'active'])->group(function () {
+    /*
+    |--------------------------------------------------------------------------
+    | 个人账号设置（本人操作自己）
+    |--------------------------------------------------------------------------
+    | 唯一不需要管理员的地方，也是头像上传、昵称修改、绑定外部身份的落点。
+    */
+
+    Route::get('/settings/profile', [ProfileController::class, 'show'])->name('settings.profile');
+    Route::put('/settings/profile', [ProfileController::class, 'updateNickname'])->name('settings.profile.update');
+    Route::put('/settings/profile/password', [ProfileController::class, 'updatePassword'])->name('settings.profile.password');
+    Route::post('/settings/profile/avatar', [ProfileController::class, 'updateAvatar'])->name('settings.profile.avatar');
+    Route::delete('/settings/profile/avatar', [ProfileController::class, 'destroyAvatar'])->name('settings.profile.avatar.destroy');
+
+    // 绑定与解绑外部身份。绑定要先跳去对方站点，因此是一个 GET 跳转
+    Route::get('/settings/identities/{provider}/bind', [IdentityController::class, 'bind'])->name('identity.bind');
+    Route::post('/settings/identities/{provider}/claim', [IdentityController::class, 'claim'])->name('identity.claim');
+    Route::delete('/settings/identities/{provider}', [IdentityController::class, 'unlink'])->name('identity.unlink');
+
     /*
     |--------------------------------------------------------------------------
     | 条目编辑（editor 及以上）
@@ -123,5 +194,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::post('/users/{user}/password', [UserController::class, 'resetPassword'])->name('users.password');
         Route::post('/users/{user}/toggle', [UserController::class, 'toggleActive'])->name('users.toggle');
+
+        // 外部身份核验：自助登记的绑定必须经管理员确认
+        Route::post('/users/{user}/identities/{identity}/verify', [UserController::class, 'verifyIdentity'])
+            ->name('identities.verify');
+        Route::post('/users/{user}/identities/{identity}/reject', [UserController::class, 'rejectIdentity'])
+            ->name('identities.reject');
     });
 });

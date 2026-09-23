@@ -194,7 +194,10 @@ ORDER BY (date_precision = 'unknown') ASC,  -- 未定位排最后
 
 ### 3.1 角色与能力矩阵
 
-| 能力 | viewer | editor | reviewer | admin |
+表头第一行是枚举值（与数据库、代码里一致），第二行是界面上的展示名
+（取自《明日方舟》世界观里的罗德岛编制序列）：
+
+| 能力 | viewer<br>预备干员 | editor<br>干员 | reviewer<br>精英干员 | admin<br>博士 |
 | --- | :-: | :-: | :-: | :-: |
 | 浏览时间线 / 检索筛选 | ✔ | ✔ | ✔ | ✔ |
 | 提交标注（评论、纠错、存疑） | ✔ | ✔ | ✔ | ✔ |
@@ -264,6 +267,135 @@ ORDER BY (date_precision = 'unknown') ASC,  -- 未定位排最后
 - **操作日志的列名叫 `field_changes` 而不是 `changes`**：Eloquent 的 `HasAttributes`
   自带 `protected $changes`，重名会导致「类外走 `__get` 拿到数据库列、类内直接命中内部空数组」
   的分裂行为，且不报任何错。为此补了 `ModelAttributeCollisionTest` 用反射守住所有模型。
+
+### 3.5 账号体系：昵称与登录名分离、头像、外部身份
+
+#### 昵称与登录名为什么必须分开
+
+`users.name`（登录名）是**凭据**，`users.nickname`（昵称）是**展示名**。两者各自全服唯一，
+但规则完全不同 —— 因为「能拿来登录」和「能拿来显示」对字符集的要求是相反的：
+
+| | 登录名 `name` | 昵称 `nickname` |
+| --- | --- | --- |
+| 字符集 | 仅 ASCII：`^[A-Za-z][A-Za-z0-9_-]{2,29}$` | 任意（含中文） |
+| 大小写 | 统一转小写存储 | 保留原样，但唯一性**不区分**大小写 |
+| 用途 | 登录、URL、@提及 | 时间线与日志上的展示 |
+
+限制登录名为 ASCII 有两个具体理由：**同形字攻击**（西里尔字母的 `а` 与拉丁的 `a`
+在多数字体里无法区分，`аdmin` 与 `admin` 就成了两个账号），以及**歧义**——
+「邮箱或登录名都能登录」这条规则只有在登录名不含 `@` 时才成立。
+
+统一转小写存储则是为了**跨数据库一致**：MySQL 的 `utf8mb4_unicode_ci` 不区分大小写，
+SQLite 的 TEXT 区分。同一份数据在测试环境与生产环境的唯一性判定不同，是最难排查的一类问题；
+全部落成小写之后，`Admin` 与 `admin` 就是同一个字符串，讨论才成立。
+
+昵称虽然不区分大小写，但**保留原样**（`考据员A` 不会变成 `考据员a`），
+并且写入前会把连续空白折成一个空格 —— 否则「考据 员」与「考据  员」会是两条不同记录，
+而人眼完全分不出来。唯一索引本身挡不住这种重名。
+
+#### 唯一性必须包含软删除行
+
+`users.name` 与 `users.nickname` 的唯一索引都**不排除软删除的账号**：被删除的账号
+仍然占着它的名字。这是有意的 —— 恢复账号时不必重新协调命名，也防止
+「删掉某人再用同名注册」这种身份冒用。
+
+代价是**校验与索引必须严格一致**：校验一旦放行而索引拒绝，用户拿到的是 500。
+因此这里没有用 `Rule::unique`，而是写了 `App\Rules\UniqueNickname` 显式 `lower()` 比对，
+并统一通过 `User::scopeWhereNicknameIs` 一类的查询作用域实现 —— 校验层与
+「并发冲突后重查定位字段」那段代码共用同一套语义。
+
+#### 头像为什么重新编码、为什么不交给 web 服务器
+
+上传的图片是**不可信输入**，本项目的处理是三件事叠加：
+
+1. **一律重新编码**（`AvatarService`）。上传的文件可以同时是合法 JPEG 和合法 ZIP
+   （多态文件），原样落盘再交给浏览器就多一条攻击路径。经过 GD 解码再编码只保留像素，
+   EXIF（含 GPS 坐标）与任何附加数据都被丢掉，顺带完成了居中裁剪与缩放到 256×256。
+2. **白名单里没有 SVG**。这里有个容易踩的坑：Laravel 的 `image` 规则**允许 svg**
+   （它的实现是一份含 svg 的 mimes 白名单），而 SVG 可以内嵌 `<script>`，
+   被浏览器当图片加载时照样执行。因此 `UploadAvatarRequest` 里 `image` 与
+   `mimes:jpg,jpeg,png` 必须**同时存在**，后者才是真正的闸门。
+3. **由 `AvatarController` 受控输出**，而不是写进 web 根目录或依赖 `storage:link`。
+   前者是「上传目录在 docroot 里」这一经典 RCE 模式的变体；后者少一个
+   「部署时忘了执行就整站头像 404」的隐性步骤。控制器里 `Content-Type` 与
+   `X-Content-Type-Options: nosniff` 都是写死的，即使校验被绕过、目录里出现了一个
+   HTML 文件，它也只可能以 `image/jpeg` 返回。URL 里的 `v` 段是内容指纹而非权限凭据，
+   因此可以放心给响应打一年的 `immutable` 缓存。
+
+输出统一为 JPEG 是因为容器里的 GD **没有编译 WebP**（`gd_info()` 的 WebP Support 为空）。
+PNG 的透明区域会先被压平到站点面板色 `#1b1b1b`，否则在 JPEG 里会变成纯黑，
+在深色界面之外看起来像图片坏了。
+
+#### 三条注册路径共用同一套不变量
+
+账号的产生方式有三条：管理员建号（`UserManager::create`）、网页自助注册
+（`UserManager::register`）、外部渠道注册（`UserManager::registerExternally`）。
+后两条走同一个私有实现 `createSelfServiceAccount()`，差别只有两点：
+密码从哪来、日志怎么写。
+
+这不是为了少写几行 —— 拆成两份实现迟早会分叉，而分叉的那一侧几乎总是权限更松的那一条。
+共用的部分包括：角色硬编码为 `viewer`（自助注册的账号不能自己决定权限）、
+`strict_source_scope` 固定开启、`email_verified_at` 留空（没有验证链路就不假称已验证）。
+
+命名相关的校验同理，四个入口共用 `ValidatesAccountNaming`：
+`name` / `nickname` / `email` 必须在**每个入口**都与数据库唯一索引严格对齐
+（包含软删除行、昵称不区分大小写、登录名统一小写）。
+这份规则散在四个文件里时，漏掉任何一处的结果都是「校验放行 → 插入撞索引 → 500」。
+
+`/register` 是全站唯一一条**匿名用户能直接触发账号表写入**的路径，因此三道闸门叠加：
+路由上的 `throttle:10,1`（按 IP 限流，挡批量刷号）、`RegisterRequest`（命名与唯一性）、
+`UserManager` 的不变量（角色与编辑范围）。限流这一道不能省：没有它，
+一个脚本就能以每秒几十个的速度建号。
+
+「是否开放注册」是运营决定而不是技术决定，因此做成 `config/identity.php` 里的开关
+（`IDENTITY_REGISTRATION`，默认开放）。关闭后注册页与提交入口一起拒绝 ——
+只把链接藏起来不算关闭。
+
+#### 外部身份：能做什么、刻意不做什么
+
+`user_identities` 表统一承载所有外部渠道，两条唯一索引分别保证
+「一个外部账号只能属于一个本地账号」与「每个渠道只能绑一个」。
+
+几条刻意的边界：
+
+- **不存任何外部令牌**（没有 `access_token` / `refresh_token` / `raw` 列）。
+  外部身份在本系统里只用于回答「你是谁」，不会拿令牌代用户调用对方接口；
+  存下用不到的令牌只会扩大泄露影响面，属于净负债。
+- **绝不代收外部账号密码**。绑定只能由用户在自己的浏览器里完成授权。
+  「输入你的鹰角密码，我帮你绑定」这种模式不是实现起来麻烦，而是从根本上不该做。
+- **邮箱撞车时拒绝静默并号**。外部渠道只断言「他是某个外部账号的持有者」，
+  我们并没有验证对方返回的邮箱归属（本项目也没有邮件验证流程）。若按邮箱自动并号，
+  任何人只要在某个渠道上把邮箱填成受害者的，就能直接接管本地账号。
+  正确路径是：先用邮箱登录，再到设置里主动绑定。
+- **state 一次性消费**（`session pull`）、只保留最近 5 条、10 分钟有效。
+  一次性是为了防重放（用户刷新回调页不该被接受第二次），上限是为了让反复点击
+  登录按钮不会把会话撑大。**顺序不能反：先验 state，再用 code** ——
+  code 是可被重放的凭据。
+- **绑定会校验「发起人 == 回调时的登录人」**。否则会出现这种错位：
+  A 发起绑定 → 同一浏览器上 B 登录 → 回调把外部身份绑到 B 名下，
+  而 A 的外部账号从此归 B 所有，两个人都看不出发生了什么。
+
+#### 关于「绑定鹰角账号」的现状
+
+**鹰角网络没有提供面向第三方的公开 OAuth 接口。** 因此本项目的做法是：
+
+- **不预置任何猜测出来的端点**。逆向其私有接口既违反服务条款，也会随对方改版随时失效。
+- 渠道走同一套配置驱动的 OAuth2 流程（`config/identity.php` 里的端点与字段映射），
+  一旦拿到正式凭据，只需填 `HYPERGRYPH_*` 环境变量即可启用，**不需要改代码**。
+- 在凭据到位之前，「绑定鹰角账号」走 `allow_manual` 的**手工登记**路径：用户提交通行证
+  UID，落库为 `pending`，由管理员在账号详情页核验后转 `verified`。
+  界面上「待核验」与「已核验」始终分开显示 —— 自助声明不能表现为认证，
+  否则等于系统在替用户背书。核验本身是人工判断，不代表鹰角网络官方认证。
+- 本地演示渠道 `stub` 让整条链路在没有真实凭据的环境里也能走通，
+  它对任何点一下的人都放行，因此 `enabled` 与环境绑定（只在 `local` / `testing` 为真），
+  配置缓存时会固化成 `false`。
+
+#### `password_set_at`：为什么不能靠 `password` 列判断
+
+外部渠道注册的账号也有密码哈希（随机占位值），但**本人永远不知道它**。
+若只看 `password` 列非空，系统会误判「他有密码，可以解绑最后一个身份」，
+结果把人永久锁在门外。因此单独用一个时间戳只回答「密码有没有被设置为本人可知的值」，
+`IdentityManager::unlink` 的守卫依据它决定是否拒绝。
 
 ---
 
@@ -495,14 +627,19 @@ http://arknight.lancelot.com
 
 定时任务（`routes/console.php`）：`timeline:scan` 每小时、`timeline:purge-locks` 每 15 分钟，均带 `withoutOverlapping`。
 
-演示账号（Seeder 预置）：
+演示账号（Seeder 预置）。登录时邮箱或登录名都可以 ——
+表里刻意让两者不同，以体现「昵称与登录名分离」：
 
-| 账号 | 密码 | 角色 |
-| --- | --- | --- |
-| admin@terra.local | terra-admin | 管理员 |
-| reviewer@terra.local | terra-reviewer | 审核员 |
-| editor@terra.local | terra-editor | 编辑者 |
-| viewer@terra.local | terra-viewer | 访客 |
+| 登录名 | 邮箱 | 密码 | 昵称 | 角色 |
+| --- | --- | --- | --- | --- |
+| archivist | admin@terra.local | terra-admin | 档案管理员 | 博士 |
+| reviewer | reviewer@terra.local | terra-reviewer | 考据审核员 | 精英干员 |
+| editor | editor@terra.local | terra-editor | 条目编辑者 | 干员 |
+| reader | viewer@terra.local | terra-viewer | 访客读者 | 预备干员 |
+| suspended | disabled@terra.local | terra-disabled | 停用示例账号 | 干员（已禁用） |
+
+Seeder 另带两条外部身份绑定样本：一条「已核验」、一条「待核验」
+（后者用于演示管理员核验入口，见 3.5）。
 
 ---
 
@@ -525,14 +662,24 @@ app/
 │   └─ Ai/                          AiDriver / Heuristic / OpenAI 兼容 / AiEventSynthesizer
 ├─ Policies/         权限矩阵（UserPolicy 的自保护返回带原因的 403）
 ├─ Http/
-│   ├─ Controllers/  Timeline / Event / AiProposal / Anomaly / Source / User / Auth
+│   ├─ Controllers/  Timeline / Event / AiProposal / Anomaly / Source / User / Avatar
+│   │                Auth/{Login,Register,Identity}
+│   │                  Register：网页自助注册；Identity：外部渠道的授权回调与注册
+│   │                Settings/Profile（本人改昵称 / 传头像 / 设密码 / 绑解绑）
 │   ├─ Middleware/   EnsureAccountIsActive（禁用后既有会话立即失效）
-│   └─ Requests/     StoreUserRequest / UpdateUserRequest / BulkUserActionRequest 等
+│   │                Concerns/ValidatesAccountNaming（四个入口共用一套命名校验）
+│   └─ Requests/     StoreUserRequest / UpdateUserRequest / RegisterRequest /
+│                    CompleteExternalRegistrationRequest / UploadAvatarRequest /
+│                    ChangePasswordRequest / BulkUserActionRequest 等
+├─ Rules/            ValidHandle / UniqueNickname / NotReserved（与数据库索引严格对齐）
 └─ Models/           Event, Era, Faction, Character, Source, Tag, EventRevision,
-                     Annotation, EventLock, AiProposal, TimelineAnomaly, UserActivityLog
+                     Annotation, EventLock, AiProposal, TimelineAnomaly,
+                     UserActivityLog, UserIdentity
 public/assets/       app.css, app.js（无构建步骤）
-resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录 / 账号管理
+resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录 / 自助注册 /
+                     外部注册 / 账号设置 / 账号管理 + components/avatar.blade.php
                      + vendor/pagination/hud.blade.php（替换 Laravel 默认 Tailwind 分页）
-tests/               166 项测试，覆盖时间解析边界、协作不变量、校验闸门、检索语义、
-                     种子数据完整性、账号管理不变量、迁移注释与列名冲突守卫
+tests/               时间解析边界、协作不变量、校验闸门、检索语义、种子数据完整性、
+                     账号管理不变量、命名与唯一性、自助注册、外部身份时序、
+                     头像上传安全、迁移注释与列名冲突守卫
 ```

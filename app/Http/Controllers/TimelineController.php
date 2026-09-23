@@ -20,7 +20,9 @@ use Illuminate\View\View;
 
 class TimelineController extends Controller
 {
-    public function __construct(private readonly TimelineConsistencyChecker $checker) {}
+    public function __construct(private readonly TimelineConsistencyChecker $checker)
+    {
+    }
 
     /** 主界面：时间线。筛选条件全部由前端驱动，服务端只负责首屏与选项字典。 */
     public function index(Request $request): View

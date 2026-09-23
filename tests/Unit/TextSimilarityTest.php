@@ -52,8 +52,8 @@ class TextSimilarityTest extends TestCase
 
     public function test_contains_quote_tolerates_whitespace_differences(): void
     {
-        $haystack = '泰拉历1096年12月23日，切尔诺伯格事变爆发，
-整合运动占领切尔诺伯格城区。';
+        $haystack = "泰拉历1096年12月23日，切尔诺伯格事变爆发，
+整合运动占领切尔诺伯格城区。";
 
         $this->assertTrue(TextSimilarity::containsQuote($haystack, '切尔诺伯格事变爆发，整合运动占领切尔诺伯格城区'));
     }

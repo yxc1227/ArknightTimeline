@@ -19,7 +19,7 @@ class TerraDateParserTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->parser = new TerraDateParser;
+        $this->parser = new TerraDateParser();
     }
 
     public function test_parses_full_date_to_a_single_point(): void

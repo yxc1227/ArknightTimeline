@@ -6,9 +6,7 @@ use App\Enums\ProposalStatus;
 use App\Enums\UserRole;
 use App\Exceptions\WriteDeniedException;
 use App\Models\AiProposal;
-use App\Models\Event;
 use App\Models\EventRevision;
-use App\Models\Source;
 use App\Services\Ai\AiEventSynthesizer;
 use App\Services\ProposalApplier;
 use App\Support\TerraDate;
@@ -34,7 +32,7 @@ class AiProposalFlowTest extends TestCase
     泰拉历1099年12月，沃伦姆德城因感染者与市民的对立陷入失控。
     TXT;
 
-    private function synthesize(string $rawText = self::CORPUS, ?Source $source = null): array
+    private function synthesize(string $rawText = self::CORPUS, ?\App\Models\Source $source = null): array
     {
         $source ??= $this->source('测试年表', 'test-chronicle', $rawText);
         $editor = $this->user(UserRole::Reviewer);
@@ -55,7 +53,7 @@ class AiProposalFlowTest extends TestCase
         $this->assertGreaterThan(0, $result['proposals']->count());
 
         // 铁律：AI 产出只落在提案表，时间线保持为空
-        $this->assertSame(0, Event::count());
+        $this->assertSame(0, \App\Models\Event::count());
         $this->assertSame($result['proposals']->count(), AiProposal::count());
     }
 
@@ -174,7 +172,7 @@ class AiProposalFlowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('event.status.value', 'needs_review');
 
-        $this->assertSame(1, Event::count());
+        $this->assertSame(1, \App\Models\Event::count());
     }
 
     public function test_rejection_requires_a_reason_and_is_kept_as_feedback(): void

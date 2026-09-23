@@ -19,7 +19,6 @@ use App\Models\Source;
 use App\Models\Tag;
 use App\Models\User;
 use App\Support\TerraDateParser;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -76,8 +75,9 @@ final class EventWriter
 
     public function __construct(
         private readonly TimelineConsistencyChecker $checker,
-        private readonly TerraDateParser $parser = new TerraDateParser,
-    ) {}
+        private readonly TerraDateParser $parser = new TerraDateParser(),
+    ) {
+    }
 
     // ------------------------------------------------------------------ 创建
 
@@ -138,7 +138,7 @@ final class EventWriter
      * @param  array<string, mixed>  $data
      *
      * @throws EditConflictException 当 expectedVersion 落后于当前版本
-     * @throws WriteDeniedException 当权限 / 条目状态不允许写入
+     * @throws WriteDeniedException  当权限 / 条目状态不允许写入
      */
     public function update(
         Event $event,
@@ -656,16 +656,16 @@ final class EventWriter
      * 必须先按 name 查询再创建：中文名称经 Str::slug() 会变成空串，
      * 直接拿 slug 做唯一键会为同名实体反复建档，产生大量重复阵营 / 人物。
      */
-    private function firstOrCreateByName(string $modelClass, string $name, array $extra = []): Model
+    private function firstOrCreateByName(string $modelClass, string $name, array $extra = []): \Illuminate\Database\Eloquent\Model
     {
-        /** @var Model|null $existing */
+        /** @var \Illuminate\Database\Eloquent\Model|null $existing */
         $existing = $modelClass::where('name', $name)->first();
 
         if ($existing) {
             return $existing;
         }
 
-        /** @var Model $created */
+        /** @var \Illuminate\Database\Eloquent\Model $created */
         $created = $modelClass::create([
             'name' => $name,
             'slug' => Str::slug($name) ?: 'item-'.Str::lower(Str::random(8)),

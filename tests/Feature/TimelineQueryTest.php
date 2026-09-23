@@ -2,11 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Event;
-use App\Models\Faction;
-use App\Models\Source;
+use App\Models\Era;
 use App\Models\Tag;
-use App\Services\TimelineConsistencyChecker;
 use App\Support\TerraDate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsTimeline;
@@ -25,7 +22,7 @@ class TimelineQueryTest extends TestCase
 
     private function search(array $filters = []): array
     {
-        return Event::query()->filter($filters)->timelineOrder()->pluck('title')->all();
+        return \App\Models\Event::query()->filter($filters)->timelineOrder()->pluck('title')->all();
     }
 
     public function test_time_range_uses_overlap_not_containment(): void
@@ -93,8 +90,8 @@ class TimelineQueryTest extends TestCase
 
     public function test_source_and_source_type_filters(): void
     {
-        $mainStory = Source::create(['name' => '主线 · 第七章', 'slug' => 'ms-7', 'type' => 'main_story']);
-        $event = Source::create(['name' => '活动 · 孤星', 'slug' => 'ev-lone', 'type' => 'event']);
+        $mainStory = \App\Models\Source::create(['name' => '主线 · 第七章', 'slug' => 'ms-7', 'type' => 'main_story']);
+        $event = \App\Models\Source::create(['name' => '活动 · 孤星', 'slug' => 'ev-lone', 'type' => 'event']);
 
         $a = $this->rawEvent(['title' => '主线条目']);
         $a->sources()->attach($mainStory->id);
@@ -109,9 +106,9 @@ class TimelineQueryTest extends TestCase
 
     public function test_faction_filter_includes_descendant_factions(): void
     {
-        $parent = Faction::create(['name' => '罗德岛', 'slug' => 'rhodes']);
-        $child = Faction::create(['name' => '精英干员', 'slug' => 'elite', 'parent_id' => $parent->id]);
-        $other = Faction::create(['name' => '整合运动', 'slug' => 'reunion']);
+        $parent = \App\Models\Faction::create(['name' => '罗德岛', 'slug' => 'rhodes']);
+        $child = \App\Models\Faction::create(['name' => '精英干员', 'slug' => 'elite', 'parent_id' => $parent->id]);
+        $other = \App\Models\Faction::create(['name' => '整合运动', 'slug' => 'reunion']);
 
         $a = $this->rawEvent(['title' => '精英干员参与的条目']);
         $a->factions()->attach($child->id);
@@ -165,20 +162,20 @@ class TimelineQueryTest extends TestCase
         $era = $this->era('未来纪', 1200, 1210);
         $broken = $this->rawEvent(['title' => '时代错位条目', 'era_id' => $era->id]);
 
-        app(TimelineConsistencyChecker::class)->checkAll();
+        app(\App\Services\TimelineConsistencyChecker::class)->checkAll();
 
         $this->assertSame(['时代错位条目'], $this->search(['only_with_anomalies' => true]));
     }
 
     public function test_feed_endpoint_returns_paginated_envelope(): void
     {
-        for ($i = 0; $i < 5; $i++) {
-            $this->rawEvent([
-                'title' => "条目 {$i}",
-                'start_index' => TerraDate::toIndex(1097, 1, $i + 1),
-                'end_index' => TerraDate::toIndex(1097, 1, $i + 1),
-            ]);
-        }
+         for ($i = 0; $i < 5; $i++) {
+             $this->rawEvent([
+                 'title' => "条目 {$i}",
+                 'start_index' => TerraDate::toIndex(1097, 1, $i + 1),
+                 'end_index' => TerraDate::toIndex(1097, 1, $i + 1),
+             ]);
+         }
 
         $response = $this->getJson(route('timeline.feed', ['per_page' => 2]));
 
@@ -201,7 +198,7 @@ class TimelineQueryTest extends TestCase
     public function test_filters_can_be_combined(): void
     {
         $era = $this->era('维多利亚战争', 1100, 1100);
-        $source = Source::create(['name' => '主线 · 第十章', 'slug' => 'ms-10', 'type' => 'main_story']);
+        $source = \App\Models\Source::create(['name' => '主线 · 第十章', 'slug' => 'ms-10', 'type' => 'main_story']);
 
         $match = $this->rawEvent([
             'title' => '伦蒂尼姆攻防战开始',

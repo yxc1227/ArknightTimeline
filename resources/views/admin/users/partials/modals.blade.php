@@ -12,12 +12,18 @@
             <div class="form-grid">
                 <div class="field">
                     <label for="uf-name">登录名 <span class="faint">*</span></label>
-                    <input type="text" id="uf-name" name="name" maxlength="60" required>
+                    <input type="text" id="uf-name" name="name" maxlength="30" required
+                           pattern="[A-Za-z][A-Za-z0-9_-]{2,29}" placeholder="例如 medic-01">
+                    <div class="faint small" style="margin-top:5px">
+                        用于登录，全服唯一；字母开头，仅限字母、数字、- 与 _。
+                    </div>
                 </div>
                 <div class="field">
-                    <label for="uf-display">显示名</label>
-                    <input type="text" id="uf-display" name="display_name" maxlength="60"
-                           placeholder="留空则使用登录名">
+                    <label for="uf-display">昵称 <span class="faint">*</span></label>
+                    <input type="text" id="uf-display" name="nickname" maxlength="60" required>
+                    <div class="faint small" style="margin-top:5px">
+                        对外展示名，全服唯一；与登录名相互独立。
+                    </div>
                 </div>
             </div>
 

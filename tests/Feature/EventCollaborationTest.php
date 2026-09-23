@@ -8,7 +8,6 @@ use App\Exceptions\EditConflictException;
 use App\Exceptions\WriteDeniedException;
 use App\Models\Event;
 use App\Models\EventRevision;
-use App\Models\User;
 use App\Services\EventLockService;
 use App\Services\EventWriter;
 use App\Support\TerraDate;
@@ -293,7 +292,7 @@ class EventCollaborationTest extends TestCase
     }
 
     /** 通过 EventWriter 建档，从而拥有 v1 的 created 版本记录。 */
-    private function authoredEvent(User $actor, array $attributes = []): Event
+    private function authoredEvent(\App\Models\User $actor, array $attributes = []): Event
     {
         return $this->writer()->create([
             'title' => '测试条目',

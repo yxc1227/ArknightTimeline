@@ -28,16 +28,17 @@ class UserManagementTest extends TestCase
         return app(UserManager::class);
     }
 
-    private function admin(string $email = 'admin@example.test'): User
-    {
-        return $this->user(UserRole::Admin, $email);
-    }
-
+    /**
+     * 一份合法的账号表单载荷。
+     *
+     * 登录名必须是 ASCII（见 User::HANDLE_PATTERN），昵称可以是中文 ——
+     * 这份载荷刻意让两者不同，以便断言「两个字段确实是分开的」。
+     */
     private function payload(array $overrides = []): array
     {
         return [
-            'name' => '新同事',
-            'display_name' => '新同事',
+            'name' => 'newcomer',
+            'nickname' => '新同事',
             'email' => 'newcomer@example.test',
             'role' => UserRole::Editor->value,
             'strict_source_scope' => true,
@@ -82,16 +83,21 @@ class UserManagementTest extends TestCase
 
     /* ------------------------------------------------------------ 列表 / 搜索 / 筛选 */
 
-    public function test_search_matches_name_display_name_and_email(): void
+    public function test_search_matches_handle_nickname_and_email(): void
     {
         $admin = $this->admin();
-        User::create(['name' => '考据员甲', 'display_name' => '甲', 'email' => 'alpha@example.test', 'password' => 'password-123', 'role' => 'reviewer']);
-        User::create(['name' => '考据员乙', 'display_name' => '乙', 'email' => 'beta@example.test', 'password' => 'password-123', 'role' => 'reviewer']);
+
+        // 登录名（ASCII）与昵称（中文）刻意不同，三个字段各查一次
+        $this->user(UserRole::Reviewer, 'alpha@example.test', '考据员甲');
+        $this->user(UserRole::Reviewer, 'beta@example.test', '考据员乙');
 
         $this->actingAs($admin)->get(route('admin.users.index', ['q' => 'alpha']))
             ->assertOk()->assertSee('考据员甲')->assertDontSee('考据员乙');
 
         $this->actingAs($admin)->get(route('admin.users.index', ['q' => '考据员乙']))
+            ->assertOk()->assertSee('考据员乙')->assertDontSee('考据员甲');
+
+        $this->actingAs($admin)->get(route('admin.users.index', ['q' => 'beta@example']))
             ->assertOk()->assertSee('考据员乙')->assertDontSee('考据员甲');
     }
 
@@ -195,7 +201,14 @@ class UserManagementTest extends TestCase
         // 返回的密码能真正登录
         $this->assertNotEmpty($response->json('password'));
         $this->post(route('login.store'), [
-            'email' => 'newcomer@example.test',
+            'identifier' => 'newcomer@example.test',
+            'password' => $response->json('password'),
+        ])->assertRedirect();
+
+        // 登录名同样可以登录（两者都全服唯一，因此不存在歧义）
+        $this->post(route('logout'));
+        $this->post(route('login.store'), [
+            'identifier' => 'newcomer',
             'password' => $response->json('password'),
         ])->assertRedirect();
 
@@ -277,8 +290,8 @@ class UserManagementTest extends TestCase
 
         // 只改角色、其余字段保持原值，断言才能精确指向唯一一处变化
         $this->actingAs($admin)->putJson(route('admin.users.update', $target), [
-            'name' => '访客',
-            'display_name' => '访客',
+            'name' => 'promote',
+            'nickname' => 'promote',
             'email' => 'promote@example.test',
             'role' => UserRole::Reviewer->value,
             'strict_source_scope' => true,
@@ -291,8 +304,9 @@ class UserManagementTest extends TestCase
             ->where('action', UserAction::Updated->value)
             ->firstOrFail();
 
-        $this->assertSame('访客', $log->field_changes['role']['from']);
-        $this->assertSame('审核员', $log->field_changes['role']['to']);
+        // 角色标签采用《明日方舟》世界观的职级命名
+        $this->assertSame('预备干员', $log->field_changes['role']['from']);
+        $this->assertSame('精英干员', $log->field_changes['role']['to']);
 
         $rows = $log->changeRows();
         $this->assertCount(1, $rows);
@@ -304,13 +318,14 @@ class UserManagementTest extends TestCase
         $admin = $this->admin();
         $target = $this->user(UserRole::Viewer, 'keep@example.test');
 
-        // 唯一性校验必须排除自身，否则「只改显示名」也会撞自己的索引
+        // 唯一性校验必须排除自身，否则「只改昵称」也会撞自己的索引
         $this->actingAs($admin)->putJson(route('admin.users.update', $target), $this->payload([
+            'name' => 'keep',
             'email' => 'keep@example.test',
-            'display_name' => '改了显示名',
+            'nickname' => '改了昵称',
         ]))->assertOk();
 
-        $this->assertSame('改了显示名', $target->fresh()->displayLabel());
+        $this->assertSame('改了昵称', $target->fresh()->displayLabel());
     }
 
     /* ------------------------------------------------------------ 不变量 */
@@ -408,11 +423,11 @@ class UserManagementTest extends TestCase
         $this->assertNotEmpty($newPassword);
 
         // 旧密码失效
-        $this->post(route('login.store'), ['email' => 'reset@example.test', 'password' => 'original-password'])
-            ->assertSessionHasErrors('email');
+        $this->post(route('login.store'), ['identifier' => 'reset@example.test', 'password' => 'original-password'])
+            ->assertSessionHasErrors('identifier');
 
         // 新密码可用
-        $this->post(route('login.store'), ['email' => 'reset@example.test', 'password' => $newPassword])
+        $this->post(route('login.store'), ['identifier' => 'reset@example.test', 'password' => $newPassword])
             ->assertRedirect();
 
         $this->assertDatabaseHas('user_activity_logs', [
@@ -440,17 +455,17 @@ class UserManagementTest extends TestCase
         $target->forceFill(['password' => 'valid-password-1'])->save();
 
         // 先确认凭据本身是对的
-        $this->post(route('login.store'), ['email' => 'blocked@example.test', 'password' => 'valid-password-1'])
+        $this->post(route('login.store'), ['identifier' => 'blocked@example.test', 'password' => 'valid-password-1'])
             ->assertRedirect();
         $this->post(route('logout'));
 
         $admin = $this->admin();
         $this->actingAs($admin)->postJson(route('admin.users.toggle', $target), ['active' => false])->assertOk();
 
-        $this->post(route('login.store'), ['email' => 'blocked@example.test', 'password' => 'valid-password-1'])
-            ->assertSessionHasErrors('email');
+        $this->post(route('login.store'), ['identifier' => 'blocked@example.test', 'password' => 'valid-password-1'])
+            ->assertSessionHasErrors('identifier');
 
-        $this->assertStringContainsString('禁用', session('errors')->first('email'));
+        $this->assertStringContainsString('禁用', session('errors')->first('identifier'));
     }
 
     /**
@@ -486,11 +501,11 @@ class UserManagementTest extends TestCase
         $target->forceFill(['password' => 'valid-password-1'])->save();
 
         $this->actingAs($admin)->postJson(route('admin.users.toggle', $target), ['active' => false])->assertOk();
-        $this->post(route('login.store'), ['email' => 'revive@example.test', 'password' => 'valid-password-1'])
-            ->assertSessionHasErrors('email');
+        $this->post(route('login.store'), ['identifier' => 'revive@example.test', 'password' => 'valid-password-1'])
+            ->assertSessionHasErrors('identifier');
 
         $this->actingAs($admin)->postJson(route('admin.users.toggle', $target), ['active' => true])->assertOk();
-        $this->post(route('login.store'), ['email' => 'revive@example.test', 'password' => 'valid-password-1'])
+        $this->post(route('login.store'), ['identifier' => 'revive@example.test', 'password' => 'valid-password-1'])
             ->assertRedirect();
     }
 
@@ -621,7 +636,7 @@ class UserManagementTest extends TestCase
     {
         $user = $this->user(UserRole::Editor, 'login-trace@example.test');
 
-        $this->post(route('login.store'), ['email' => 'login-trace@example.test', 'password' => 'secret-password'])
+        $this->post(route('login.store'), ['identifier' => 'login-trace@example.test', 'password' => 'secret-password'])
             ->assertRedirect();
 
         $user->refresh();

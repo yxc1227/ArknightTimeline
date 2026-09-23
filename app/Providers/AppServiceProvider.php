@@ -9,6 +9,7 @@ use App\Models\TimelineAnomaly;
 use App\Services\Ai\AiDriver;
 use App\Services\Ai\HeuristicAiDriver;
 use App\Services\Ai\OpenAiCompatibleDriver;
+use App\Services\Identity\IdentityManager;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +22,20 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->registerAiDriver();
+        $this->registerIdentityManager();
+    }
+
+    /**
+     * IdentityManager 必须是单例。
+     *
+     * 它内部持有一张「渠道 → 驱动」的注册表，而 extend() 是替换驱动实现的唯一接缝
+     * （测试用它注入假驱动，从而完全不发网络请求）。
+     * 若每次解析都得到新实例，extend() 就只改到了一个没人用的对象上，
+     * 测试会静默地打到真实驱动 —— 那是最难查的一类失败。
+     */
+    private function registerIdentityManager(): void
+    {
+        $this->app->singleton(IdentityManager::class);
     }
 
     /**

@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\AnomalyType;
 use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
 use App\Enums\EventStatus;
@@ -238,7 +237,7 @@ class Event extends Model
     public function hasBlockingAnomalies(): bool
     {
         return $this->openAnomalies()
-            ->whereIn('type', collect(AnomalyType::cases())
+            ->whereIn('type', collect(\App\Enums\AnomalyType::cases())
                 ->filter(fn ($t) => $t->isBlocking())
                 ->map(fn ($t) => $t->value)
                 ->all())

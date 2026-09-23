@@ -16,7 +16,7 @@ class EditConflictException extends RuntimeException
      * @param  array<int, array{field:string, label:string, base:mixed, theirs:mixed, mine:mixed}>  $conflicts
      * @param  array<string, mixed>  $autoMerged  仅一方修改、可自动合并的字段
      * @param  array<string, mixed>  $theirsOnly  对方独有改动
-     * @param  array<string, mixed>  $mineOnly  己方独有改动
+     * @param  array<string, mixed>  $mineOnly    己方独有改动
      */
     public function __construct(
         public readonly int $eventId,

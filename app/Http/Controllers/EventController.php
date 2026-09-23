@@ -25,7 +25,8 @@ class EventController extends Controller
     public function __construct(
         private readonly EventWriter $writer,
         private readonly EventLockService $locks,
-    ) {}
+    ) {
+    }
 
     /** 条目详情：正文 + 关系 + 标注 + 版本 + 编辑租约，一次给全，减少面板闪烁。 */
     public function show(Request $request, Event $event): JsonResponse

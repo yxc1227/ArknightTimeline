@@ -2,8 +2,6 @@
 
 namespace App\Services\Ai;
 
-use App\Enums\DateConfidence;
-use App\Enums\DatePrecision;
 use App\Enums\ProposalStatus;
 use App\Models\AiProposal;
 use App\Models\Character;
@@ -16,7 +14,6 @@ use App\Services\TimelineConsistencyChecker;
 use App\Support\TerraDate;
 use App\Support\TerraDateParser;
 use App\Support\TextSimilarity;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
@@ -54,12 +51,13 @@ final class AiEventSynthesizer
         private readonly AiDriver $driver,
         private readonly TimelineConsistencyChecker $checker,
         private readonly TerraDateParser $parser,
-    ) {}
+    ) {
+    }
 
     /**
      * 对一段原文执行梳理，产出待审提案。
      *
-     * @return array{batch_id: string, proposals: Collection<int, AiProposal>, stats: array<string, int>, driver: string, model: ?string}
+     * @return array{batch_id: string, proposals: \Illuminate\Support\Collection<int, AiProposal>, stats: array<string, int>, driver: string, model: ?string}
      */
     public function synthesize(
         Source $source,
@@ -175,7 +173,7 @@ final class AiEventSynthesizer
 
         // L2：时间可解析性。给 AI 的默认置信度是 inferred，不是 confirmed ——
         // 除非原文逐字含该纪年表述，否则不允许冒充「已确证」。
-        $parsed = $this->parser->parse($dateDisplay, DateConfidence::Inferred);
+        $parsed = $this->parser->parse($dateDisplay, \App\Enums\DateConfidence::Inferred);
 
         return [
             'title' => $title,
@@ -184,9 +182,9 @@ final class AiEventSynthesizer
             'start_index' => $parsed->startIndex,
             'end_index' => $parsed->endIndex,
             'date_precision' => $parsed->precision,
-            'date_confidence' => $parsed->precision === DatePrecision::Unknown
-                ? DateConfidence::Unknown
-                : DateConfidence::Inferred,
+            'date_confidence' => $parsed->precision === \App\Enums\DatePrecision::Unknown
+                ? \App\Enums\DateConfidence::Unknown
+                : \App\Enums\DateConfidence::Inferred,
             'location' => $candidate['location'] ?? null,
             'characters' => $this->normalizeRelations($candidate['characters'] ?? [], 'support'),
             'factions' => $this->normalizeRelations($candidate['factions'] ?? [], 'involved'),

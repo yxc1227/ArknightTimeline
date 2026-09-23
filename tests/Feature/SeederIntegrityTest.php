@@ -8,6 +8,8 @@ use App\Models\Era;
 use App\Models\Event;
 use App\Models\Faction;
 use App\Models\Source;
+use App\Models\User;
+use App\Models\UserIdentity;
 use App\Support\TerraDateParser;
 use Database\Seeders\TimelineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -262,5 +264,55 @@ class SeederIntegrityTest extends TestCase
         $this->assertSame('confirmed', $event->date_confidence->value);
         $this->assertSame('泰拉历1096年12月23日', $event->date_display);
         $this->assertSame('verified', $event->status->value);
+    }
+
+    /**
+     * 演示账号必须体现「昵称与登录名分离」这条设计。
+     *
+     * 种子数据是最容易被当作规范的东西：如果这里用中文当登录名，
+     * 后来的人就会以为登录名可以是中文，而那条规则其实写在
+     * User::HANDLE_PATTERN 里（登录名是凭据，必须 ASCII）。
+     */
+    public function test_seeded_accounts_separate_ascii_handle_from_nickname(): void
+    {
+        $accounts = User::all();
+
+        $this->assertCount(5, $accounts);
+
+        foreach ($accounts as $user) {
+            $this->assertTrue(
+                User::isValidHandle($user->name),
+                "演示账号 {$user->email} 的登录名「{$user->name}」不符合格式要求",
+            );
+            $this->assertNotSame($user->name, $user->nickname, '演示数据应当让登录名与昵称不同，以体现两者分离');
+            $this->assertNotSame('', trim((string) $user->nickname));
+        }
+
+        // 登录名与昵称各自全服唯一
+        $this->assertSame($accounts->count(), $accounts->pluck('name')->unique()->count());
+        $this->assertSame($accounts->count(), $accounts->pluck('nickname')->unique()->count());
+
+        // 停用示例账号确实处于禁用状态（否则状态筛选与徽章没有可演示的数据）
+        $disabled = User::where('email', 'disabled@terra.local')->firstOrFail();
+        $this->assertFalse($disabled->isActive());
+    }
+
+    /**
+     * 外部身份绑定也要有真实样本：一条已核验、一条待核验 ——
+     * 「待核验」是唯一需要管理员介入的状态，没有样本就等于没有演示。
+     */
+    public function test_seeded_identities_cover_both_verification_states(): void
+    {
+        $identities = UserIdentity::all();
+
+        $this->assertCount(2, $identities);
+        $this->assertCount(1, $identities->filter(fn (UserIdentity $i) => $i->isVerified()));
+        $this->assertCount(1, $identities->filter(fn (UserIdentity $i) => ! $i->isVerified()));
+
+        // 同一渠道不能在同一个人身上绑两条（唯一索引的语义在应用层的体现）
+        $this->assertSame(
+            $identities->count(),
+            $identities->map(fn (UserIdentity $i) => $i->user_id.'|'.$i->provider()->value)->unique()->count(),
+        );
     }
 }

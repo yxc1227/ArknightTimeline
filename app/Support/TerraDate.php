@@ -53,7 +53,8 @@ final readonly class TerraDate
         public ?int $day = null,
         public ?string $anchorLabel = null,
         public ?int $anchorOffsetYears = null,
-    ) {}
+    ) {
+    }
 
     public static function unknown(string $display = '时间未定'): self
     {

@@ -8,8 +8,7 @@
         {{-- ============================ 概要 ============================ --}}
         <div class="panel">
             <div class="profile-head">
-                <span class="avatar avatar--lg" data-status="{{ $user->trashed() ? 'trashed' : $user->status()->value }}"
-                      aria-hidden="true">{{ $user->initials() }}</span>
+                <x-avatar :user="$user" size="lg"/>
 
                 <div style="flex:1;min-width:0">
                     <div class="row" style="align-items:center;gap:9px;flex-wrap:wrap">
@@ -81,11 +80,24 @@
                 </div>
 
                 <dl class="kv">
+                    <dt>昵称</dt><dd>{{ $user->nickname }}</dd>
                     <dt>登录名</dt><dd class="mono">{{ $user->name }}</dd>
-                    <dt>显示名</dt><dd>{{ $user->display_name ?: '—' }}</dd>
-                    <dt>邮箱</dt><dd class="mono" style="word-break:break-all">{{ $user->email }}</dd>
+                    <dt>邮箱</dt>
+                    <dd class="mono" style="word-break:break-all">
+                        {{ $user->email }}
+                        @unless ($user->email_verified_at)
+                            <span class="badge badge--warn">未验证</span>
+                        @endunless
+                    </dd>
                     <dt>角色</dt><dd>{{ $user->role()->label() }} <span class="faint small">（等级 {{ $user->role()->level() }}）</span></dd>
                     <dt>状态</dt><dd>{{ $user->trashed() ? '已删除' : $user->status()->label() }}</dd>
+                    <dt>登录方式</dt>
+                    <dd>
+                        {{ $user->hasUsablePassword() ? '密码' : '无密码' }}
+                        @foreach ($identities as $identity)
+                            <span class="badge badge--muted">{{ $identity->label() }}</span>
+                        @endforeach
+                    </dd>
                     <dt>出处范围</dt>
                     <dd>
                         {{ $user->enforcesSourceScope() ? '限制在自己的出处内' : '不限制（可修改全部条目）' }}
@@ -140,6 +152,60 @@
                     @endforelse
                 </div>
             </div>
+        </div>
+
+        {{-- ============================ 外部身份绑定 ============================ --}}
+        <div class="panel">
+            <div class="panel__title">
+                <span data-en="Identities">外部身份绑定</span>
+                @if ($pendingIdentities > 0)
+                    <span class="badge badge--warn">{{ $pendingIdentities }} 项待核验</span>
+                @else
+                    <span class="faint small mono">{{ $identities->count() }} LINKED</span>
+                @endif
+            </div>
+
+            @if ($pendingIdentities > 0)
+                <div class="alert alert--warn">
+                    用户自助登记的绑定只是**声明**，不代表身份已确认。
+                    核验需要你在站外与本人核对（例如让他提供账号截图），
+                    确认后再点「核验通过」—— 界面上「待核验」与「已核验」始终分开显示。
+                </div>
+            @endif
+
+            @forelse ($identities as $identity)
+                <div class="provider-card">
+                    <div class="provider-card__head">
+                        <span class="provider-card__mark">{{ $identity->provider()->short() }}</span>
+
+                        <div style="flex:1;min-width:0">
+                            <strong>{{ $identity->label() }}</strong>
+                            <div class="mono small">{{ $identity->provider_user_id }}</div>
+                            <div class="faint small">{{ $identity->verificationNote() }}</div>
+                        </div>
+
+                        <span class="badge {{ $identity->status()->badgeClass() }}">{{ $identity->status()->label() }}</span>
+                    </div>
+
+                    @unless ($identity->isVerified())
+                        @can('verify', $identity)
+                            <div class="row-actions">
+                                <button class="btn btn--ok btn--sm" type="button"
+                                        data-verify-identity="{{ $identity->id }}" data-user-id="{{ $user->id }}"
+                                        data-account="{{ $identity->displayAccount() }}">核验通过</button>
+                                <button class="btn btn--danger btn--sm" type="button"
+                                        data-reject-identity="{{ $identity->id }}" data-user-id="{{ $user->id }}"
+                                        data-account="{{ $identity->displayAccount() }}">驳回</button>
+                            </div>
+                        @endcan
+                    @endunless
+                </div>
+            @empty
+                <div class="empty">
+                    该账号没有绑定任何外部身份。<br>
+                    <span class="small">用户可以在「账号设置」里自行绑定。</span>
+                </div>
+            @endforelse
         </div>
 
         {{-- ============================ 操作日志 ============================ --}}

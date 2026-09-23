@@ -29,7 +29,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class TimelineConsistencyChecker
 {
-    public function __construct(private readonly TerraDateParser $parser = new TerraDateParser) {}
+    public function __construct(private readonly TerraDateParser $parser = new TerraDateParser())
+    {
+    }
 
     /**
      * 体检单条事件，并把结果同步进 timeline_anomalies。返回本轮产出的异常载荷。
@@ -348,7 +350,7 @@ final class TimelineConsistencyChecker
     /** 全量重算事件索引（例如批量调整了纪元区间之后）。 */
     public function reindexEraAssignments(): int
     {
-        $eras = Era::ordered()->get();
+        $eras = \App\Models\Era::ordered()->get();
         $updated = 0;
 
         foreach ($eras as $era) {

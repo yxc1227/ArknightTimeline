@@ -62,7 +62,17 @@
     <div class="userbox">
         @auth
             <span class="role-chip" data-role="{{ auth()->user()->role()->value }}">{{ auth()->user()->role()->label() }}</span>
-            <span>{{ auth()->user()->displayLabel() }}</span>
+
+            {{--
+                头像即「我的」入口：全站最自然的位置就是右上角这一小块。
+                刻意不为它单独加一个导航项 —— 导航已经承担了四个工作页面的分流，
+                再塞一个「账号设置」只会让分组变模糊。
+            --}}
+            <a class="userbox__me" href="{{ route('settings.profile') }}" title="账号设置">
+                <x-avatar :user="auth()->user()" size="sm" title="账号设置"/>
+                <span>{{ auth()->user()->displayLabel() }}</span>
+            </a>
+
             <form method="POST" action="{{ route('logout') }}" style="margin:0">
                 @csrf
                 <button class="btn btn--ghost btn--sm" type="submit">退出</button>
@@ -73,6 +83,17 @@
         @endauth
     </div>
 </header>
+
+{{--
+    一次性提示条。
+    只渲染 success 类型的 flash（session('status')）：错误提示由各页自己渲染，
+    因为「错在哪个字段」需要就地展示，放成全页横幅反而看不出是哪个输入框的问题。
+--}}
+@if (session('status'))
+    <div class="flash-bar">
+        <div class="alert alert--ok">{{ session('status') }}</div>
+    </div>
+@endif
 
 <div class="shell">
     @yield('content')
@@ -85,6 +106,8 @@
         csrf: @json(csrf_token()),
         user: @json(auth()->user()?->toApiArray()),
         perPage: {{ (int) config('timeline.collaboration.per_page', 40) }},
+        // 头像体积上限交给前端，让它在选文件时就能给出提示，不必等一次失败的往返
+        avatarMaxKb: {{ (int) config('identity.avatar.max_kilobytes', 2048) }},
         urls: {
             timeline: @json(route('timeline.feed')),
             events: @json(url('/events')),
@@ -95,7 +118,8 @@
             anomaliesScan: @json(route('anomalies.scan')),
             sources: @json(url('/sources')),
             users: @json(url('/admin/users')),
-            usersBulk: @json(route('admin.users.bulk'))
+            usersBulk: @json(route('admin.users.bulk')),
+            avatarDestroy: @json(route('settings.profile.avatar.destroy'))
         }
     };
 </script>

@@ -17,7 +17,9 @@ use Illuminate\View\View;
  */
 class AnomalyController extends Controller
 {
-    public function __construct(private readonly TimelineConsistencyChecker $checker) {}
+    public function __construct(private readonly TimelineConsistencyChecker $checker)
+    {
+    }
 
     public function index(Request $request): View
     {

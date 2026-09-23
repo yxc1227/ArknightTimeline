@@ -27,7 +27,8 @@ final class OpenAiCompatibleDriver implements AiDriver
         private readonly ?string $apiKey,
         private readonly string $modelName,
         private readonly int $timeout = 60,
-    ) {}
+    ) {
+    }
 
     public function name(): string
     {

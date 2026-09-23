@@ -210,7 +210,7 @@ class TimelineConsistencyTest extends TestCase
 
     public function test_writer_triggers_a_check_on_every_write(): void
     {
-        $editor = $this->user(UserRole::Editor);
+        $editor = $this->user(\App\Enums\UserRole::Editor);
         $era = $this->era('维多利亚战争', 1100, 1100);
 
         // 通过 EventWriter 写入一条时代错位的条目，巡检应被自动触发
@@ -255,7 +255,7 @@ class TimelineConsistencyTest extends TestCase
         $this->checker()->checkEvent($event);
 
         $anomaly = TimelineAnomaly::where('event_id', $event->id)->firstOrFail();
-        $reviewer = $this->user(UserRole::Reviewer);
+        $reviewer = $this->user(\App\Enums\UserRole::Reviewer);
 
         $this->actingAs($reviewer)
             ->postJson(route('anomalies.resolve', $anomaly), ['status' => 'ignored', 'note' => '两条表述角度不同，保留'])

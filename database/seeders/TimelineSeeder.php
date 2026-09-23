@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\ChangeOrigin;
 use App\Enums\EventStatus;
+use App\Enums\IdentityProvider;
 use App\Enums\SourceType;
 use App\Models\Character;
 use App\Models\Era;
@@ -14,6 +15,8 @@ use App\Models\Tag;
 use App\Models\User;
 use App\Services\Ai\AiEventSynthesizer;
 use App\Services\EventWriter;
+use App\Services\Identity\ExternalProfile;
+use App\Services\Identity\IdentityManager;
 use App\Services\UserManager;
 use App\Support\TerraDate;
 use Illuminate\Database\Seeder;
@@ -61,13 +64,18 @@ class TimelineSeeder extends Seeder
 
     private function seedUsers(): User
     {
+        /*
+         * 登录名（handle）用 ASCII，昵称用中文 —— 刻意让两者不一样，
+         * 这样「昵称与登录名分离」在演示数据里就是可见的，
+         * 而不需要读代码才知道它们是两个字段。
+         */
         $accounts = [
-            ['name' => '档案管理员', 'email' => 'admin@terra.local', 'role' => 'admin', 'password' => 'terra-admin'],
-            ['name' => '考据审核员', 'email' => 'reviewer@terra.local', 'role' => 'reviewer', 'password' => 'terra-reviewer'],
-            ['name' => '条目编辑者', 'email' => 'editor@terra.local', 'role' => 'editor', 'password' => 'terra-editor'],
-            ['name' => '访客读者', 'email' => 'viewer@terra.local', 'role' => 'viewer', 'password' => 'terra-viewer'],
+            ['handle' => 'archivist', 'nickname' => '档案管理员', 'email' => 'admin@terra.local', 'role' => 'admin', 'password' => 'terra-admin'],
+            ['handle' => 'reviewer', 'nickname' => '考据审核员', 'email' => 'reviewer@terra.local', 'role' => 'reviewer', 'password' => 'terra-reviewer'],
+            ['handle' => 'editor', 'nickname' => '条目编辑者', 'email' => 'editor@terra.local', 'role' => 'editor', 'password' => 'terra-editor'],
+            ['handle' => 'reader', 'nickname' => '访客读者', 'email' => 'viewer@terra.local', 'role' => 'viewer', 'password' => 'terra-viewer'],
             // 停用示例：账号列表、状态筛选与「已禁用」徽章都需要至少一条真实数据才有意义
-            ['name' => '停用示例账号', 'email' => 'disabled@terra.local', 'role' => 'editor', 'password' => 'terra-disabled'],
+            ['handle' => 'suspended', 'nickname' => '停用示例账号', 'email' => 'disabled@terra.local', 'role' => 'editor', 'password' => 'terra-disabled'],
         ];
 
         $admin = null;
@@ -75,13 +83,16 @@ class TimelineSeeder extends Seeder
 
         foreach ($accounts as $account) {
             // withTrashed + 清空 deleted_at：让 seed 可重复执行
-            // （软删除的账号仍占用 email 唯一索引，否则二次 seed 会撞唯一键）
+            // （软删除的账号仍占用 email / name / nickname 三个唯一索引，
+            //   否则二次 seed 会撞唯一键）
             $user = User::withTrashed()->updateOrCreate(
                 ['email' => $account['email']],
                 [
-                    'name' => $account['name'],
-                    'display_name' => $account['name'],
+                    'name' => $account['handle'],
+                    'nickname' => $account['nickname'],
                     'password' => $account['password'],
+                    // 演示账号的密码都写在 README 里，属于「本人可知」
+                    'password_set_at' => now(),
                     'role' => $account['role'],
                     'is_active' => true,
                     'email_verified_at' => now(),
@@ -118,6 +129,24 @@ class TimelineSeeder extends Seeder
 
         // 把示例账号真的停用一次，从而得到一条 deactivated 日志与对应的字段变化
         $manager->setActive($users['disabled@terra.local'], false, $admin);
+
+        /*
+         * 外部身份绑定：一条「已核验」+ 一条「待核验」。
+         *
+         * 两条都走 IdentityManager 而不是直接插表，理由与上面一致 ——
+         * 演示数据必须由生产代码路径生成，否则界面上的状态
+         * （尤其是「待核验」这种需要人工介入的状态）会与实际逻辑脱节。
+         */
+        $identities = app(IdentityManager::class);
+
+        $identities->link(
+            $users['editor@terra.local'],
+            new ExternalProfile(IdentityProvider::Hypergryph, '7788990', '条目编辑者'),
+            verified: true,
+            actor: $admin,
+        );
+
+        $identities->claimManually($users['reviewer@terra.local'], IdentityProvider::Hypergryph, '1234567');
     }
 
     // ------------------------------------------------------------------ 阵营
