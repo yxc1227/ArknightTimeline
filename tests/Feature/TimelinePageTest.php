@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\UserRole;
 use App\Models\AiProposal;
+use App\Models\Tag;
 use App\Models\TimelineAnomaly;
 use App\Services\Ai\AiEventSynthesizer;
 use App\Services\TimelineConsistencyChecker;
@@ -40,6 +41,45 @@ class TimelinePageTest extends TestCase
     public function test_timeline_feed_works_without_authentication(): void
     {
         $this->getJson(route('timeline.feed'))->assertOk()->assertJsonPath('meta.total', 0);
+    }
+
+    /**
+     * 筛选栏是「头部 + 滚动区 + 底部」三段式，而不是整栏滚动。
+     *
+     * 这条结构是有意锁住的：整栏滚动时「重置」与「新增条目」会随内容滚走，
+     * 而且面板的四角刻度（绝对定位）会跟着内容漂移。
+     */
+    public function test_filter_sidebar_uses_a_three_part_layout(): void
+    {
+        $editor = $this->user(UserRole::Editor, 'editor-sidebar@example.test');
+
+        $this->actingAs($editor)->get('/')
+            ->assertOk()
+            ->assertSee('sidebar__head', false)
+            ->assertSee('sidebar__scroll', false)
+            ->assertSee('sidebar__foot', false)
+            ->assertSee('新增事件条目');
+    }
+
+    public function test_guest_sidebar_has_no_footer_section(): void
+    {
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('sidebar__head', false)
+            ->assertSee('sidebar__scroll', false)
+            // 访客没有新增入口，因此底部区不渲染
+            ->assertDontSee('sidebar__foot', false);
+    }
+
+    /**
+     * 标签筛选不再自带滚动条：滚动容器里再套一个滚动容器，
+     * 滚轮停在标签上时外层的筛选组就滚不动了。
+     */
+    public function test_tag_picker_does_not_create_a_nested_scroll_area(): void
+    {
+        Tag::create(['name' => '战役', 'slug' => 'battle']);
+
+        $this->get('/')->assertOk()->assertSee('class="tag-picker"', false);
     }
 
     public function test_guest_only_sees_read_only_navigation(): void
