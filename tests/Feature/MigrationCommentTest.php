@@ -10,11 +10,13 @@ use Tests\TestCase;
  * 数据库备注（列注释）的守卫。
  *
  * 目标：整个 schema 无遗漏地自描述 —— 读表的人不必回头翻迁移或问人。
- * 两条独立的检查：
+ *
+ * 三条检查：
  *
  *  1. **静态检查**：逐个迁移文件比对「列定义数」与「comment 数」。
  *     任何驱动下都会执行，因此能真正挡住「新增列忘了写注释」。
- *  2. **运行时检查**：查 information_schema 确认注释真的落到了库里。
+ *  2. **表清单检查**：扫描所有 Schema::create，确认没有新表漏出检查范围。
+ *  3. **运行时检查**：查 information_schema 确认注释真的落到了库里。
  *     只有 MySQL / PostgreSQL 会执行 —— SQLite 语法器没有 modifyComment，
  *     注释会被**静默跳过**（这正是测试用 :memory: 库不受影响的原因）。
  *     运行时检查是只读的，刻意不使用 RefreshDatabase，
@@ -22,7 +24,7 @@ use Tests\TestCase;
  */
 class MigrationCommentTest extends TestCase
 {
-    /** 全部业务表 + 骨架表；顺序无关，仅用于拼 SQL 的 IN 列表（常量内容，无注入风险）。 */
+    /** 全部业务表 + 骨架表（写的是**不带前缀**的逻辑表名，查询时再拼连接前缀）。 */
     private const TABLES = [
         'users', 'password_reset_tokens', 'sessions',
         'cache', 'cache_locks',
@@ -74,14 +76,7 @@ class MigrationCommentTest extends TestCase
     public function test_every_expected_table_is_covered_by_the_check(): void
     {
         // 防止有人加了新表却忘了把它加进 self::TABLES（那会让运行时检查出现盲区）
-        $created = [];
-        foreach (glob(database_path('migrations/*.php')) ?: [] as $file) {
-            $source = file_get_contents($file) ?: '';
-            preg_match_all("/Schema::create\(\s*'([a-z_]+)'/", $source, $matches);
-            $created = array_merge($created, $matches[1]);
-        }
-
-        $missing = array_diff(array_unique($created), self::TABLES);
+        $missing = array_diff($this->declaredTables(), self::TABLES);
 
         $this->assertSame([], array_values($missing), '以下表未纳入注释检查范围：'.implode('、', $missing));
     }
@@ -100,13 +95,16 @@ class MigrationCommentTest extends TestCase
             $this->markTestSkipped('数据库尚未迁移，无法校验列注释');
         }
 
-        $tables = "'".implode("','", self::TABLES)."'";
+        // 必须拼上连接的真实表前缀：information_schema 里存的是物理表名，
+        // 用逻辑表名去查会命中 0 行 —— 那样断言会「空过」而不是报错。
+        $prefix = $connection->getTablePrefix();
+        $physical = "'".implode("','", array_map(fn (string $t) => $prefix.$t, self::TABLES))."'";
 
         $rows = DB::select(
             "select table_name, column_name
              from information_schema.columns
              where table_schema = database()
-               and table_name in ({$tables})
+               and table_name in ({$physical})
                and (column_comment is null or column_comment = '')
              order by table_name, ordinal_position"
         );
@@ -114,5 +112,43 @@ class MigrationCommentTest extends TestCase
         $missing = array_map(fn ($row) => $row->table_name.'.'.$row->column_name, $rows);
 
         $this->assertSame([], $missing, '以下列在数据库中缺少备注：'.implode('、', $missing));
+
+        // 反空过：确认真的检查到了列。数量与迁移里的列定义总数对齐，
+        // 因此表名或前缀不一致时会立刻失败，而不是安静地通过。
+        $inspected = (int) DB::selectOne(
+            "select count(*) as total from information_schema.columns
+             where table_schema = database() and table_name in ({$physical})"
+        )->total;
+
+        $this->assertSame(
+            $this->expectedColumnCount(),
+            $inspected,
+            '数据库中检到的列数与迁移定义不一致，可能是表前缀与 DB_PREFIX 不匹配',
+        );
+    }
+
+    /** 迁移文件里声明的全部逻辑表名。 */
+    private function declaredTables(): array
+    {
+        $tables = [];
+
+        foreach (glob(database_path('migrations/*.php')) ?: [] as $file) {
+            preg_match_all("/Schema::create\(\s*'([a-z_]+)'/", (string) file_get_contents($file), $matches);
+            $tables = array_merge($tables, $matches[1]);
+        }
+
+        return array_values(array_unique($tables));
+    }
+
+    /** 迁移文件里声明的列定义总数。 */
+    private function expectedColumnCount(): int
+    {
+        $total = 0;
+
+        foreach (glob(database_path('migrations/*.php')) ?: [] as $file) {
+            $total += preg_match_all('/->('.self::COLUMN_METHODS.')\(/', (string) file_get_contents($file));
+        }
+
+        return $total;
     }
 }
