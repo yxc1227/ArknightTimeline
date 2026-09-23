@@ -13,7 +13,7 @@
     {{-- ============================ 筛选侧栏 ============================ --}}
     <aside class="sidebar" id="filters">
         <div class="filter-head">
-            <strong style="font-size:13px">检索与筛选</strong>
+            <strong data-en="Filter">检索与筛选</strong>
             <button class="btn btn--ghost btn--sm" id="filters-reset">重置</button>
         </div>
 
@@ -22,7 +22,7 @@
         </div>
 
         <details class="filter-group" open>
-            <summary>时间轴</summary>
+            <summary data-en="Scale">时间轴</summary>
             <div class="filter-group__body">
                 <canvas id="scrubber" title="拖动选择时间范围"></canvas>
                 <div class="filter-head" style="margin-top:6px">
@@ -36,7 +36,7 @@
         </details>
 
         <details class="filter-group">
-            <summary>纪元</summary>
+            <summary data-en="Era">纪元</summary>
             <div class="filter-group__body">
                 <select data-filter="era_id">
                     <option value="">全部纪元</option>
@@ -48,7 +48,7 @@
         </details>
 
         <details class="filter-group">
-            <summary>出处</summary>
+            <summary data-en="Source">出处</summary>
             <div class="filter-group__body">
                 <div class="field">
                     <select data-filter="source_type">
@@ -70,7 +70,7 @@
         </details>
 
         <details class="filter-group">
-            <summary>阵营与人物</summary>
+            <summary data-en="Faction / Character">阵营与人物</summary>
             <div class="filter-group__body">
                 <div class="field">
                     <select data-filter="faction_id">
@@ -92,7 +92,7 @@
         </details>
 
         <details class="filter-group">
-            <summary>标签</summary>
+            <summary data-en="Tag">标签</summary>
             <div class="filter-group__body">
                 <div class="tag-picker">
                     @foreach ($filterOptions['tags'] as $tag)
@@ -106,7 +106,7 @@
         </details>
 
         <details class="filter-group">
-            <summary>条目状态</summary>
+            <summary data-en="Status">条目状态</summary>
             <div class="filter-group__body">
                 <div class="field">
                     <select data-filter="status">
@@ -139,11 +139,12 @@
 
     {{-- ============================ 时间线主体 ============================ --}}
     <main class="main">
-        <div class="panel" style="padding:12px 16px">
-            <div class="row" style="align-items:center">
-                <div class="stats-line" id="stats-line"><span>正在载入…</span></div>
+        <div class="panel">
+            <div class="panel__title">
+                <span data-en="Timeline">统一事件时间表</span>
+                <span class="stats-line" id="stats-line"><span>LOADING ......</span></span>
             </div>
-            <div class="faint small" style="margin-top:6px">
+            <div class="faint small">
                 排序依据是游戏内纪元时间的归一化区间；粒度不足时（如「1097年冬」）以区间形式参与排序与检索，
                 不会伪造精确日期。未定位时间的条目单独归入「时间未定」泳道。
             </div>
@@ -171,7 +172,7 @@
     {{-- ============================ 冲突合并模态 ============================ --}}
     <div class="modal-mask" id="conflict-mask">
         <div class="modal">
-            <div class="modal__head">编辑冲突 · 字段级合并</div>
+            <div class="modal__head" data-en="Conflict">编辑冲突 · 字段级合并</div>
             <div class="modal__body" id="conflict-body"></div>
             <div class="modal__foot">
                 <button class="btn" id="conflict-cancel">稍后再说</button>

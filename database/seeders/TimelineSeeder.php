@@ -158,6 +158,10 @@ class TimelineSeeder extends Seeder
     /**
      * 纪元切分是「检索维度」而非「世界观设定」，因此按剧情推进的节点划分，
      * 区间用 TerraDate 网格索引表示，条目的 era_id 与区间不一致时会被一致性巡检点名。
+     *
+     * 配色刻意采用**单一色族的递进梯度**（远古灰 → 深黄 → 标志黄 → 琥珀 → 橙 → 红），
+     * 而不是七个互不相干的色相：整站只有「近黑 / 白 / 标志黄」三种主色，
+     * 纪元的可辨识度靠明度与暖度递进获得。时间顺序上的「逐步升级」也正好被颜色表达出来。
      */
     private function seedEras(): void
     {
@@ -169,7 +173,7 @@ class TimelineSeeder extends Seeder
                 'date_label' => '泰拉历前 — 泰拉历 999 年',
                 'start' => TerraDate::toIndex(-500),
                 'end' => TerraDate::toIndex(999, 12, 31),
-                'color' => '#64748b',
+                'color' => '#808080',
                 'description' => '源石显现、源石技艺普及、各古老政体成型的时期。年表大量缺失，条目多需推断。',
             ],
             [
@@ -179,7 +183,7 @@ class TimelineSeeder extends Seeder
                 'date_label' => '泰拉历 1000 年 — 1093 年',
                 'start' => TerraDate::toIndex(1000),
                 'end' => TerraDate::toIndex(1093, 12, 31),
-                'color' => '#8b5cf6',
+                'color' => '#9a7d18',
                 'description' => '萨卡兹流亡、伊比利亚大静谧余波、乌萨斯与卡西米尔的长期对抗。',
             ],
             [
@@ -189,7 +193,7 @@ class TimelineSeeder extends Seeder
                 'date_label' => '泰拉历 1094 年 — 1095 年',
                 'start' => TerraDate::toIndex(1094),
                 'end' => TerraDate::toIndex(1095, 12, 31),
-                'color' => '#0ea5e9',
+                'color' => '#c9a227',
             ],
             [
                 'name' => '切尔诺伯格事变与龙门危机',
@@ -198,7 +202,7 @@ class TimelineSeeder extends Seeder
                 'date_label' => '泰拉历 1096 年 12 月 — 1097 年',
                 'start' => TerraDate::toIndex(1096, 12),
                 'end' => TerraDate::toIndex(1097, 12, 31),
-                'color' => '#38bdf8',
+                'color' => '#ffd400',
                 'description' => '整合运动崛起、切尔诺伯格遭天灾、罗德岛介入救援并卷入龙门危机。',
             ],
             [
@@ -208,7 +212,7 @@ class TimelineSeeder extends Seeder
                 'date_label' => '泰拉历 1098 年 — 1099 年',
                 'start' => TerraDate::toIndex(1098),
                 'end' => TerraDate::toIndex(1099, 12, 31),
-                'color' => '#fbbf24',
+                'color' => '#ffa32e',
             ],
             [
                 'name' => '维多利亚战争',
@@ -217,7 +221,7 @@ class TimelineSeeder extends Seeder
                 'date_label' => '泰拉历 1100 年',
                 'start' => TerraDate::toIndex(1100),
                 'end' => TerraDate::toIndex(1100, 12, 31),
-                'color' => '#f472b6',
+                'color' => '#ff7038',
             ],
             [
                 'name' => '萨卡兹的终局',
@@ -226,7 +230,7 @@ class TimelineSeeder extends Seeder
                 'date_label' => '泰拉历 1101 年',
                 'start' => TerraDate::toIndex(1101),
                 'end' => TerraDate::toIndex(1101, 12, 31),
-                'color' => '#ef4444',
+                'color' => '#ff4242',
             ],
         ];
 

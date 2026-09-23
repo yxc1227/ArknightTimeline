@@ -7,7 +7,7 @@
     <div style="flex:1;min-width:0">
         <div class="panel">
             <div class="panel__title">
-                <span>时间线一致性收件箱</span>
+                <span data-en="Consistency Inbox">时间线一致性收件箱</span>
                 @if ($canReview)
                     <button class="btn btn--sm" id="scan">全量体检</button>
                 @endif
@@ -21,9 +21,9 @@
 
             <div class="stats-line" style="margin-bottom:12px">
                 @foreach ($summary as $severity => $total)
-                    <span>{{ $severity }}: {{ $total }}</span>
+                    <span>{{ strtoupper($severity) }} {{ str_pad($total, 2, '0', STR_PAD_LEFT) }}</span>
                 @endforeach
-                @if (empty($summary)) <span>当前没有未处置异常</span> @endif
+                @if (empty($summary)) <span>NO OPEN ISSUE // 当前没有未处置异常</span> @endif
             </div>
 
             <form method="GET" class="row" style="align-items:flex-end">
@@ -58,14 +58,18 @@
         </div>
 
         <div class="panel">
+            <div class="panel__title">
+                <span data-en="Issue List">异常清单</span>
+            </div>
+
             <table class="tbl">
                 <thead>
                 <tr>
-                    <th style="width:78px">级别</th>
-                    <th style="width:96px">类型</th>
-                    <th>说明</th>
-                    <th style="width:230px">涉及条目</th>
-                    <th style="width:140px">操作</th>
+                    <th style="width:88px">Severity</th>
+                    <th style="width:104px">Type</th>
+                    <th>Detail</th>
+                    <th style="width:230px">Entry</th>
+                    <th style="width:140px">Action</th>
                 </tr>
                 </thead>
                 <tbody id="anomalies-host">

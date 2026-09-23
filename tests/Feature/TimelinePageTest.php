@@ -46,7 +46,7 @@ class TimelinePageTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('只读浏览中')
+            ->assertSee('READ ONLY')
             ->assertDontSee('AI 审核台');
     }
 

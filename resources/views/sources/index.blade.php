@@ -7,8 +7,8 @@
     <div style="flex:1;min-width:0">
         <div class="panel">
             <div class="panel__title">
-                <span>出处与语料库</span>
-                <span class="faint small">出处是溯源链的根：AI 抽取的每条引用都要能回到这里的原文定位</span>
+                <span data-en="Source Library">出处与语料库</span>
+                <span class="faint small mono">CORPUS // 溯源链的根</span>
             </div>
 
             <div class="alert alert--info small">
@@ -33,11 +33,11 @@
             <table class="tbl">
                 <thead>
                 <tr>
-                    <th>出处</th>
-                    <th style="width:110px">类型</th>
-                    <th style="width:130px">编号 / 章节</th>
-                    <th style="width:80px">收录条目</th>
-                    <th style="width:100px">原文语料</th>
+                    <th>Source</th>
+                    <th style="width:110px">Type</th>
+                    <th style="width:130px">Code / Chapter</th>
+                    <th style="width:88px">Entries</th>
+                    <th style="width:100px">Corpus</th>
                     <th style="width:80px"></th>
                 </tr>
                 </thead>

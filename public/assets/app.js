@@ -77,6 +77,26 @@
         return [clean, ...parts.map((p) => String(p).replace(/^\/+/, ''))].join('/');
     }
 
+    /** 固定宽度编号：官方站的计数一律补零成两位（00 // 00 / 05）。 */
+    const pad = (value, width = 2) => String(value ?? 0).padStart(width, '0');
+
+    /**
+     * 时间戳格式化为「2026 // 09 / 23 15:04」。
+     *
+     * 注意：这个 `//` 日期母题只用于**元数据**（版本时间、标注时间、公告时间）。
+     * 条目的游戏内纪年（date_display）永远原样输出，绝不做任何格式化 ——
+     * 泰拉历的粒度本身就是信息，重排它会伪造精度。
+     */
+    const stamp = (iso) => {
+        if (!iso) return '—';
+
+        const date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return '—';
+
+        return `${date.getFullYear()} // ${pad(date.getMonth() + 1)} / ${pad(date.getDate())} `
+            + `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
+
     /**
      * 触发 AI 梳理。审核台与出处详情页共用同一段逻辑 ——
      * 两处入口的检验规则（必填、持久化原文、结果去向）必须完全一致，
@@ -181,7 +201,8 @@
         function renderLoading() {
             const host = $('#timeline-host');
             if (!host || state.events.length) return;
-            host.innerHTML = '<div class="load-more"><span class="spinner"></span> 正在检索…</div>';
+            // 「LOADING ......」的加载语汇同样来自官方站的系统化文案习惯
+            host.innerHTML = '<div class="load-more"><span class="spinner"></span> LOADING ...... 正在检索</div>';
         }
 
         /* ---------------- 渲染 */
@@ -192,13 +213,15 @@
 
             const stats = $('#stats-line');
             if (stats) {
-                stats.innerHTML = `<span>命中 ${num(state.total)} 条</span>`
-                    + `<span>本页 ${num(state.events.length)} 条</span>`
-                    + (state.unanchored ? `<span>其中时间未定 ${num(state.unanchored)} 条</span>` : '');
+                // 编号 / 计数仪表：TOTAL 51 // SHOWN 40 // UNDATED 03
+                stats.innerHTML = `<span>TOTAL ${num(state.total)}</span>`
+                    + `<span>SHOWN ${num(state.events.length)}</span>`
+                    + (state.unanchored ? `<span>UNDATED ${pad(state.unanchored)}</span>` : '');
             }
 
             if (!state.events.length) {
-                host.innerHTML = '<div class="empty">没有符合条件的条目。<br><span class="small">可以放宽筛选条件，或用「AI 梳理」从剧情原文里补齐。</span></div>';
+                host.innerHTML = '<div class="empty">没有符合条件的条目。<br>'
+                    + '<span class="small">可以放宽筛选条件，或用「AI 梳理」从剧情原文里补齐。</span></div>';
                 return;
             }
 
@@ -249,7 +272,7 @@
                 <span class="era-band__bar" style="background:${esc(color)}"></span>
                 <span class="era-band__name">${esc(name)}</span>
                 <span class="era-band__range">${esc(range)}</span>
-                <span class="era-band__count">${num(count)} 条</span>
+                <span class="era-band__count">CNT ${pad(count)}</span>
             </div><div class="tl">`;
         }
 
@@ -277,14 +300,14 @@
                         <span class="badge ${esc(event.status.badge)}">${esc(event.status.label)}</span>
                         ${event.date.precision !== 'day' ? `<span class="badge badge--muted">${esc(event.date.precision_label)}</span>` : ''}
                         ${event.date.confidence !== 'confirmed' ? `<span class="badge badge--warn">${esc(event.date.confidence_label)}</span>` : ''}
-                        ${hasAnomaly ? `<span class="badge badge--danger">⚠ ${event.anomalies_count}</span>` : ''}
-                        ${event.is_locked ? '<span class="badge badge--muted">🔒 已锁定</span>' : ''}
+                        ${hasAnomaly ? `<span class="badge badge--danger">异常 ${pad(event.anomalies_count)}</span>` : ''}
+                        ${event.is_locked ? '<span class="badge badge--muted">已锁定</span>' : ''}
                     </div>
                     <p class="tl-card__summary">${esc(event.summary)}</p>
                     <div class="tl-card__meta">
-                        ${event.location ? `<span>📍 ${esc(event.location)}</span>` : ''}
-                        <span>v${event.version}</span>
-                        ${event.annotations_count ? `<span>💬 ${event.annotations_count}</span>` : ''}
+                        ${event.location ? `<span>LOC ${esc(event.location)}</span>` : ''}
+                        <span>VER ${pad(event.version)}</span>
+                        ${event.annotations_count ? `<span>NOTE ${pad(event.annotations_count)}</span>` : ''}
                     </div>
                     ${chips.length ? `<div class="chips" style="margin-top:7px">${chips.join('')}</div>` : ''}
                 </div>
@@ -322,20 +345,26 @@
             // 与后端 TerraDate::DAYS_PER_YEAR 保持一致，避免把网格常数散落在两处
             const daysPerYear = state.scale.days_per_year || 372;
 
-            // 纪元色带
+            // 纪元色带：纪元颜色来自数据库（已按黄→红「递进」渐变重新配过色）
             (options.era_bands || []).forEach((eraBand) => {
                 const from = Math.floor(eraBand.start_index / daysPerYear);
                 const to = Math.ceil(eraBand.end_index / daysPerYear);
                 const x = ((from - min) / span) * width;
                 const w = Math.max(1, ((to - from) / span) * width);
-                ctx.fillStyle = eraBand.color + '22';
+                ctx.fillStyle = eraBand.color + '1f';
                 ctx.fillRect(x, 0, w, height);
+
+                // 纪元分界刻度
+                ctx.fillStyle = eraBand.color + '55';
+                ctx.fillRect(x, 0, 1, height);
             });
 
+            // 年度分布：常态灰柱，只有明显的高峰才用标志黄点出来
             buckets.forEach((b) => {
                 const x = ((b.year - min) / span) * width;
-                const h = Math.max(2, (b.total / peak) * (height - 14));
-                ctx.fillStyle = b.year === 1097 ? '#38bdf8' : '#2c3d55';
+                const intensity = b.total / peak;
+                const h = Math.max(2, intensity * (height - 14));
+                ctx.fillStyle = intensity >= 0.75 ? '#ffd400' : '#3f3f3f';
                 ctx.fillRect(x, height - h, Math.max(1, barWidth - 1), h);
             });
 
@@ -344,10 +373,10 @@
                 const [from, to] = state.selection;
                 const x1 = ((from - min) / span) * width;
                 const x2 = ((to - min) / span) * width;
-                ctx.fillStyle = 'rgba(56,189,248,.18)';
+                ctx.fillStyle = 'rgba(255,212,0,.16)';
                 ctx.fillRect(Math.min(x1, x2), 0, Math.abs(x2 - x1), height);
-                ctx.strokeStyle = '#38bdf8';
-                ctx.strokeRect(Math.min(x1, x2), .5, Math.abs(x2 - x1), height - 1);
+                ctx.strokeStyle = '#ffd400';
+                ctx.strokeRect(Math.min(x1, x2) + .5, .5, Math.abs(x2 - x1) - 1, height - 1);
             }
 
             canvas.dataset.min = String(min);
@@ -490,7 +519,7 @@
 
         async function openEvent(id) {
             openDrawer();
-            $('#drawer-body').innerHTML = '<div class="load-more"><span class="spinner"></span> 载入条目…</div>';
+            $('#drawer-body').innerHTML = '<div class="load-more"><span class="spinner"></span> LOADING ...... 载入条目</div>';
             $('#drawer-title').textContent = '';
             $('#drawer-date').textContent = '';
             $('#drawer-foot').innerHTML = '';
@@ -518,10 +547,10 @@
 
             $('#drawer-body').innerHTML = lockNote + `
                 <div class="tabs" id="detail-tabs">
-                    <button class="is-active" data-tab="view">详情</button>
-                    <button data-tab="edit">编辑</button>
-                    <button data-tab="notes">标注 ${annotations.length ? `(${annotations.length})` : ''}</button>
-                    <button data-tab="history">版本 (${revisions.length})</button>
+                    <button class="is-active" data-tab="view" data-en="DETAIL">详情</button>
+                    <button data-tab="edit" data-en="EDIT">编辑</button>
+                    <button data-tab="notes" data-en="NOTE">标注${annotations.length ? ` ${pad(annotations.length)}` : ''}</button>
+                    <button data-tab="history" data-en="HISTORY">版本 ${pad(revisions.length)}</button>
                 </div>
 
                 <div class="tabpane is-active" data-pane="view">${paneView(event, anomalies, permissions)}</div>
@@ -544,16 +573,24 @@
         }
 
         function paneView(event, anomalies, permissions) {
-            const sources = (event.sources || []).map((s) => `
-                <div class="card">
+            const sources = (event.sources || []).map((s) => {
+                const locator = [s.type_label, s.code, s.chapter, s.stage_code]
+                    .filter(Boolean)
+                    .map((part) => esc(part))
+                    .join(' // ');
+
+                return `<div class="card">
                     <div class="row" style="align-items:baseline">
                         <strong>${esc(s.name)}</strong>
-                        <span class="faint small mono">${esc(s.type_label)}${s.code ? ' · ' + esc(s.code) : ''}${s.stage_code ? ' · ' + esc(s.stage_code) : ''}</span>
                         ${s.is_primary ? '<span class="badge badge--ok">主要出处</span>' : ''}
                     </div>
-                    ${s.quote ? `<div class="quote" style="margin-top:7px">${esc(s.quote)}</div>` : '<div class="faint small" style="margin-top:5px">该出处未附引文</div>'}
-                </div>
-            `).join('') || '<div class="faint small">尚未挂载出处。时间线的可信度取决于出处，建议补齐。</div>';
+                    <div class="faint small mono" style="margin-top:3px">${locator}</div>
+                    ${s.quote
+                        ? `<div class="quote" style="margin-top:7px">${esc(s.quote)}</div>`
+                        // 引文缺失是真实的待办状态，必须显式说明，而不是留白
+                        : '<div class="faint small" style="margin-top:7px">该出处尚未附引文 —— 待录入原文后补齐，或直接标注说明依据。</div>'}
+                </div>`;
+            }).join('') || '<div class="faint small">尚未挂载出处。时间线的可信度取决于出处，建议补齐。</div>';
 
             const people = (event.characters || []).map((c) =>
                 `<span class="chip">${esc(c.name)}<span class="faint">·${esc(c.role)}</span></span>`
@@ -568,9 +605,10 @@
             ).join('') || '<span class="faint small">—</span>';
 
             const anomalyBlock = (anomalies || []).length
-                ? `<div class="section-label">一致性告警</div>` + anomalies.map((a) => `
+                ? '<div class="section-label" data-en="CONSISTENCY">一致性告警</div>' + anomalies.map((a) => `
                     <div class="alert ${a.severity === 'error' ? 'alert--danger' : 'alert--warn'}">
-                        <strong>${esc(a.type_label)}</strong>：${esc(a.message)}
+                        <span class="badge ${a.severity === 'error' ? 'badge--danger' : 'badge--warn'}">${esc(a.type_label)}</span>
+                        ${esc(a.message)}
                     </div>`).join('')
                 : '';
 
@@ -580,25 +618,25 @@
                     <dt>游戏内纪元</dt><dd class="mono">${esc(event.date.display)} <span class="faint">（${esc(event.date.precision_label)} · ${esc(event.date.confidence_label)}）</span></dd>
                     <dt>所属纪元</dt><dd>${event.era ? `${esc(event.era.name)} <span class="faint small">${esc(event.era.date_label)}</span>` : '<span class="faint">未归属</span>'}</dd>
                     <dt>发生地</dt><dd>${esc(event.location || '—')}</dd>
-                    <dt>状态</dt><dd><span class="badge ${esc(event.status.badge)}">${esc(event.status.label)}</span> ${event.is_locked ? '<span class="badge badge--muted">🔒 已锁定</span>' : ''}</dd>
-                    <dt>版本</dt><dd class="mono">v${event.version} · 更新于 ${esc((event.updated_at || '').slice(0, 16).replace('T', ' '))}</dd>
+                    <dt>状态</dt><dd><span class="badge ${esc(event.status.badge)}">${esc(event.status.label)}</span> ${event.is_locked ? '<span class="badge badge--muted">已锁定</span>' : ''}</dd>
+                    <dt>版本</dt><dd class="mono">VER ${pad(event.version)} // ${esc(stamp(event.updated_at))}</dd>
                 </dl>
 
-                <div class="section-label">简要描述</div>
+                <div class="section-label" data-en="DESCRIPTION">简要描述</div>
                 <p style="margin:0">${esc(event.summary)}</p>
 
-                ${event.details ? `<div class="section-label">详述</div><p style="margin:0;white-space:pre-wrap">${esc(event.details)}</p>` : ''}
+                ${event.details ? `<div class="section-label" data-en="DETAILS">详述</div><p style="margin:0;white-space:pre-wrap">${esc(event.details)}</p>` : ''}
 
-                <div class="section-label">出处来源</div>
+                <div class="section-label" data-en="SOURCE">出处来源</div>
                 ${sources}
 
-                <div class="section-label">相关人物</div>
+                <div class="section-label" data-en="CHARACTER">相关人物</div>
                 <div class="chips">${people}</div>
 
-                <div class="section-label">相关阵营</div>
+                <div class="section-label" data-en="FACTION">相关阵营</div>
                 <div class="chips">${factions}</div>
 
-                <div class="section-label">标签</div>
+                <div class="section-label" data-en="TAG">标签</div>
                 <div class="chips">${tags}</div>
             `;
         }
@@ -623,7 +661,7 @@
 
             return `
                 <div class="alert alert--info small">
-                    保存时会携带版本号 v${event.version}。若他人已抢先保存，系统不会覆盖对方的改动，
+                    保存时会携带版本号 VER ${pad(event.version)}。若他人已抢先保存，系统不会覆盖对方的改动，
                     而是把冲突逐字段摊开让你裁决（对方的独有改动会自动并入）。
                 </div>
 
@@ -669,19 +707,19 @@
                         </div>
                     </div>
 
-                    <div class="section-label">出处来源</div>
+                    <div class="section-label" data-en="SOURCE">出处来源</div>
                     <div id="source-rows">${sourceRows}</div>
                     <button type="button" class="btn btn--sm" data-add="source">+ 添加出处</button>
 
-                    <div class="section-label">相关人物</div>
+                    <div class="section-label" data-en="CHARACTER">相关人物</div>
                     <div id="character-rows">${characterRows}</div>
                     <button type="button" class="btn btn--sm" data-add="character">+ 添加人物</button>
 
-                    <div class="section-label">相关阵营</div>
+                    <div class="section-label" data-en="FACTION">相关阵营</div>
                     <div id="faction-rows">${factionRows}</div>
                     <button type="button" class="btn btn--sm" data-add="faction">+ 添加阵营</button>
 
-                    <div class="section-label">标签</div>
+                    <div class="section-label" data-en="TAG">标签</div>
                     <div class="field">
                         <input type="text" name="tags" value="${esc((event.tags || []).map((t) => t.name).join(', '))}" placeholder="用逗号分隔，例如：战役, 政变">
                     </div>
@@ -754,11 +792,11 @@
             const list = annotations.map((a) => `
                 <div class="card">
                     <div class="row" style="align-items:baseline">
-                        <strong>${esc(a.type_label)}</strong>
-                        <span class="faint small">${esc(a.author || '匿名访客')} · ${esc((a.created_at || '').slice(0, 16).replace('T', ' '))}</span>
+                        <span class="badge badge--info">${esc(a.type_label)}</span>
+                        <span class="faint small mono">${esc(a.author || '匿名访客')} // ${esc(stamp(a.created_at))}</span>
                         <span class="badge ${a.status === 'open' ? 'badge--warn' : 'badge--ok'}">${esc(a.status)}</span>
                     </div>
-                    ${a.field ? `<div class="faint small mono" style="margin-top:3px">针对字段：${esc(a.field)}</div>` : ''}
+                    ${a.field ? `<div class="faint small mono" style="margin-top:4px">FIELD // ${esc(a.field)}</div>` : ''}
                     <div style="margin-top:6px;white-space:pre-wrap">${esc(a.body)}</div>
                     ${permissions.review && a.status === 'open' ? `
                         <div class="btn-row" style="margin-top:8px">
@@ -787,7 +825,7 @@
                     <button type="submit" class="btn btn--primary btn--sm">提交标注</button>
                     <span class="faint small" style="margin-left:8px">标注不需要编辑权限，访客也可提交。</span>
                 </form>
-                <div class="section-label">标注记录</div>
+                <div class="section-label" data-en="RECORD">标注记录</div>
                 ${list}
             `;
         }
@@ -795,18 +833,18 @@
         function paneHistory(revisions) {
             if (!revisions.length) return '<div class="faint small">暂无版本记录。</div>';
 
-            return `<div class="faint small" style="margin-bottom:10px">版本链只增不改：回滚会生成一个新版本，历史永远保留。</div>`
+            return '<div class="faint small" style="margin-bottom:10px">版本链只增不改：回滚会生成一个新版本，历史永远保留。</div>'
                 + revisions.map((r) => `
                 <div class="card">
                     <div class="row" style="align-items:baseline">
-                        <span class="mono">v${r.version}</span>
+                        <span class="mono" style="color:var(--accent)">VER ${pad(r.version)}</span>
                         <strong>${esc(r.action_label)}</strong>
                         <span class="badge ${r.origin === 'ai' ? 'badge--info' : 'badge--muted'}">${esc(r.origin_label)}</span>
-                        <span class="faint small">${esc(r.author || '—')} · ${esc((r.created_at || '').slice(0, 16).replace('T', ' '))}</span>
+                        <span class="faint small mono">${esc(r.author || '—')} // ${esc(stamp(r.created_at))}</span>
                     </div>
-                    ${r.changed_fields?.length ? `<div class="chips" style="margin-top:6px">${r.changed_fields.map((f) => `<span class="chip">${esc(f)}</span>`).join('')}</div>` : ''}
-                    ${r.comment ? `<div class="faint small" style="margin-top:6px">${esc(r.comment)}</div>` : ''}
-                    ${state.current.permissions.revert ? `<button class="btn btn--sm" style="margin-top:8px" data-revert="${r.version}">回滚到此版本</button>` : ''}
+                    ${r.changed_fields?.length ? `<div class="chips" style="margin-top:7px">${r.changed_fields.map((f) => `<span class="chip">${esc(f)}</span>`).join('')}</div>` : ''}
+                    ${r.comment ? `<div class="faint small" style="margin-top:7px">${esc(r.comment)}</div>` : ''}
+                    ${state.current.permissions.revert ? `<button class="btn btn--sm" style="margin-top:9px" data-revert="${r.version}">回滚到此版本</button>` : ''}
                 </div>`).join('');
         }
 
@@ -1118,9 +1156,11 @@
 
             openDrawer();
             $('#drawer-title').textContent = '新建事件条目';
-            $('#drawer-date').textContent = '未保存';
+            $('#drawer-date').textContent = 'NEW // 未保存';
             $('#drawer-body').innerHTML = `
-                <div class="tabs" id="detail-tabs"><button class="is-active" data-tab="edit">新建</button></div>
+                <div class="tabs" id="detail-tabs">
+                    <button class="is-active" data-tab="edit" data-en="CREATE">新建条目</button>
+                </div>
                 <div class="tabpane is-active" data-pane="edit">${paneEdit(state.current.event, { update: true })}</div>
             `;
             $('#drawer-foot').innerHTML = '<button class="btn btn--ghost" id="drawer-close">关闭</button>';

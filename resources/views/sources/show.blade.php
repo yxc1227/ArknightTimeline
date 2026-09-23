@@ -7,7 +7,7 @@
     <div style="flex:1;min-width:0">
         <div class="panel">
             <div class="panel__title">
-                <span>{{ $source->name }}</span>
+                <span data-en="Source">{{ $source->name }}</span>
                 <span class="badge">{{ $source->type->label() }}{{ $source->code ? ' · '.$source->code : '' }}</span>
             </div>
 
@@ -19,10 +19,10 @@
 
         <div class="panel">
             <div class="panel__title">
-                <span>出处信息与原文语料</span>
+                <span data-en="Corpus">出处信息与原文语料</span>
                 @auth
                     @if (auth()->user()->canEditEvents())
-                        <span class="faint small">原文变更会使既有引用的字符偏移失效，请谨慎覆盖</span>
+                        <span class="faint small mono">WARN // 覆盖原文会使既有引用的字符偏移失效</span>
                     @endif
                 @endauth
             </div>
@@ -47,7 +47,7 @@
                         </div>
                     </form>
 
-                    <div class="section-label">用这段原文触发 AI 梳理</div>
+                    <div class="section-label" data-en="Synthesize">用这段原文触发 AI 梳理</div>
                     <form id="synthesize-form" data-source-id="{{ $source->id }}">
                         <input type="hidden" name="source_id" value="{{ $source->id }}">
                         <div class="row">
@@ -84,8 +84,8 @@
 
         <div class="panel">
             <div class="panel__title">
-                <span>该出处记录的条目</span>
-                <span class="faint small">共 {{ $source->events->count() }} 条</span>
+                <span data-en="Entries">该出处记录的条目</span>
+                <span class="faint small mono">CNT {{ str_pad($source->events->count(), 2, '0', STR_PAD_LEFT) }}</span>
             </div>
 
             @forelse ($source->events as $event)
