@@ -5,13 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', '明日方舟时间线 · 统一事件年表')</title>
+
+    {{--
+        标记同时供给三处，几何同源（app/Support/Logo.php）：
+        SVG 给支持矢量图标的浏览器（任意缩放都清晰），.ico 给不支持的旧浏览器兜底，
+        apple-touch-icon 是 iOS 添加到主屏时的图标（该处只认 PNG，故由同一几何导出）。
+        三行顺序有意义：现代浏览器优先取 SVG。
+    --}}
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
+
     <link rel="stylesheet" href="{{ asset('assets/app.css') }}">
 </head>
 <body data-page="@yield('page', 'timeline')">
 
 <header class="topbar">
     <a class="brand" href="{{ route('timeline.index') }}">
-        <span class="brand__mark">AT</span>
+        {{-- 标记本身是装饰：站点名就在旁边，重复朗读只是噪音，故不传 label --}}
+        <x-logo class="brand__mark"/>
         <span>明日方舟时间线</span>
         <span class="brand__sub">Arknights Timeline ://</span>
     </a>

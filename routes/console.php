@@ -48,6 +48,35 @@ Artisan::command('timeline:purge-locks', function () {
 })->purpose('回收过期的编辑租约');
 
 /*
+|--------------------------------------------------------------------------
+| 标识（logo）导出
+|--------------------------------------------------------------------------
+|
+| 标记的几何只在 App\Support\Logo 一处定义，但要用到它的地方分三类，
+| 其中两类是「静态文件」——拿不到 Blade 与 CSS，因此必须导出：
+|
+|   1. 页面内：<x-logo> 组件直接读几何，不需要导出；
+|   2. public/favicon.svg：本命令导出（浏览器直接取这个文件）；
+|   3. public/favicon.ico 与 apple-touch-icon.png：光栅图，不由 PHP 生成 ——
+|      容器里的 GD 不能栅格化 SVG。这两份由同一几何经 headless Chrome 渲染、
+|      再按 ICO 规范封装，属于「改了 Logo.php 才需要重跑」的一次性产物，
+|      步骤记在 docs/LOGO.md §6。
+|
+| 改几何后跑一次本命令，就能保证 favicon 与页面里的标记不会长得不一样。
+*/
+
+Artisan::command('logo:export', function () {
+    $svg = \App\Support\Logo::faviconSvg();
+    $path = public_path('favicon.svg');
+    file_put_contents($path, $svg . "\n");
+
+    $this->info('已导出 public/favicon.svg（' . strlen($svg) . ' 字节）。');
+    $this->line('  光栅版本（favicon.ico / apple-touch-icon.png）需按 docs/LOGO.md §6 重新渲染。');
+
+    return self::SUCCESS;
+})->purpose('从 App\Support\Logo 导出浏览器图标文件');
+
+/*
 | 巡检频率的选择依据：时间线内容的写入是低频的（日均几十次），
 | 而全量巡检随条目数线性增长，因此按小时而非按分钟执行；
 | 写入时的即时体检已经覆盖了「新问题立刻可见」的需求。

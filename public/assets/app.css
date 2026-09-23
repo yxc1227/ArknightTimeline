@@ -144,19 +144,15 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .brand:hover { text-decoration: none; }
 
+/* 顶栏标记位：尺寸由这里定，形状与配色交给 <x-logo>（见「标识」段）。
+   曾经这里是用 background + clip-path + 等宽字拼出来的「AT」，
+   换成矢量标记后，斜切由 SVG 外框自己带着走 —— 标记从此在顶栏、
+   浏览器标签图标、文档里是同一份几何，不会再出现「CSS 版」与「图片版」两个长相。 */
 .brand__mark {
     width: 28px;
     height: 28px;
-    display: grid;
-    place-items: center;
-    background: var(--accent);
-    color: var(--accent-ink);
-    font-family: var(--mono);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0;
-    /* 单角斜切：本项目的按钮 / 徽标统一形状语言 */
-    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+    display: block;
+    flex: 0 0 auto;
 }
 
 .brand__sub {
@@ -1768,6 +1764,43 @@ img.avatar {
 
 .event-row__date { flex: 0 0 auto; font-size: 12px; color: var(--text-faint); min-width: 116px; }
 .event-row__title { flex: 1 1 200px; min-width: 0; font-size: 13px; }
+
+/* ---------------------------------------------------------------- 标识 */
+
+/* 项目标记：斜切方块 + 「AT」字母组合（几何与理由见 app/Support/Logo.php，规范见 docs/LOGO.md）。
+   与图标同一分工 —— 形状在 PHP，颜色在这里。
+   28px 是唯一「被算过」的尺寸：顶栏高度 62px、品牌文字 14px，
+   标记略高于文字行高而不抢视线；其余尺寸都是它的倍数，别另外调数值。 */
+.logo {
+    width: 28px;
+    height: 28px;
+    display: block;
+    flex: 0 0 auto;
+}
+
+.logo__box { fill: var(--accent); }
+.logo__ink { fill: var(--accent-ink); }
+
+/* 放大档：登录卡片、空状态引导、关于页。56px = 28 × 2，仍是同一比例。 */
+.logo--lg { width: 56px; height: 56px; }
+
+/* 单色用法：去掉方块、只留字母与基准轴，颜色完全随文字。
+   用于印刷、水印、浅底区块 —— 这些场景里黄底方块会变成一个刺眼的色块。 */
+.logo--ink .logo__box { fill: none; }
+.logo--ink .logo__ink { fill: currentColor; }
+
+/* 反白（knockout）：方块取当前文字色，字母与轴挖成页面底色。
+   用于深色区块上的强调位（页脚、登录卡片页头）。 */
+.logo--knockout .logo__box { fill: currentColor; }
+.logo--knockout .logo__ink { fill: var(--bg); }
+
+/* 最小净空：标记是满幅方块，四周必须留出不小于边长 1/8（32 网格上即 4 单位）的空间，
+   且不得贴着其它元素或页面边缘 —— 斜切角一旦被压住，形状语言就失效了。 */
+
+/* 「标记 + 文字」的锁排：标记与站点名的间距由 .brand 的 gap 决定（11px），
+   这里只规定两者在同一光学中线上对齐 —— 标记是满幅实心方块，
+   与文字视觉居中对齐时会显得偏高，故用 1px 下压校正。 */
+.brand .logo { margin-top: 1px; }
 
 /* ---------------------------------------------------------------- 图标 */
 
