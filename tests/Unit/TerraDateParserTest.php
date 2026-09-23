@@ -98,6 +98,46 @@ class TerraDateParserTest extends TestCase
         $this->assertSame(TerraDate::toIndex(1097, 1, 5), $date->endIndex);
     }
 
+    /**
+     * 《大地巡旅》年表用「1016-1019」这种纯年份区间写跨年事件。
+     * 少了这条分支，条目会被 parseYear 抓走起始年、退化成单点 —— 等于伪造精度。
+     */
+    public function test_year_only_range_expands_to_whole_years(): void
+    {
+        $date = $this->parser->parse('泰拉历1016年-1019年');
+
+        $this->assertSame(DatePrecision::Range, $date->precision);
+        $this->assertSame(TerraDate::toIndex(1016), $date->startIndex);
+        $this->assertSame(TerraDate::toIndex(1019, 12, 31), $date->endIndex);
+        $this->assertSame(1016, $date->year);
+    }
+
+    public function test_bare_year_range_without_year_suffix(): void
+    {
+        // 年表原文就是不带「年」字的形式
+        $date = $this->parser->parse('1074-1076');
+
+        $this->assertSame(DatePrecision::Range, $date->precision);
+        $this->assertSame(TerraDate::toIndex(1074), $date->startIndex);
+        $this->assertSame(TerraDate::toIndex(1076, 12, 31), $date->endIndex);
+    }
+
+    public function test_year_range_must_not_swallow_iso_dates(): void
+    {
+        // 1096-12-23 的第二段只有两位，不能被当成年份区间
+        $this->assertSame(DatePrecision::Day, $this->parser->parse('1096-12-23')->precision);
+        // 混合写法仍由 parseRange 处理，不走年份区间
+        $this->assertSame(DatePrecision::Range, $this->parser->parse('1096年12月23日 — 1097年1月5日')->precision);
+    }
+
+    public function test_reversed_year_range_is_normalised(): void
+    {
+        $date = $this->parser->parse('1031-1029');
+
+        $this->assertSame(TerraDate::toIndex(1029), $date->startIndex);
+        $this->assertSame(TerraDate::toIndex(1031, 12, 31), $date->endIndex);
+    }
+
     public function test_reversed_range_is_normalised(): void
     {
         $date = $this->parser->parse('1097年3月 — 1097年1月');

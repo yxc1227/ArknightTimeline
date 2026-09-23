@@ -39,7 +39,7 @@ class Source extends Model
     public function events(): BelongsToMany
     {
         return $this->belongsToMany(Event::class, 'event_source')
-            ->withPivot(['chapter', 'stage_code', 'quote', 'quote_offset', 'is_primary', 'sort_order'])
+            ->withPivot(['chapter', 'stage_code', 'quote', 'quote_offset', 'source_line', 'is_annotation', 'is_primary', 'sort_order'])
             ->withTimestamps();
     }
 

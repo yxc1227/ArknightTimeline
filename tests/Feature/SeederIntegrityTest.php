@@ -13,7 +13,9 @@ use App\Models\Faction;
 use App\Models\Source;
 use App\Models\User;
 use App\Models\UserIdentity;
+use App\Support\CorpusLocator;
 use App\Support\TerraDateParser;
+use App\Support\TerraTourCorpus;
 use Database\Seeders\TimelineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -108,8 +110,25 @@ class SeederIntegrityTest extends TestCase
         $this->assertSame('artbook', $source->type->value);
         $this->assertSame('官方世界观设定集', $source->code);
 
-        // 这本书的原文尚未整卷录入，因此 raw_text 应留空 —— 而不是塞入编造的「原文」
-        $this->assertTrue(blank($source->raw_text), '《大地巡旅》不应预置 raw_text');
+        // 原文文件刻意不入库（版权与体积：raw_text 是 MySQL TEXT，整书 1.16 MB 会被静默截断）。
+        // 因此语料是不是有值，取决于本地有没有那份文件 —— 两种状态都必须成立，
+        // 唯一不能出现的是「文件不在、语料却有内容」：那只能是编造的原文。
+        if (! TerraTourCorpus::exists()) {
+            $this->assertTrue(blank($source->raw_text), '原文缺失时不应凭空造出语料');
+
+            return;
+        }
+
+        // 有文件时必须只收录**被引用的那一卷**（附录「泰拉纪年」），而不是整本书
+        $excerpt = TerraTourCorpus::excerpt();
+        $this->assertNotNull($excerpt);
+        $this->assertSame($excerpt['text'], $source->raw_text);
+        $this->assertStringContainsString('泰拉纪年', (string) $source->raw_text);
+        $this->assertLessThan(
+            65535,
+            strlen((string) $source->raw_text),
+            'raw_text 必须放得进 MySQL TEXT（64 KB），否则会被静默截断、引文偏移随之全部错位',
+        );
     }
 
     /**
@@ -153,7 +172,7 @@ class SeederIntegrityTest extends TestCase
             ->where('sources.slug', 'terra-tour')
             ->where('event_source.chapter', '泰拉纪年')
             ->get(['events.title', 'events.date_display', 'events.date_confidence', 'events.date_precision',
-                'events.status', 'event_source.quote', 'event_source.quote_offset']);
+                'events.status', 'event_source.quote', 'event_source.quote_offset', 'event_source.source_line']);
 
         $this->assertGreaterThan(20, $rows->count(), '《大地巡旅》年表条目数量异常');
 
@@ -162,8 +181,126 @@ class SeederIntegrityTest extends TestCase
             $this->assertSame('confirmed', $row->date_confidence, "年表条目「{$row->title}」应标为已确证");
             $this->assertSame('verified', $row->status, "年表条目「{$row->title}」应处于已确证状态");
             $this->assertNotNull($row->quote, "年表条目「{$row->title}」必须附年表原文引文");
-            $this->assertNull($row->quote_offset);
+
+            // 引文必须已经落到语料里的具体位置：偏移与行号是「引用可定位」的凭据，
+            // 一条没有定位的引文与一段普通文字没有区别。
+            $this->assertNotNull($row->quote_offset, "年表条目「{$row->title}」的引文尚未定位到语料");
+            $this->assertGreaterThan(0, $row->source_line, "年表条目「{$row->title}」缺少引文所在行号");
         }
+    }
+
+    /**
+     * L3 硬闸门：每条引文都必须能在**自己的出处语料**中逐字定位。
+     *
+     * README 一直把「出处可定位」列为硬闸门，但在此之前它只是一句声明：
+     * 没有任何测试真的去核对过。这条闸门一上线就抓出 7 条「长得像引文、实际改写过」
+     * 的记录 —— 6 条把原文的「，」写成了「。」，1 条撞上示例语料里的城市名错字
+     * （伦蒂尼**恩**），另有一处把年表续行补上「969」前缀充作引文。
+     * 它们现已逐条按原文修正，这也是「容忍空白标点、不容忍改写」这句口径的由来。
+     */
+    public function test_every_quote_is_locatable_in_its_source_corpus(): void
+    {
+        $violations = [];
+        $mismatched = [];
+        $checked = 0;
+
+        foreach (Source::whereNotNull('raw_text')->with('events')->get() as $source) {
+            $locator = CorpusLocator::forText((string) $source->raw_text);
+
+            foreach ($source->events as $event) {
+                $quote = $event->pivot->quote;
+
+                if (blank($quote)) {
+                    continue;
+                }
+
+                $checked++;
+                $hit = $locator->locate((string) $quote);
+
+                if ($hit === null) {
+                    $violations[] = "{$source->slug} / {$event->title}：{$quote}";
+
+                    continue;
+                }
+
+                // 落库的偏移与行号必须与现场计算一致：手抄的数字迟早漂移，
+                // 而漂移过的定位比「没有定位」更误导人（它会跳到错误的原文位置）。
+                if ($hit->charOffset !== $event->pivot->quote_offset || $hit->line !== $event->pivot->source_line) {
+                    $mismatched[] = "{$source->slug} / {$event->title}："
+                        ."落库 offset={$event->pivot->quote_offset} line={$event->pivot->source_line}，"
+                        ."实际 offset={$hit->charOffset} line={$hit->line}";
+                }
+            }
+        }
+
+        $this->assertSame([], $violations, "以下引文无法在出处语料中定位（不是逐字抄录）：\n".implode("\n", $violations));
+        $this->assertSame([], $mismatched, "以下引文的定位与语料不符：\n".implode("\n", $mismatched));
+
+        // 反空过：没有引文被检查时，上面两个断言会「什么也没查」地通过
+        $this->assertGreaterThan(30, $checked, '被检查的引文数量异常，闸门可能没真正跑起来');
+    }
+
+    /**
+     * 年表引文所在的行，要么自己以年份开头，要么是**紧邻上一条年份条目的续行**。
+     *
+     * 年表用「同一年下分两行」的形态记录彼此关联的两件事（969 年巫王即位与叙拉古独立即如此）。
+     * 这层结构以前只能靠人记住，现在它可以从语料本身验证 ——
+     * 也就顺带挡住了「给续行补一个年份前缀」这类看起来更整齐、实则改写了原文的做法。
+     */
+    public function test_chronicle_quotes_sit_on_year_headed_lines_or_continuations(): void
+    {
+        if (! TerraTourCorpus::exists()) {
+            $this->markTestSkipped('本地没有《大地巡旅》原文文件，无法验证引文所在行的形态');
+        }
+
+        $locator = TerraTourCorpus::locator();
+        $this->assertNotNull($locator);
+
+        $rows = DB::table('event_source')
+            ->join('sources', 'sources.id', '=', 'event_source.source_id')
+            ->where('sources.slug', 'terra-tour')
+            ->where('event_source.chapter', '泰拉纪年')
+            ->get(['event_source.quote', 'event_source.source_line']);
+
+        $this->assertNotEmpty($rows);
+
+        foreach ($rows as $row) {
+            $line = (int) $row->source_line;
+
+            $this->assertTrue(
+                $locator->lineStartsWithYear($line) || $locator->isContinuationLine($line),
+                "引文「{$row->quote}」落在第 {$line} 行，而该行既不以年份开头、也不是年份条目的续行",
+            );
+        }
+    }
+
+    /**
+     * 年表里 `[…]` 标注的条目是凯尔希的补充（原书有注）。
+     * 这层语义现在是一列布尔值，可检索、也可在界面上区分 —— 而不是埋在引文文本里。
+     */
+    public function test_annotation_quotes_are_flagged(): void
+    {
+        $flagged = DB::table('event_source')
+            ->join('sources', 'sources.id', '=', 'event_source.source_id')
+            ->where('sources.slug', 'terra-tour')
+            ->where('event_source.is_annotation', true)
+            ->pluck('event_source.quote');
+
+        $this->assertGreaterThan(0, $flagged->count(), '年表里的凯尔希补充条目应当被标记出来');
+
+        foreach ($flagged as $quote) {
+            $this->assertStringStartsWith('[', (string) $quote, '被标为编者按的引文应当以 [ 开头');
+        }
+
+        // 反向：不以 [ 开头的引文不应被标成编者按
+        $wrong = DB::table('event_source')
+            ->join('sources', 'sources.id', '=', 'event_source.source_id')
+            ->where('sources.slug', 'terra-tour')
+            ->where('event_source.is_annotation', true)
+            ->where('event_source.quote', 'not like', '[%')
+            ->count();
+
+        $this->assertSame(0, $wrong);
     }
 
     /**
@@ -176,17 +313,18 @@ class SeederIntegrityTest extends TestCase
         $rows = DB::table('event_source')
             ->join('sources', 'sources.id', '=', 'event_source.source_id')
             ->where('sources.slug', 'terra-tour')
-            ->get(['event_source.quote', 'event_source.chapter', 'event_source.quote_offset']);
+            ->get(['event_source.quote', 'event_source.chapter']);
 
         $this->assertNotEmpty($rows);
 
         foreach ($rows as $row) {
-            $this->assertNull($row->quote_offset);
-
             if ($row->chapter === '泰拉纪年') {
-                // 引文形如「797 七城联邦建成……」/「[1083年 阿米娅出生]」，以年份数字或凯尔希补充标记开头
-                $this->assertMatchesRegularExpression('/^(\d{3,4}|\[)\s*\d{0,4}/u', (string) $row->quote,
-                    "年表引文应以年份数字开头：{$row->quote}");
+                // 年表引文必须存在；它是否**逐字**取自原文，交给
+                // test_every_quote_is_locatable_in_its_source_corpus 用语料直接判定 ——
+                // 此前这里用「引文以年份开头」当代理指标，但那只是代理：
+                // 它挡不住「给续行补一个年份前缀」（969 叙拉古那条正是如此），
+                // 反而会把真正的原文形态误判成违规。
+                $this->assertNotNull($row->quote, '年表条目必须附年表原文引文');
             } else {
                 $this->assertNull($row->quote, '不得为尚未录入原文的散文卷出处编造引文');
                 $this->assertContains($row->chapter, ['世界卷', '国家与地区卷']);

@@ -45,6 +45,10 @@ trait HasEventRules
             'sources.*.stage_code' => ['nullable', 'string', 'max:60'],
             'sources.*.quote' => ['nullable', 'string', 'max:4000'],
             'sources.*.quote_offset' => ['nullable', 'integer', 'min:0'],
+            // 行号与 quote_offset 同属「引文在这一段语料里的位置」，
+            // 0 是哨兵值，表示尚未定位（引文缺失或不是逐字抄录）
+            'sources.*.source_line' => ['nullable', 'integer', 'min:0'],
+            'sources.*.is_annotation' => ['nullable', 'boolean'],
             'sources.*.is_primary' => ['nullable', 'boolean'],
 
             'characters' => ['nullable', 'array', 'max:40'],

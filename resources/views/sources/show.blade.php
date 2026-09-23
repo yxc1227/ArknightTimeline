@@ -109,6 +109,19 @@
                     <p class="muted small" style="margin:6px 0 0">{{ $event->summary }}</p>
                     @if ($pivot?->quote)
                         <div class="quote" style="margin-top:8px">{{ $pivot->quote }}</div>
+                        {{-- 引文能不能在语料里定位，就是 L3 闸门的结论。不给出来的话，
+                             读者无从分辨这段话是原文还是转述 —— 而「分不清」正是
+                             考据场景里最不该出现的状态。 --}}
+                        <div class="faint small mono" style="margin-top:4px">
+                            @if ($pivot->source_line > 0)
+                                原文第 {{ $pivot->source_line }} 行 · 字符偏移 {{ $pivot->quote_offset }}
+                            @else
+                                未能在原文中定位 —— 引文与语料不一致，待核对
+                            @endif
+                            @if ($pivot->is_annotation)
+                                · 编者按条目
+                            @endif
+                        </div>
                     @else
                         {{-- 引文缺失是**真实的待办状态**，必须显式呈现而不是留白。
                              留白会让人误以为「已核对过、无引文可引」。 --}}

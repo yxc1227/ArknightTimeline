@@ -4,6 +4,7 @@ use App\Services\EventLockService;
 use App\Services\TimelineConsistencyChecker;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -46,6 +47,91 @@ Artisan::command('timeline:purge-locks', function () {
 
     return self::SUCCESS;
 })->purpose('回收过期的编辑租约');
+
+/*
+|--------------------------------------------------------------------------
+| 引文定位：L3「出处可定位」硬闸门的运维入口
+|--------------------------------------------------------------------------
+|
+| 引文的字符偏移与行号是**相对 sources.raw_text 现算**的，所以语料一旦被改写，
+| 既有引用就会整批失效 —— 出处页对此只有一句 WARN，维护者却无从知道坏了多少条。
+| 本命令就是那个出口：报告有多少条引文已无法定位，并可用 --fix 把偏移与行号重算回写。
+|
+| --fix 刻意**不碰引文本身**：定位不到只说明这条引文不是逐字抄的，
+| 而「该改成什么」必须人去核对原文，机器不能替它决定。
+|
+| 关于直接写 event_source：这里是重算**派生数据**（引文在语料中的坐标），
+| 不是编辑条目内容，因此不走 EventWriter —— 否则每重算一次就会留下一批
+| 内容没有任何变化的版本快照，把真实的编辑历史淹掉。
+*/
+
+Artisan::command('citations:verify {--fix : 重算并回写偏移与行号（不改变引文内容）}', function () {
+    $sources = \App\Models\Source::whereNotNull('raw_text')->with('events')->get();
+
+    if ($sources->isEmpty()) {
+        $this->warn('没有任何出处录入过原文语料，无从核对。');
+
+        return self::SUCCESS;
+    }
+
+    $checked = 0;
+    $located = 0;
+    $fixed = 0;
+    $missing = [];
+
+    foreach ($sources as $source) {
+        $locator = \App\Support\CorpusLocator::forText((string) $source->raw_text);
+
+        foreach ($source->events as $event) {
+            $quote = $event->pivot->quote;
+
+            if (blank($quote)) {
+                continue;
+            }
+
+            $checked++;
+            $hit = $locator->locate((string) $quote);
+
+            if ($hit === null) {
+                $missing[] = "  [{$source->slug}] {$event->title}：{$quote}";
+
+                continue;
+            }
+
+            $located++;
+
+            $stale = $hit->charOffset !== $event->pivot->quote_offset
+                || $hit->line !== $event->pivot->source_line;
+
+            if ($stale && $this->option('fix')) {
+                DB::table('event_source')
+                    ->where('event_id', $event->id)
+                    ->where('source_id', $source->id)
+                    ->update(['quote_offset' => $hit->charOffset, 'source_line' => $hit->line]);
+                $fixed++;
+            }
+        }
+    }
+
+    $this->info("核对完成：{$checked} 条引文，可定位 {$located} 条，无法定位 ".count($missing).' 条。');
+
+    if ($fixed > 0) {
+        $this->info("已重算 {$fixed} 条引文的偏移与行号。");
+    }
+
+    if ($missing === []) {
+        return self::SUCCESS;
+    }
+
+    $this->newLine();
+    $this->warn('以下引文无法在语料中定位 —— 它们不是逐字抄录，需要人工核对原文后改写引文：');
+
+    foreach ($missing as $line) {
+        $this->line($line);
+    }
+
+    return self::FAILURE;
+})->purpose('核对全部引文能否在出处语料中逐字定位');
 
 /*
 |--------------------------------------------------------------------------

@@ -631,6 +631,10 @@ final class EventWriter
                     'stage_code' => $row['stage_code'] ?? null,
                     'quote' => $row['quote'] ?? null,
                     'quote_offset' => $row['quote_offset'] ?? null,
+                    // 行号与「编者按」标记和 quote_offset 同一坐标系（都相对 raw_text），
+                    // 因此由同一个写入路径带上，避免有人只更新一半、留下对不上的定位。
+                    'source_line' => (int) ($row['source_line'] ?? 0),
+                    'is_annotation' => (bool) ($row['is_annotation'] ?? false),
                     'is_primary' => (bool) ($row['is_primary'] ?? $index === 0),
                     'sort_order' => $index,
                 ];
@@ -792,6 +796,8 @@ final class EventWriter
                 'stage_code' => $s->pivot->stage_code,
                 'quote' => $s->pivot->quote,
                 'quote_offset' => $s->pivot->quote_offset,
+                'source_line' => (int) $s->pivot->source_line,
+                'is_annotation' => (bool) $s->pivot->is_annotation,
                 'is_primary' => (bool) $s->pivot->is_primary,
             ])->values()->all(),
             'characters' => $event->characters->map(fn (Character $c) => [

@@ -80,7 +80,7 @@ class Event extends Model
     public function sources(): BelongsToMany
     {
         return $this->belongsToMany(Source::class, 'event_source')
-            ->withPivot(['chapter', 'stage_code', 'quote', 'quote_offset', 'is_primary', 'sort_order'])
+            ->withPivot(['chapter', 'stage_code', 'quote', 'quote_offset', 'source_line', 'is_annotation', 'is_primary', 'sort_order'])
             ->withTimestamps();
     }
 
@@ -319,6 +319,10 @@ class Event extends Model
                     'chapter' => $s->pivot->chapter,
                     'stage_code' => $s->pivot->stage_code,
                     'quote' => $s->pivot->quote,
+                    // 供界面标注「可回跳原文的引用」与「编者按条目」
+                    'quote_offset' => $s->pivot->quote_offset,
+                    'source_line' => (int) $s->pivot->source_line,
+                    'is_annotation' => (bool) $s->pivot->is_annotation,
                     'is_primary' => (bool) $s->pivot->is_primary,
                 ])->values()->all()
                 : [],

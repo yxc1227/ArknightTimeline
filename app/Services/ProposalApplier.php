@@ -124,6 +124,10 @@ final class ProposalApplier
                 'stage_code' => $s->pivot->stage_code,
                 'quote' => $s->pivot->quote,
                 'quote_offset' => $s->pivot->quote_offset,
+                // 合并时必须原样带走定位信息：丢掉行号等于把「可回跳的引用」
+                // 降级成「一段来源不明的文字」，而这正是合并最容易悄悄造成的损失。
+                'source_line' => (int) $s->pivot->source_line,
+                'is_annotation' => (bool) $s->pivot->is_annotation,
                 'is_primary' => (bool) $s->pivot->is_primary,
             ])->all();
 

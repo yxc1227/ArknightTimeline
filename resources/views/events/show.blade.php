@@ -104,12 +104,22 @@
                             @if (! empty($s['is_primary']))
                                 <span class="badge badge--ok"><x-icon name="status-ok" class="icon--sm"/>主要出处</span>
                             @endif
+                            @if (($s['source_line'] ?? 0) > 0)
+                                {{-- 有行号说明这条引文已在语料中逐字定位（L3 闸门通过） --}}
+                                <span class="chip mono">原文第 {{ $s['source_line'] }} 行</span>
+                            @endif
+                            @if (! empty($s['is_annotation']))
+                                <span class="chip">编者按</span>
+                            @endif
                         </div>
                         @if ($locator)
                             <div class="faint small mono" style="margin-top:3px">{{ $locator }}</div>
                         @endif
                         @if (! empty($s['quote']))
                             <div class="quote" style="margin-top:7px">{{ $s['quote'] }}</div>
+                            @if (($s['source_line'] ?? 0) === 0)
+                                <div class="faint small" style="margin-top:4px">该引文未能在语料中定位 —— 与原文不一致，待核对。</div>
+                            @endif
                         @else
                             <div class="faint small" style="margin-top:7px">该出处尚未附引文 —— 待录入原文后补齐，或直接标注说明依据。</div>
                         @endif

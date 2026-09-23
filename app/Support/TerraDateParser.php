@@ -20,6 +20,7 @@ use App\Enums\DatePrecision;
  *   1097年初 / 1097年末 / 1097年中                      → year（收窄区间）
  *   1097年                                            → year
  *   1096年12月23日 — 1097年1月5日                       → range
+ *   1016-1019 / 泰拉历1029年-1031年                     → range（纯年份区间）
  *   切尔诺伯格事变后 3 年                               → relative（需锚点回填）
  *   泰拉历前 200 年 / 远古                                → unknown
  */
@@ -76,6 +77,7 @@ final class TerraDateParser
         }
 
         return $this->parseRange($text, $confidence)
+            ?? $this->parseYearRange($text, $confidence)
             ?? $this->parseDay($text, $confidence)
             ?? $this->parseMonth($text, $confidence)
             ?? $this->parseSeason($text, $confidence)
@@ -136,6 +138,45 @@ final class TerraDateParser
             year: $startYear,
             month: $startMonth,
             day: $startDay,
+        );
+    }
+
+    /**
+     * 纯年份区间：「1016-1019」。
+     *
+     * 《大地巡旅》年表用这种写法给出跨年事件（1016-1019 哥伦比亚独立战争、
+     * 1029-1031 四国战争、1074-1076 大叛乱），而 parseRange 要求两端都带「月」，
+     * 于是它们会一路落到 parseYear，被 `\b(1\d{3})\b` 抓走起始年 ——
+     * 条目从「跨度」退化成「单点」，正是伪造精度的一种。
+     *
+     * 两端都必须是 3-4 位年份，且用数字边界卡住，
+     * 以免把 1096-12-23 这类 ISO 日期（第二段只有两位）吞进来。
+     */
+    private function parseYearRange(string $text, DateConfidence $confidence): ?TerraDate
+    {
+        $pattern = '/(?<!\d)(\d{3,4})\s*年?\s*(?:-|~|至|到)\s*(\d{3,4})\s*年?(?!\d)/u';
+
+        if (! preg_match($pattern, $text, $m)) {
+            return null;
+        }
+
+        $startYear = (int) $m[1];
+        $endYear = (int) $m[2];
+
+        if ($endYear < $startYear) {
+            [$startYear, $endYear] = [$endYear, $startYear];
+        }
+
+        [$start] = TerraDate::yearBounds($startYear);
+        [, $end] = TerraDate::yearBounds($endYear);
+
+        return new TerraDate(
+            display: $text,
+            startIndex: $start,
+            endIndex: $end,
+            precision: DatePrecision::Range,
+            confidence: $confidence,
+            year: $startYear,
         );
     }
 
