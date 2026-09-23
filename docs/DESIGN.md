@@ -615,15 +615,17 @@ WHERE id = ? AND version = ?
 ## 6. 运行方式
 
 ```bash
-# 项目跑在 php_8.4.8 容器里，MySQL 在宿主机监听，因此 .env 里 DB_HOST=host.docker.internal
-docker exec -w /Arknight php_8.4.8 php artisan migrate:fresh --seed   # 重建 + 灌入起始语料
-docker exec -w /Arknight php_8.4.8 php artisan test                    # 测试
-docker exec -w /Arknight php_8.4.8 php artisan timeline:scan --rebuild # 全量一致性体检
-docker exec -w /Arknight php_8.4.8 php artisan timeline:purge-locks    # 回收过期编辑租约
+php artisan migrate:fresh --seed           # 重建 + 灌入起始语料
+php artisan test                           # 测试
+php artisan timeline:scan --rebuild        # 全量一致性体检（顺带补 era_id）
+php artisan timeline:purge-locks           # 回收过期编辑租约
 
-# 访问（nginx 已配置该虚拟主机）
-http://arknight.lancelot.com
+php artisan serve                          # http://localhost:8000
 ```
+
+> 部署形态不影响本文的任何设计判断：把 `php artisan` 换成
+> `docker exec -w /app <容器名> php artisan` 即可在容器里执行同一套命令
+> （此时若数据库在宿主机上，需要 `DB_HOST=host.docker.internal`）。
 
 定时任务（`routes/console.php`）：`timeline:scan` 每小时、`timeline:purge-locks` 每 15 分钟，均带 `withoutOverlapping`。
 

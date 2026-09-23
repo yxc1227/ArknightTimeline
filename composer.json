@@ -1,9 +1,9 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "terra-timeline/app",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "泰拉时间线：以「区间 + 精度 + 可信度」建模的《明日方舟》剧情考据协作平台（非官方粉丝项目）",
+    "keywords": ["laravel", "timeline", "arknights", "fan-project"],
     "license": "MIT",
     "require": {
         "php": "^8.3",

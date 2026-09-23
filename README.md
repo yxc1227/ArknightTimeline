@@ -5,6 +5,22 @@
 
 ---
 
+## ⚠️ 免责声明（请先读这一段）
+
+这是一个**个人兴趣项目**，用于练习后端工程与做一点剧情考据的整理工作。
+
+- **与鹰角网络（Hypergryph）没有任何隶属、合作或授权关系**，不代表官方立场。
+- 《明日方舟》及其相关的名词、设定、剧情文本、角色名称等知识产权**归鹰角网络所有**。
+  本仓库仅在**出处引用与考据讨论**的意义上收录少量原文片段（种子数据里的引文均为短句，
+  目的是演示「引用可定位」这条校验），**不作为游戏资料的再分发渠道**，请勿把它当作资料站使用。
+- 本项目是一个**网页端的考据协作工具**：不包含、不修改、不模拟任何游戏客户端，
+  不提供游戏内资源、抽卡、脚本、代练或账号交易类功能。
+- 项目**不收集、不中转、不代理**任何鹰角账号密码，也不逆向对方的私有接口。
+  外部账号绑定只走用户自己浏览器里的授权流程 —— 细节见「[安全与隐私](#安全与隐私)」。
+- 若权利方认为本仓库的某处内容不妥，开 issue 告知即可，我会立即删除相关内容。
+
+---
+
 ## 这个项目要解决什么问题
 
 《明日方舟》的世界观记录分散在主线章节、活动剧情、干员档案、官方设定集与访谈中，
@@ -37,33 +53,51 @@
 
 ## 快速开始
 
-### 方式 A：Docker（本项目当前使用的环境）
-
-项目在 `php_8.4.8` 容器中运行，MySQL 位于宿主机：
-
-```bash
-docker exec -w /Arknight php_8.4.8 php artisan migrate:fresh --seed
-```
-
-启动后访问 nginx 已配好的虚拟主机：**http://arknight.lancelot.com**
-
-> **关于 `DB_HOST`**：代码跑在容器里，容器内的 `127.0.0.1` 是容器自身。
-> 因此 `.env` 必须写 `DB_HOST=host.docker.internal` 才能连到宿主机的 MySQL。
-
-### 方式 B：本机 PHP
-
-需要 PHP 8.3+ 与 Composer。**应用本身不需要 Node**——视图直接引用 `public/assets/` 下的
-手写 CSS/JS，没有 `@vite` 依赖。
+需要 **PHP 8.3+** 与 **Composer**。**应用本身不需要 Node** —— 视图直接引用
+`public/assets/` 下的手写 CSS/JS，没有 `@vite` 依赖。
 
 ```bash
 composer install
 cp .env.example .env && php artisan key:generate
 php artisan migrate:fresh --seed
-php artisan serve
+php artisan serve                      # http://localhost:8000
 ```
+
+`.env.example` 默认走 **SQLite**（`DB_CONNECTION=sqlite`），开箱即用，不需要额外起数据库服务。
+换成 MySQL / PostgreSQL 只需改 `.env` 里的连接信息；表前缀由 `DB_PREFIX` 控制
+（MySQL 连接上的默认值是 `arknight_`，用别的库时记得改或留空）。
 
 > `composer setup` 会把上面的步骤串起来，但它末尾还包含 `npm run build`（Laravel 骨架自带，
 > 本项目未使用 Vite）。没有 Node 时忽略该步即可，或直接按上面四条命令执行。
+
+### Docker（可选）
+
+如果习惯把 PHP 跑在容器里，把上面的 `php artisan` 换成：
+
+```bash
+docker exec -w /app <容器名> php artisan migrate:fresh --seed
+```
+
+> **容器里的 `DB_HOST`**：容器内的 `127.0.0.1` 指的是容器自身。数据库如果跑在宿主机上，
+> 需要 `DB_HOST=host.docker.internal`（Docker Desktop for macOS / Windows 支持；
+> Linux 上要另配，或直接用宿主机的网桥地址）。
+
+### 环境变量
+
+除 Laravel 骨架自带的那些之外，本项目只用到了下面这些，**全部都有可用的默认值**，
+不配置也能跑起来：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `TIMELINE_AI_DRIVER` | `heuristic` | AI 梳理驱动。`heuristic` 是零依赖的规则抽取；改 `openai-compatible` 才会真正调用模型 |
+| `TIMELINE_AI_ENDPOINT` / `TIMELINE_AI_KEY` / `TIMELINE_AI_MODEL` | OpenAI 官方端点 / 空 / `gpt-4o-mini` | 仅 `openai-compatible` 驱动使用。**没有 Key 时会静默降级回 `heuristic`**，不会让站点挂掉 |
+| `TIMELINE_PER_PAGE` / `TIMELINE_LEASE_SECONDS` / `TIMELINE_REVISION_KEEP` | 见 `config/timeline.php` | 每页条数 / 编辑租约时长 / 版本快照保留数 |
+| `IDENTITY_REGISTRATION` | `true` | 是否开放自助注册。设为 `false` 后注册页与提交入口一起关闭 |
+| `IDENTITY_AVATAR_MAX_KB` / `IDENTITY_AVATAR_SIZE` | `2048` / `256` | 头像上传上限与输出边长 |
+| `HYPERGRYPH_CLIENT_ID` / `HYPERGRYPH_CLIENT_SECRET` / `HYPERGRYPH_AUTHORIZE_URL` / `HYPERGRYPH_TOKEN_URL` / `HYPERGRYPH_USERINFO_URL` | 空 | 鹰角通行证渠道。**五项全空时该渠道显示为「未启用」**，不影响其他功能 |
+
+> **密钥不要提交。** `.env` 已在 `.gitignore` 里；`HYPERGRYPH_CLIENT_SECRET` 与
+> `TIMELINE_AI_KEY` 只应存在于本地 `.env` 或部署平台的密钥管理中。
 
 ### 演示账号
 
@@ -80,6 +114,9 @@ php artisan serve
 
 种子数据里还带了两条外部身份绑定样本（一条「已核验」、一条「待核验」），
 登录 `archivist` 后进 `/admin/users` 的账号详情即可看到核验入口。
+
+> 这些密码写在 `TimelineSeeder` 里，**只为本地演示与自动化测试而存在**。
+> 自己部署时请务必先改掉管理员密码（或在 seed 之后直接删掉演示账号）。
 
 浏览时间线无需登录，直接打开首页即可。
 
@@ -209,25 +246,16 @@ reviewer 锁定后 editor 完全不可写、出处归属（`source_user`）限�
 
 ## 技术栈
 
-- **后端**：Laravel 13 · PHP 8.3+（本项目运行于 8.4）· MySQL
+- **后端**：Laravel 13 · PHP 8.3+ · SQLite / MySQL / PostgreSQL（`.env.example` 默认 SQLite）
 - **前端**：Blade + 原生 CSS/JS（**零构建步骤**，不依赖 Node）
-- **测试**：PHPUnit 12（166 项 / 1042 断言，含种子数据完整性与守卫测试）
+- **测试**：PHPUnit 12（243 项 / 1491 断言，含种子数据完整性与守卫测试）
 - **AI**：驱动可插拔——离线规则抽取兜底，或任意兼容 OpenAI Chat Completions 的服务
 
-### AI 驱动配置
-
-```dotenv
-TIMELINE_AI_DRIVER=heuristic           # 默认。纯规则离线抽取，零依赖零成本
-# TIMELINE_AI_DRIVER=openai-compatible
-TIMELINE_AI_ENDPOINT=https://api.openai.com/v1/chat/completions
-TIMELINE_AI_KEY=
-TIMELINE_AI_MODEL=gpt-4o-mini
-```
-
-配置了 `openai-compatible` 但没填密钥时会**静默降级到规则抽取**而不是报错——
+AI 驱动只需一个环境变量的切换（见上文「环境变量」）。值得单独提一句的是降级方向：
+配置了 `openai-compatible` 却**没填密钥时会静默降级到规则抽取**，而不是报错 ——
 AI 梳理是增强功能，它挂掉不该让整个站点不可用。
 
-其余阈值（疑似重复相似度、单日过载阈值、租约时长等）见 `config/timeline.php`。
+其余阈值（疑似重复相似度、单日过载阈值、租约时长、版本快照保留数等）见 `config/timeline.php`。
 
 ## 目录结构
 
@@ -244,20 +272,28 @@ app/
 │   ├─ TimelineConsistencyChecker.php  规则巡检
 │   ├─ ProposalApplier.php             人工放行 AI 提案（两级闸门）
 │   ├─ UserManager.php                 账号写入唯一入口：防锁死约束 + 操作日志
+│   ├─ AvatarService.php               头像：GD 重编码 + 居中裁剪（洗掉 EXIF 与附加数据）
+│   ├─ Identity/                       外部身份：驱动接口 / OAuth2 / 本地演示 / 不变量
 │   └─ Ai/                             驱动抽象 / 规则抽取 / OpenAI 兼容 / 梳理流水线
-├─ Policies/         权限矩阵（含 UserPolicy 的自保护带原因 403）
+├─ Rules/            命名校验（登录名格式 / 昵称唯一 / 保留名），与数据库唯一索引严格对齐
+├─ Policies/         权限矩阵（含 UserPolicy 的自保护带原因 403、UserIdentityPolicy 的核验权）
 ├─ Http/
-│   ├─ Controllers/  Timeline / Event / AiProposal / Anomaly / Source / User / Auth
+│   ├─ Controllers/  Timeline / Event / AiProposal / Anomaly / Source / User / Avatar
+│   │                Auth/（Login / Register 自助注册 / Identity 外部渠道回调）
+│   │                Settings/Profile（本人改昵称、传头像、设密码、绑解绑）
 │   ├─ Middleware/   EnsureAccountIsActive（禁用后既有会话立即失效）
-│   └─ Requests/     表单校验
+│   └─ Requests/     表单校验 + Concerns/ValidatesAccountNaming（四个入口共用一套命名规则）
 └─ Models/           Event, Era, Faction, Character, Source, Tag, EventRevision,
-                     Annotation, EventLock, AiProposal, TimelineAnomaly, UserActivityLog
+                     Annotation, EventLock, AiProposal, TimelineAnomaly,
+                     UserActivityLog, UserIdentity
 
-database/migrations/ 字典层 / 事件表 / 关系表 / 协作表 / 用户角色 / 账号状态与操作日志
-database/seeders/    起始语料（51 事件、7 纪元、27 阵营、37 人物、36 出处、5 账号）
+database/migrations/ 字典层 / 事件表 / 关系表 / 协作表 / 用户角色 / 账号状态与操作日志 /
+                     昵称头像与唯一索引 / 外部身份绑定
+database/seeders/    起始语料（51 事件、7 纪元、27 阵营、37 人物、36 出处、5 账号、2 身份绑定）
 docs/DESIGN.md       完整设计说明
 public/assets/       app.css, app.js（无构建步骤）
-resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录 / 账号管理
+resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录 / 自助注册 / 外部注册 /
+                     账号设置 / 账号管理 + components/avatar.blade.php
 tests/               单元 + 功能测试（含迁移注释与列名冲突守卫）
 ```
 
@@ -325,6 +361,17 @@ php artisan test
 - **账号管理**：越权访问、搜索（含 LIKE 通配符转义）、状态与角色筛选、排序白名单、
   软删除可见性，以及**三条防锁死约束**——不能删/禁用自己、不能掏空最后一个启用中的管理员、
   禁用后既有会话立即失效
+- **命名与唯一性**：登录名必须 ASCII 且统一小写、昵称不区分大小写唯一、
+  连续空白折叠（防「人眼分不出来」的重名）、保留名（角色标签等）不可占用、
+  **软删除的账号仍占着它的名字**；角色展示名与枚举值的对应关系
+- **自助注册**：三条闸门（IP 限流 / 命名唯一性 / 角色硬编码为最低档）、
+  开关关闭后注册页与提交一起拒绝、已登录用户被送走、注册即登录且密码可用
+- **外部身份时序**：state 一次性消费（重放被拒）、伪造 state 被拒、条数上限、
+  邮箱撞车**拒绝静默并号**、绑定会话错位被拒、外部账号已被他人绑定、
+  解绑最后一个登录方式被拒、自助登记必须经管理员核验（越权核验 403）
+- **头像上传安全**：SVG 被拒（Laravel 的 `image` 规则是允许 SVG 的，白名单才是闸门）、
+  伪装类型与超限尺寸被拒、**输出必是重编码后的正方形 JPEG**、
+  换头像会删掉旧文件、响应头写死类型与 `nosniff`
 - **迁移注释**：每个列定义必须带 `comment()`，且不得使用无法携带注释的 `timestamps()`；
   表清单守卫确保新增表不会漏出检查范围
 - **列名冲突守卫**：任何列名都不得与 Eloquent 内部属性重名（`changes` 就撞过
@@ -333,6 +380,48 @@ php artisan test
 最后一项是把起始语料**当成代码来测**——手写数据里一个错字就会让条目排到错误的位置，
 而页面不会报错、只会安静地显示错的东西。
 
+## 安全与隐私
+
+账号体系天然会碰到「别人的凭据」，所以单独用一节把边界写清楚：
+
+| 事项 | 做法 |
+| --- | --- |
+| 外部账号绑定 | **不收集、不中转、不代填**对方的账号密码。绑定只能由用户在自己的浏览器里完成授权 |
+| 外部令牌 | **不保存** `access_token` / `refresh_token`：外部身份只用来回答「你是谁」，不拿令牌代用户调用对方接口 |
+| 邮箱撞车 | 拒绝**静默并号**。用外部渠道登录时若邮箱命中已有账号，只提示「请先登录再绑定」，绝不自动合并 |
+| 授权回调 | state 一次性消费（防重放）+ 10 分钟有效 + 只保留最近 5 条（防会话膨胀）；**先验 state 再用 code** |
+| 绑定会话 | 校验「发起绑定的人 == 回调时的登录人」，避免会话错位把外部身份绑到别人名下 |
+| 头像上传 | 一律用 GD **重新编码**（EXIF 与任何附加数据都不会保留）；白名单只放 JPG / PNG —— Laravel 的 `image` 规则**允许 SVG**，而 SVG 能内嵌脚本 |
+| 头像输出 | 由控制器写死 `Content-Type` 与 `nosniff`，不写进 web 根目录、不依赖 `storage:link` |
+| 开放注册 | 默认开放但**按 IP 限流**（10 次/分钟），可用 `IDENTITY_REGISTRATION=false` 整体关闭 |
+| 自助注册的权限 | 角色硬编码为最低档；提交额外字段也无法提权（服务层只接受具体参数） |
+| 密码「可知」标记 | `password_set_at` 区分「库里有哈希」与「本人知道密码」，据此拒绝解绑最后一个登录方式 |
+| 管理员保护 | 不能删除/禁用自己、不能掏空最后一个启用中的管理员；账号变更全部写入只追加的审计表 |
+
+**不入库的敏感内容**：`.env` 已在 `.gitignore` 中；外部渠道凭据与 AI Key 只应存在于
+本地环境或部署平台的密钥管理里。
+
+## 关于「鹰角账号绑定」
+
+需要说明一句：**鹰角网络没有提供面向第三方的公开 OAuth 接口**。因此这个仓库里
+「绑定鹰角账号」的现状是：
+
+- 走的是通用的 OAuth2 授权码流程，端点与字段映射全部放在 `config/identity.php`。
+  **拿到正式凭据后只填环境变量即可启用，不需要改代码**；没有预置任何猜出来的端点 ——
+  逆向私有接口既违反服务条款，也会随对方改版随时失效。
+- 凭据到位之前，实际可用的是「**手工登记通行证 UID → 待核验 → 管理员核验**」这条路径。
+  界面上「待核验」与「已核验」始终分开显示：自助登记只是一句声明，
+  把它渲染成认证等于系统在替用户背书。
+- 仓库里另有一个本地演示渠道（`stub`），让整条链路在没有凭据时也能跑通与测试。
+  它对任何点一下的人都放行，因此启用条件与 `APP_ENV` 绑定（只在 `local` / `testing`），
+  **生产环境不可能出现这个入口**。
+
 ## License
 
-MIT
+**代码**以 [MIT](https://opensource.org/licenses/MIT) 授权：可自由使用、修改、分发。
+
+**但收录的内容不在 MIT 范围内。**《明日方舟》及其相关的名词、设定、剧情文本、角色名称等
+知识产权归**鹰角网络（Hypergryph）**所有。本仓库中的引文与设定条目仅作**出处引用与
+考据讨论**之用，不得用于商业目的，也不代表权利方的观点或授权。
+
+如果你是权利方，且认为本仓库的某处内容不妥，开 issue 或直接联系我，我会立即移除相关内容。
