@@ -20,6 +20,7 @@
                    data-active="{{ $isActive ? '1' : '0' }}"
                    style="--world-accent: {{ $option['accent'] }}"
                    title="{{ $option['description'] }}">
+                    <x-icon name="{{ $option['value'] === 'talos' ? 'world-talos' : 'world-terra' }}" class="icon--lg"/>
                     <span class="world-switch__label">{{ $option['label'] }}</span>
                     <span class="world-switch__meta mono">
                         {{ $option['english'] }} ·

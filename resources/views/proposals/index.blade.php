@@ -60,7 +60,7 @@
                 </div>
 
                 <div class="btn-row">
-                    <button type="submit" class="btn btn--primary" id="synthesize-submit">开始梳理</button>
+                    <button type="submit" class="btn btn--primary" id="synthesize-submit"><x-icon name="spark"/>开始梳理</button>
                     <span class="faint small">
                         当前驱动：
                         <span class="mono">{{ config('timeline.ai.driver') }}</span>
@@ -127,9 +127,9 @@
                                 <div class="row" style="align-items:baseline">
                                     <strong style="font-size:14px">{{ $proposal->title }}</strong>
                                     <span class="mono small" style="color:var(--accent)">{{ $proposal->date_display }}</span>
-                                    <span class="badge {{ $payload['status_badge'] }}">{{ $payload['status_label'] }}</span>
+                                    <span class="badge {{ $payload['status_badge'] }}"><x-icon name="{{ $proposal->status->icon() }}" class="icon--sm"/>{{ $payload['status_label'] }}</span>
                                     <span class="badge {{ $payload['confidence_tier'] === 'high' ? 'badge--ok' : ($payload['confidence_tier'] === 'medium' ? 'badge--warn' : 'badge--danger') }}">
-                                        置信度 {{ $proposal->confidence }}
+                                        <x-icon name="{{ $payload['confidence_tier'] === 'high' ? 'status-ok' : ($payload['confidence_tier'] === 'medium' ? 'status-warn' : 'status-danger') }}" class="icon--sm"/>置信度 {{ $proposal->confidence }}
                                     </span>
                                     @if ($proposal->start_index)
                                         <span class="badge badge--muted">{{ $payload['date']['hint'] }}</span>

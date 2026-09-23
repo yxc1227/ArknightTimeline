@@ -25,6 +25,7 @@
                    data-active="{{ $isActive ? '1' : '0' }}"
                    style="--world-accent: {{ $world['accent'] }}"
                    title="{{ $world['description'] }}">
+                    <x-icon name="{{ $world['value'] === 'talos' ? 'world-talos' : 'world-terra' }}" class="icon--lg"/>
                     <span class="world-switch__label">{{ $world['label'] }}</span>
                     <span class="world-switch__meta mono">{{ $world['english'] }} · {{ $world['calendar'] }}</span>
                 </a>
@@ -37,7 +38,7 @@
         <div class="sidebar__head">
             <div class="filter-head">
                 <strong data-en="Filter">检索与筛选</strong>
-                <button class="btn btn--ghost btn--sm" id="filters-reset">重置</button>
+                <button class="btn btn--ghost btn--sm" id="filters-reset"><x-icon name="reset"/>重置</button>
             </div>
 
             <div class="field" style="margin-bottom:0">
@@ -160,7 +161,7 @@
         {{-- 底部固定：新增入口始终可见，不会被滚走 --}}
         @auth
             <div class="sidebar__foot">
-                <button class="btn btn--primary" id="new-event" style="width:100%">+ 新增事件条目</button>
+                <button class="btn btn--primary" id="new-event" style="width:100%"><x-icon name="plus"/>新增事件条目</button>
             </div>
         @endauth
     </aside>
@@ -189,7 +190,7 @@
                 <h2 class="drawer__title" id="drawer-title">—</h2>
                 <div class="drawer__date" id="drawer-date"></div>
             </div>
-            <button class="btn btn--ghost btn--icon" id="detail-close" title="关闭">✕</button>
+            <button class="btn btn--ghost btn--icon" id="detail-close" title="关闭"><x-icon name="x"/></button>
         </div>
         <div class="drawer__body" id="drawer-body"></div>
         <div class="drawer__foot" id="drawer-foot">

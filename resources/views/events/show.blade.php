@@ -28,7 +28,7 @@
 
                 <div class="row-actions">
                     <a class="btn btn--ghost btn--sm" href="{{ route('timeline.index', ['world' => $ev['world']]) }}">
-                        返回时间线
+                        <x-icon name="back"/>返回时间线
                     </a>
                 </div>
             </div>
@@ -40,7 +40,7 @@
                 <div class="panel__title"><span data-en="CONSISTENCY">一致性告警</span></div>
                 @foreach ($data['anomalies'] as $a)
                     <div class="alert {{ $a['severity'] === 'error' ? 'alert--danger' : 'alert--warn' }}" style="margin-top:10px">
-                        <span class="badge {{ $a['severity'] === 'error' ? 'badge--danger' : 'badge--warn' }}">{{ $a['type_label'] ?? '' }}</span>
+                        <span class="badge {{ $a['severity'] === 'error' ? 'badge--danger' : 'badge--warn' }}"><x-icon name="{{ $a['severity'] === 'error' ? 'status-danger' : 'status-warn' }}" class="icon--sm"/>{{ $a['type_label'] ?? '' }}</span>
                         {{ $a['message'] ?? '' }}
                     </div>
                 @endforeach
@@ -102,7 +102,7 @@
                         <div class="row" style="align-items:baseline">
                             <strong>{{ $s['name'] }}</strong>
                             @if (! empty($s['is_primary']))
-                                <span class="badge badge--ok">主要出处</span>
+                                <span class="badge badge--ok"><x-icon name="status-ok" class="icon--sm"/>主要出处</span>
                             @endif
                         </div>
                         @if ($locator)

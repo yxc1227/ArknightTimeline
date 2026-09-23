@@ -19,22 +19,26 @@
     {{-- 导航为「英文大写微标签 + 中文」的上下双语结构 --}}
     <nav class="nav">
         <a href="{{ route('timeline.index') }}" class="{{ request()->routeIs('timeline.*') ? 'is-active' : '' }}">
+            <x-icon name="timeline" class="icon--lg"/>
             <span class="nav__en">Timeline</span>
             <span class="nav__zh">时间线</span>
         </a>
 
         {{-- 干员简介与时间线同属公开内容：读者顺着条目里的名字就能点进来 --}}
         <a href="{{ route('operators.index') }}" class="{{ request()->routeIs('operators.*') ? 'is-active' : '' }}">
+            <x-icon name="operators" class="icon--lg"/>
             <span class="nav__en">Operators</span>
             <span class="nav__zh">干员简介</span>
         </a>
 
         @auth
             <a href="{{ route('sources.index') }}" class="{{ request()->routeIs('sources.*') ? 'is-active' : '' }}">
+                <x-icon name="sources" class="icon--lg"/>
                 <span class="nav__en">Source</span>
                 <span class="nav__zh">出处与语料</span>
             </a>
             <a href="{{ route('proposals.index') }}" class="{{ request()->routeIs('proposals.*') ? 'is-active' : '' }}">
+                <x-icon name="review" class="icon--lg"/>
                 <span class="nav__en">AI Review</span>
                 <span class="nav__zh">
                     AI 审核台
@@ -44,6 +48,7 @@
                 </span>
             </a>
             <a href="{{ route('anomalies.index') }}" class="{{ request()->routeIs('anomalies.*') ? 'is-active' : '' }}">
+                <x-icon name="inbox" class="icon--lg"/>
                 <span class="nav__en">Consistency</span>
                 <span class="nav__zh">
                     一致性收件箱
@@ -56,6 +61,7 @@
             {{-- 账号管理只对管理员可见：非管理员连入口都不必看到 --}}
             @if (auth()->user()->isAdmin())
                 <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'is-active' : '' }}">
+                    <x-icon name="account" class="icon--lg"/>
                     <span class="nav__en">Account</span>
                     <span class="nav__zh">账号管理</span>
                 </a>

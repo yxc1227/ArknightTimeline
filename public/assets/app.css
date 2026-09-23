@@ -1768,3 +1768,42 @@ img.avatar {
 
 .event-row__date { flex: 0 0 auto; font-size: 12px; color: var(--text-faint); min-width: 116px; }
 .event-row__title { flex: 1 1 200px; min-width: 0; font-size: 13px; }
+
+/* ---------------------------------------------------------------- 图标 */
+
+/* 形状数据在 App\Support\Icons，经由 <x-icon> 渲染；这里只管尺寸与对齐。
+   图标一律 currentColor：跟文字走色，不在此处、也不在模板里指定色值 ——
+   语义色（ok/warn/danger/info）由 .badge--* 等既有类带入。 */
+.icon {
+    width: 1em;
+    height: 1em;
+    flex: 0 0 auto;
+    vertical-align: -0.15em;
+}
+
+/* 尺寸档位（基准 body 14px）：
+   sm = 徽章 / 表格行内 12px；lg = 顶栏导航与按钮 16px；xl = 空状态 / 页头 20px。
+   父级有 display:flex 时 vertical-align 不生效也无妨，flex 对齐已覆盖。 */
+.icon--sm { width: .857em; height: .857em; }
+.icon--lg { width: 1.143em; height: 1.143em; }
+.icon--xl { width: 1.43em; height: 1.43em; vertical-align: -0.22em; }
+
+/* 高频嵌入场景的微调：
+   按钮自身有 gap:7px，图标无需额外间距；
+   等宽微标签字距偏大，图标贴近一点才像同一枚「刻线」。 */
+.toast__title .icon,
+.modal__head .icon { margin-right: 4px; vertical-align: -0.12em; }
+
+/* 图标按钮（.btn--icon 既有定义）：方形触区，直角，悬停随按钮主色 */
+.btn--icon .icon { vertical-align: 0; }
+
+/* 顶栏导航：图标在双语标签之上，居中、随激活态变色（currentColor 已处理） */
+.nav a { align-items: center; text-align: center; }
+.nav a .icon { margin-bottom: 3px; opacity: .82; }
+.nav a:hover .icon { opacity: 1; }
+.nav a.is-active .icon { opacity: 1; }
+
+/* 世界切换器：图标在标签之上，居中 */
+.world-switch__item { align-items: center; text-align: center; }
+.world-switch__item .icon { margin-bottom: 3px; opacity: .85; }
+.world-switch__item[data-active='1'] .icon { opacity: 1; }

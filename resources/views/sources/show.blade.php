@@ -70,7 +70,7 @@
                             <textarea name="raw_text" style="min-height:120px">{{ $source->raw_text }}</textarea>
                         </div>
                         <div class="btn-row">
-                            <button type="submit" class="btn btn--primary" id="synthesize-submit">开始梳理</button>
+                            <button type="submit" class="btn btn--primary" id="synthesize-submit"><x-icon name="spark"/>开始梳理</button>
                             <span class="faint small">梳理结果会进入 <a href="{{ route('proposals.index') }}">AI 审核台</a> 等待人工放行。</span>
                         </div>
                     </form>
@@ -93,9 +93,9 @@
                     <div class="row" style="align-items:baseline">
                         <span class="mono small" style="color:var(--accent)">{{ $event->date_display }}</span>
                         <strong>{{ $event->title }}</strong>
-                        <span class="badge {{ $event->status->badgeClass() }}">{{ $event->status->label() }}</span>
+                        <span class="badge {{ $event->status->badgeClass() }}"><x-icon name="{{ $event->status->icon() }}" class="icon--sm"/>{{ $event->status->label() }}</span>
                         @if ($event->date_confidence !== \App\Enums\DateConfidence::Confirmed)
-                            <span class="badge badge--warn">{{ $event->date_confidence->label() }}</span>
+                            <span class="badge badge--warn"><x-icon name="{{ $event->date_confidence->icon() }}" class="icon--sm"/>{{ $event->date_confidence->label() }}</span>
                         @endif
                         @php $pivot = $event->pivot; @endphp
                         {{-- 章节 / 关卡号：告诉审核人该去出处的哪个位置核对 --}}

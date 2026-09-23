@@ -45,6 +45,19 @@ enum ProposalStatus: string
         };
     }
 
+    /** 提案状态徽章用的图标（见 docs/ICONS.md「状态」段，经 <x-icon> 渲染）。 */
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Pending => 'status-warn',
+            self::Approved => 'status-info',
+            self::Applied => 'status-ok',
+            self::Rejected => 'status-info',
+            self::Duplicate => 'status-danger',
+            self::Unverified => 'status-danger',
+        };
+    }
+
     /** 只有通过了「出处可定位」校验的提案才允许被采纳。 */
     public function canBeApproved(): bool
     {

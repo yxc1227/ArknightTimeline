@@ -33,6 +33,18 @@ enum EventStatus: string
         };
     }
 
+    /** 徽章用的状态图标（见 docs/ICONS.md「状态」段，经 <x-icon> 渲染）。 */
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Draft => 'status-info',
+            self::NeedsReview => 'status-warn',
+            self::Verified => 'status-ok',
+            self::Disputed => 'status-danger',
+            self::Deprecated => 'status-info',
+        };
+    }
+
     /** 争议中与已废弃的条目禁止直接改正文，只能提交建议。 */
     public function isFrozen(): bool
     {

@@ -9,7 +9,7 @@
             <div class="panel__title">
                 <span data-en="Consistency Inbox">时间线一致性收件箱</span>
                 @if ($canReview)
-                    <button class="btn btn--sm" id="scan">全量体检</button>
+                    <button class="btn btn--sm" id="scan"><x-icon name="scan"/>全量体检</button>
                 @endif
             </div>
 

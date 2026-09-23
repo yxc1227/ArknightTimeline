@@ -33,6 +33,17 @@ enum DateConfidence: string
         };
     }
 
+    /** 可信度徽章用的状态图标（见 docs/ICONS.md「状态」段，经 <x-icon> 渲染）。 */
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Confirmed => 'status-ok',
+            self::Inferred => 'status-warn',
+            self::Disputed => 'status-danger',
+            self::Unknown => 'status-info',
+        };
+    }
+
     /** 低可信度的时间被覆盖时不需要走「冲突确认」流程。 */
     public function requiresConflictReview(): bool
     {

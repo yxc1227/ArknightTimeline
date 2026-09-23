@@ -25,4 +25,14 @@ enum AnomalySeverity: string
             self::Error => 'badge badge--danger',
         };
     }
+
+    /** 一致性告警徽章用的状态图标（见 docs/ICONS.md「状态」段，经 <x-icon> 渲染）。 */
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Info => 'status-info',
+            self::Warning => 'status-warn',
+            self::Error => 'status-danger',
+        };
+    }
 }
