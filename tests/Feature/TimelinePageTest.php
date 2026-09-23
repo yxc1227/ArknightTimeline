@@ -228,6 +228,24 @@ class TimelinePageTest extends TestCase
             ->assertJsonPath('permissions.review', false);
     }
 
+    /**
+     * 直接访问 /events/{id}（例如从人物页或外部链接点进来）必须渲染 HTML 页面，
+     * 而不是把 JSON 原样丢给浏览器。抽屉里通过 fetch 拉的就是 JSON，靠 Accept 头区分。
+     */
+    public function test_event_detail_renders_an_html_page_for_browser_navigation(): void
+    {
+        $event = $this->rawEvent(['title' => '塔卫二侧的相关条目', 'summary' => '穿过星门之后的第二家园。']);
+
+        $this->get(route('events.show', $event))
+            ->assertOk()
+            ->assertSee('塔卫二侧的相关条目')
+            ->assertSee('穿过星门之后的第二家园。')
+            ->assertSee('返回时间线')
+            // 不能把 JSON 的载荷结构直接吐在页面上
+            ->assertDontSee('"permissions"')
+            ->assertDontSee('"toApiArray"');
+    }
+
     public function test_anonymous_visitors_can_submit_annotations(): void
     {
         $event = $this->rawEvent();

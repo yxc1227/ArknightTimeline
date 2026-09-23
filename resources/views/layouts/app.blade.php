@@ -108,19 +108,12 @@
 <div class="toasts" id="toasts"></div>
 
 <script>
-    @php
-        /*
-         * 世界是页面级上下文，由查询串决定。
-         * 从 layout 里统一解析一次交给 JS：所有世界相关的请求参数与提示文案
-         * （历法名、时间未定泳道的说明）都从这里取，避免在若干模块里各写一遍。
-         */
-        $layoutWorld = \App\Enums\World::fromRequest(request()->string('world')->value());
-    @endphp
     window.APP = {
         csrf: @json(csrf_token()),
-        world: @json($layoutWorld->value),
-        worldCalendar: @json($layoutWorld->calendarLabel()),
-        user: @json(auth()->user()?->toApiArray()),
+        // 世界是页面级上下文，由查询串决定；解析一次交给 JS，避免各模块各写一遍
+        world: @json(\App\Enums\World::fromRequest(request()->string('world')->value())->value),
+        worldCalendar: @json(\App\Enums\World::fromRequest(request()->string('world')->value())->calendarLabel()),
+        user: @json(optional(auth()->user())->toApiArray()),
         perPage: {{ (int) config('timeline.collaboration.per_page', 40) }},
         // 头像体积上限交给前端，让它在选文件时就能给出提示，不必等一次失败的往返
         avatarMaxKb: {{ (int) config('identity.avatar.max_kilobytes', 2048) }},

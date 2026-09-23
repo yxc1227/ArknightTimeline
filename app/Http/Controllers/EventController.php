@@ -19,6 +19,7 @@ use App\Services\EventLockService;
 use App\Services\EventWriter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Gate;
 
 class EventController extends Controller
@@ -29,12 +30,20 @@ class EventController extends Controller
     ) {
     }
 
-    /** 条目详情：正文 + 关系 + 标注 + 版本 + 编辑租约，一次给全，减少面板闪烁。 */
-    public function show(Request $request, Event $event): JsonResponse
+    /**
+     * 条目详情。
+     *
+     * 同一份数据两个出口：
+     *  · 时间线页内的编辑侧栏（抽屉）通过 fetch 拉 JSON —— `api()` 始终带
+     *    `Accept: application/json`，因此 `$request->wantsJson()` 为真，走 JSON；
+     *  · 直接访问 `/events/61`（例如从人物页、或别人发来的链接）是浏览器整页导航，
+     *    走 HTML 详情页，否则浏览器会把 JSON 原样显示出来。
+     */
+    public function show(Request $request, Event $event): \Symfony\Component\HttpFoundation\Response
     {
         $event->load(['era', 'sources', 'characters', 'factions', 'tags', 'annotations.user', 'causedBy', 'parent']);
 
-        return response()->json([
+        $payload = [
             'event' => $event->toApiArray(),
             'annotations' => $event->annotations->map(fn (Annotation $a) => $a->toApiArray()),
             'revisions' => $event->revisions()->with('user')->limit(20)->get()->map(fn ($r) => $r->toApiArray()),
@@ -50,6 +59,15 @@ class EventController extends Controller
                 'factions' => Faction::orderBy('name')->get(['id', 'name', 'color']),
                 'tags' => Tag::orderBy('name')->get(['id', 'name', 'color']),
             ],
+        ];
+
+        if ($request->wantsJson()) {
+            return response()->json($payload);
+        }
+
+        return response()->view('events.show', [
+            'event' => $event,
+            'data' => $payload,
         ]);
     }
 
