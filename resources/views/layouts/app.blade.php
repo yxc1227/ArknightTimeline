@@ -4,16 +4,16 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', '泰拉时间线 · 明日方舟统一事件年表')</title>
+    <title>@yield('title', '明日方舟时间线 · 统一事件年表')</title>
     <link rel="stylesheet" href="{{ asset('assets/app.css') }}">
 </head>
 <body data-page="@yield('page', 'timeline')">
 
 <header class="topbar">
     <a class="brand" href="{{ route('timeline.index') }}">
-        <span class="brand__mark">TL</span>
-        <span>泰拉时间线</span>
-        <span class="brand__sub">Terra Timeline ://</span>
+        <span class="brand__mark">AT</span>
+        <span>明日方舟时间线</span>
+        <span class="brand__sub">Arknights Timeline ://</span>
     </a>
 
     {{-- 导航为「英文大写微标签 + 中文」的上下双语结构 --}}
@@ -21,6 +21,12 @@
         <a href="{{ route('timeline.index') }}" class="{{ request()->routeIs('timeline.*') ? 'is-active' : '' }}">
             <span class="nav__en">Timeline</span>
             <span class="nav__zh">时间线</span>
+        </a>
+
+        {{-- 干员简介与时间线同属公开内容：读者顺着条目里的名字就能点进来 --}}
+        <a href="{{ route('operators.index') }}" class="{{ request()->routeIs('operators.*') ? 'is-active' : '' }}">
+            <span class="nav__en">Operators</span>
+            <span class="nav__zh">干员简介</span>
         </a>
 
         @auth

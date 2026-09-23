@@ -136,7 +136,7 @@ class TerraDateParserTest extends TestCase
 
     public function test_unparseable_text_falls_back_to_unknown_instead_of_throwing(): void
     {
-        // 「时间未定」是泰拉时间线的常态，必须能被正常录入而不是抛异常
+        // 「时间未定」是时间线的常态，必须能被正常录入而不是抛异常
         $date = $this->parser->parse('泰拉历纪元前（年表未载）');
 
         $this->assertSame(DatePrecision::Unknown, $date->precision);

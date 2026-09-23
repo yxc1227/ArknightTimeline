@@ -1678,3 +1678,93 @@ img.avatar {
 }
 
 .world-switch__tagline { padding: 7px 12px 0; margin: 0; }
+
+/* ---------------------------------------------------------------- 干员简介 */
+
+.main--wide { max-width: 1220px; margin: 0 auto; }
+
+/* 概览里的人物首字方块：与头像同一语言，但不占用图片资源 */
+.operator-mark {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+    color: var(--accent);
+    font-size: 22px;
+}
+
+.operator-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+/* 一张卡 = 一个人：名字 / 结构化标签 / 一行简介 / 两个出口（本页 + 维基） */
+.operator-card {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 12px 14px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--border-strong);
+    transition: border-color .15s, background .15s;
+}
+
+.operator-card:hover { border-left-color: var(--accent); background: var(--bg-panel); }
+
+.operator-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+
+.operator-card__name {
+    font-size: 15px;
+    letter-spacing: .02em;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.operator-card__name:hover { color: var(--accent); }
+
+.operator-card__code {
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--text-faint);
+}
+
+.operator-card__meta { display: flex; flex-wrap: wrap; gap: 5px; }
+
+/* 简介固定三行高：卡片高度不随文案长短跳动，网格才不会参差 */
+.operator-card__profile {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: var(--text-dim);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.operator-card__foot { display: flex; gap: 7px; margin-top: auto; }
+
+/* 干员详情页里的相关条目行：日期 → 标题 → 纪元 → 可信度 */
+.event-rows { display: flex; flex-direction: column; }
+
+.event-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    flex-wrap: wrap;
+}
+
+.event-row:hover { background: var(--bg-panel); text-decoration: none; }
+
+.event-row__date { flex: 0 0 auto; font-size: 12px; color: var(--text-faint); min-width: 116px; }
+.event-row__title { flex: 1 1 200px; min-width: 0; font-size: 13px; }

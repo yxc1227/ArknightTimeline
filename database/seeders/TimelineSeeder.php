@@ -421,14 +421,14 @@ class TimelineSeeder extends Seeder
         $factionSlugs = Faction::pluck('id', 'name');
 
         $characters = [
-            ['博士', 'Doctor', '罗德岛', '未公开'],
-            ['阿米娅', 'Amiya', '罗德岛', '卡特斯'],
-            ['凯尔希', 'Kal\'tsit', '罗德岛', '菲林'],
-            ['特蕾西娅', 'Theresa', '巴别塔', '萨卡兹'],
-            ['特雷西斯', 'Theresis', '卡兹戴尔', '萨卡兹'],
-            ['塔露拉', 'Talulah', '整合运动', '德拉克'],
-            ['爱国者', 'Patriot', '整合运动', '温迪戈'],
-            ['霜星', 'Frostnova', '整合运动', '萨卡兹'],
+            ['博士', 'Doctor', '罗德岛', '未公开', '罗德岛的指挥官。主线开始时被罗德岛小队从切尔诺伯格地下设施的「石棺」中唤醒，此前的经历缺失。'],
+            ['阿米娅', 'Amiya', '罗德岛', '卡特斯', '罗德岛的公开领袖。'],
+            ['凯尔希', 'Kal\'tsit', '罗德岛', '菲林', '罗德岛的核心成员之一，与巴别塔时期的历史密切相关。'],
+            ['特蕾西娅', 'Theresa', '巴别塔', '萨卡兹', '巴别塔的领导者（罗德岛的前身组织）。'],
+            ['特雷西斯', 'Theresis', '卡兹戴尔', '萨卡兹', '卡兹戴尔一方的核心人物。'],
+            ['塔露拉', 'Talulah', '整合运动', '德拉克', '整合运动的领袖，切尔诺伯格事变的发动方核心人物。'],
+            ['爱国者', 'Patriot', '整合运动', '温迪戈', '整合运动的干部。'],
+            ['霜星', 'Frostnova', '整合运动', '萨卡兹', '整合运动的干部。'],
             ['梅菲斯特', 'Mephisto', '整合运动', '萨卡兹'],
             ['浮士德', 'Faust', '整合运动', '萨卡兹'],
             ['陈', 'Ch\'en', '龙门', '龙族'],
@@ -458,7 +458,7 @@ class TimelineSeeder extends Seeder
             // 《大地巡礼》「国家与地区」卷涉及、此前缺失的关联人物。
             // 种族字段留空而不是靠印象填：拿不准的字段宁可缺失，也不要写错。
             ['帕拉斯', 'Pallas', '米诺斯', null],
-            ['斯卡蒂', 'Skadi', '阿戈尔', null],
+            ['斯卡蒂', 'Skadi', '阿戈尔', null, '阿戈尔出身，与深海威胁相关的干员。'],
             ['幽灵鲨', 'Specter', '阿戈尔', null],
             ['歌蕾蒂娅', 'Gladiia', '阿戈尔', null],
 
@@ -466,20 +466,36 @@ class TimelineSeeder extends Seeder
             // 代号与种族一律留空：社区资料给的是中文名与转写，没有可靠出处，
             // 按本文件既有原则「拿不准的字段宁可缺失，也不要写错」处理。
             // 管理员与佩丽卡的英文写法在社区里就有多种转写，同样不猜。
-            ['管理员', null, '终末地工业', null],
-            ['佩丽卡', null, '终末地工业', null],
-            ['陈千语', null, '终末地工业', null],
-            ['阿伯莉', null, '联盟工团', null],
+            ['管理员', null, '终末地工业', null, '终末地工业协议回收部门的负责人，塔罗斯历 152 年于帝江号苏醒时失去记忆。', null, 'talos'],
+            ['佩丽卡', null, '终末地工业', null, '终末地工业的技术监督。', null, 'talos'],
+            ['陈千语', null, '终末地工业', null, '终末地工业的特勤干员。', null, 'talos'],
+            ['阿伯莉', null, '联盟工团', null, '四号谷地遇袭时牺牲。', null, 'talos'],
         ];
 
-        foreach ($characters as $order => [$name, $codename, $faction, $race]) {
+        foreach ($characters as $order => $row) {
+            [$name, $codename, $faction, $race] = $row;
+
+            /*
+             * 第 5 项是简介，第 6 项是该世界维基页面名覆盖，第 7 项是所属世界 —— 都可选。
+             *
+             * 用普通取值而不是在 foreach 的解构里写默认值：后者在 PHP 里是**编译错误**
+             * （Assignments can only happen to writable values），
+             * 默认值语法只在普通赋值里成立。
+             */
+            $profile = $row[4] ?? null;
+            $wikiSlug = $row[5] ?? null;
+            $world = $row[6] ?? 'terra';
+
             Character::updateOrCreate(
                 ['slug' => 'chr-'.md5($name)],
                 [
                     'name' => $name,
                     'codename' => $codename,
+                    'world' => $world,
                     'faction_id' => $factionSlugs[$faction] ?? null,
                     'race' => $race,
+                    'description' => $profile,
+                    'wiki_slug' => $wikiSlug,
                     'sort_order' => $order,
                 ],
             );

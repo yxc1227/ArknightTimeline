@@ -26,7 +26,7 @@ class TimelinePageTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('泰拉时间线')
+            ->assertSee('明日方舟时间线')
             ->assertSee('timeline-host', false);
     }
 

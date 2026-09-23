@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'AI 审核台 · 泰拉时间线')
+@section('title', 'AI 审核台 · 明日方舟时间线')
 @section('page', 'proposals')
 
 @section('content')

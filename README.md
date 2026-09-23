@@ -1,4 +1,4 @@
-# 泰拉时间线 · Terra Unified Timeline
+# 明日方舟时间线 · Arknights Timeline
 
 > 《明日方舟》系列的统一事件时间表。整合主线、支线、活动剧情、官方设定集，
 > 以及《明日方舟：终末地》塔卫二的记录，按各自的游戏内纪年（泰拉历 / 塔罗斯历）
@@ -21,6 +21,9 @@
   不提供游戏内资源、抽卡、脚本、代练或账号交易类功能。
 - 项目**不收集、不中转、不代理**任何鹰角账号密码，也不逆向对方的私有接口。
   外部账号绑定只走用户自己浏览器里的授权流程 —— 细节见「[安全与隐私](#安全与隐私)」。
+- **人物档案一律外链到该世界自己的维基**：泰拉干员 → [PRTS 维基](https://prts.wiki/)，
+  塔卫二人员 → [终末地 WIKI](https://www.fz.wiki/)。本仓库只写一行与时间线相关的简介，
+  不复制对方的正文。若对方希望调整链接方式或认为某处引用不妥，开 issue 即可。
 - 若权利方认为本仓库的某处内容不妥，开 issue 告知即可，我会立即删除相关内容。
 
 ---
@@ -45,6 +48,7 @@
 | --- | --- |
 | **统一时间线** | 主线 / 支线 / 活动 / 设定集事件按各自纪年排序，纪元色带分组 |
 | **双世界年表** | 泰拉（泰拉历 1096—1101 为主）与塔卫二（塔罗斯历 1—152）各自成表：纪元区间、出处、时间轴刻度、年代分布全部按世界隔离，侧栏一键切换 |
+| **干员简介** | 干员/人物卡片列表（搜索 + 阵营筛选，按世界隔离）+ 详情页：本仓库撰写的一行简介、结构化字段、按世界分组的相关条目。**人物档案一律外链到该世界自己的维基**（泰拉→PRTS、塔卫二→终末地 WIKI），这里不维护副本 |
 | **结构化条目** | 发生时间（游戏内纪元）、标题、简要描述、出处来源、相关人物与阵营 |
 | **多维检索** | 按时间区间（含跨年季节）、纪元、出处、载体类型、阵营（含子阵营）、人物、标签、状态、可信度筛选 + 全文搜索 |
 | **AI 辅助梳理** | 从剧情原文 / 设定集段落批量抽取事件候选，四层校验后进入待审队列 |
@@ -100,6 +104,8 @@ docker exec -w /app <容器名> php artisan migrate:fresh --seed
 | `IDENTITY_REGISTRATION` | `true` | 是否开放自助注册。设为 `false` 后注册页与提交入口一起关闭 |
 | `IDENTITY_AVATAR_MAX_KB` / `IDENTITY_AVATAR_SIZE` | `2048` / `256` | 头像上传上限与输出边长 |
 | `HYPERGRYPH_CLIENT_ID` / `HYPERGRYPH_CLIENT_SECRET` / `HYPERGRYPH_AUTHORIZE_URL` / `HYPERGRYPH_TOKEN_URL` / `HYPERGRYPH_USERINFO_URL` | 空 | 鹰角通行证渠道。**五项全空时该渠道显示为「未启用」**，不影响其他功能 |
+| `TIMELINE_WIKI_BASE` / `TIMELINE_WIKI_LABEL` | `https://prts.wiki/w/` / `PRTS 维基` | 泰拉（terra）干员档案的外链目标。换镜像站或换语言版本不需要改代码 |
+| `TIMELINE_TALOS_WIKI_BASE` / `TIMELINE_TALOS_WIKI_LABEL` | `https://www.fz.wiki/wiki/干员/` / `终末地 WIKI` | 塔卫二（talos）人员档案的外链目标（社区维护的《明日方舟：终末地》百科，人物条目挂在 `/wiki/干员/` 命名空间下） |
 
 > **密钥不要提交。** `.env` 已在 `.gitignore` 里；`HYPERGRYPH_CLIENT_SECRET` 与
 > `TIMELINE_AI_KEY` 只应存在于本地 `.env` 或部署平台的密钥管理中。
@@ -129,7 +135,7 @@ docker exec -w /app <容器名> php artisan migrate:fresh --seed
 
 ```bash
 php artisan migrate:fresh --seed          # 重建数据库 + 灌入起始语料
-php artisan test                          # 运行测试（256 项 / 1633 断言）
+php artisan test                          # 运行测试（269 项 / 1680 断言）
 ./vendor/bin/pint                         # 代码风格（Laravel 官方风格）
 
 php artisan timeline:scan                 # 全量一致性体检，结果汇入异常收件箱
@@ -151,6 +157,8 @@ php artisan timeline:purge-locks          # 回收过期的编辑租约（定时
 | `/admin/users` | 账号管理（仅管理员）。搜索/筛选/排序表格 + 批量操作 + 新建/编辑/重置密码弹窗 |
 | `/admin/users/{id}` | 账号详情。基本资料 + 贡献统计 + 外部身份绑定（含核验）+ 操作日志（字段级前后值） |
 | `/settings/profile` | 个人账号设置。头像上传/移除、改昵称、设置/修改密码、绑定与解绑外部渠道 |
+| `/operators` | 干员简介列表。卡片网格 + 名称/代号/种族搜索 + 阵营筛选（含子阵营） |
+| `/operators/{slug}` | 干员详情。一行简介、阵营/种族、按世界分组的相关条目，以及该世界自己的维基外链（泰拉→PRTS、塔卫二→终末地 WIKI）；未撰写简介时如实标注并退回结构化字段 |
 | `/login` | 登录（邮箱或登录名 + 密码，或通过外部渠道） |
 | `/register` | 自助注册。邮箱 + 密码 + 登录名 + 昵称；可用 `IDENTITY_REGISTRATION=false` 关闭 |
 | `/register/external` | 外部渠道注册的第二步：补全登录名 / 昵称 / 邮箱 |
@@ -284,6 +292,7 @@ app/
 ├─ Policies/         权限矩阵（含 UserPolicy 的自保护带原因 403、UserIdentityPolicy 的核验权）
 ├─ Http/
 │   ├─ Controllers/  Timeline / Event / AiProposal / Anomaly / Source / User / Avatar
+│   │                Operator（干员简介 + 按世界各自的维基外链）
 │   │                Auth/（Login / Register 自助注册 / Identity 外部渠道回调）
 │   │                Settings/Profile（本人改昵称、传头像、设密码、绑解绑）
 │   ├─ Middleware/   EnsureAccountIsActive（禁用后既有会话立即失效）
@@ -298,8 +307,8 @@ database/seeders/    起始语料（61 事件、10 纪元、33 阵营、41 人�
                      其中泰拉 51 事件 / 7 纪元，塔卫二 10 事件 / 3 纪元
 docs/DESIGN.md       完整设计说明
 public/assets/       app.css, app.js（无构建步骤）
-resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录 / 自助注册 / 外部注册 /
-                     账号设置 / 账号管理 + components/avatar.blade.php
+resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 干员简介 / 登录 / 自助注册 /
+                     外部注册 / 账号设置 / 账号管理 + components/avatar.blade.php
 tests/               单元 + 功能测试（含迁移注释与列名冲突守卫）
 ```
 

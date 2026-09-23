@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $source->name.' · 出处 · 泰拉时间线')
+@section('title', $source->name.' · 出处 · 明日方舟时间线')
 @section('page', 'sources')
 
 @section('content')

@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\OperatorController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\SourceController;
 use App\Http\Controllers\TimelineController;
@@ -24,6 +25,17 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [TimelineController::class, 'index'])->name('timeline.index');
 Route::get('/api/timeline', [TimelineController::class, 'feed'])->name('timeline.feed');
 Route::get('/api/filter-options', [TimelineController::class, 'filterOptions'])->name('timeline.filter-options');
+
+/*
+|--------------------------------------------------------------------------
+| 干员简介（公开）
+|--------------------------------------------------------------------------
+| 与时间线同样开放：读者顺着条目里的名字点进来，看到本仓库写的一行简介，
+| 以及通往 PRTS 维基的链接。档案的权威内容在对方站点，这里不维护副本。
+*/
+
+Route::get('/operators', [OperatorController::class, 'index'])->name('operators.index');
+Route::get('/operators/{character}', [OperatorController::class, 'show'])->name('operators.show');
 
 Route::get('/events/{event}', [EventController::class, 'show'])->name('events.show');
 Route::get('/events/{event}/revisions', [EventController::class, 'revisions'])->name('events.revisions');

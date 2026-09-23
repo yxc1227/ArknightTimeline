@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', '注册 · 泰拉时间线')
+@section('title', '注册 · 明日方舟时间线')
 @section('page', 'register')
 
 @section('content')

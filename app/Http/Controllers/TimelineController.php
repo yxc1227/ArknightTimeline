@@ -87,7 +87,7 @@ class TimelineController extends Controller
                 'has_more' => $page * $perPage < $total,
                 'filters' => $filters,
             ],
-            // 未定位条目单独成组：泰拉时间线里「时间未定」的条目数量可观，
+            // 未定位条目单独成组：时间线里「时间未定」的条目数量可观，
             // 强行塞进时间序列会污染排序语义，因此单列一条泳道。
             'unanchored_count' => Event::filter([...$filters, 'only_unanchored' => true])->count(),
             // 年度分布：供顶部缩放条绘制概览。按年聚合而非逐条下发，避免前端拿全量数据。

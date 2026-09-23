@@ -2,7 +2,7 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "terra-timeline/app",
     "type": "project",
-    "description": "泰拉时间线：以「区间 + 精度 + 可信度」建模的《明日方舟》剧情考据协作平台（非官方粉丝项目）",
+    "description": "明日方舟时间线：以「区间 + 精度 + 可信度」建模的《明日方舟》与《终末地》剧情考据协作平台（非官方粉丝项目）",
     "keywords": ["laravel", "timeline", "arknights", "fan-project"],
     "license": "MIT",
     "require": {

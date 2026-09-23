@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', '账号管理 · 泰拉时间线')
+@section('title', '账号管理 · 明日方舟时间线')
 @section('page', 'users')
 
 @php
