@@ -14,6 +14,7 @@ use App\Models\Tag;
 use App\Models\User;
 use App\Services\Ai\AiEventSynthesizer;
 use App\Services\EventWriter;
+use App\Services\UserManager;
 use App\Support\TerraDate;
 use Illuminate\Database\Seeder;
 
@@ -65,26 +66,58 @@ class TimelineSeeder extends Seeder
             ['name' => '考据审核员', 'email' => 'reviewer@terra.local', 'role' => 'reviewer', 'password' => 'terra-reviewer'],
             ['name' => '条目编辑者', 'email' => 'editor@terra.local', 'role' => 'editor', 'password' => 'terra-editor'],
             ['name' => '访客读者', 'email' => 'viewer@terra.local', 'role' => 'viewer', 'password' => 'terra-viewer'],
+            // 停用示例：账号列表、状态筛选与「已禁用」徽章都需要至少一条真实数据才有意义
+            ['name' => '停用示例账号', 'email' => 'disabled@terra.local', 'role' => 'editor', 'password' => 'terra-disabled'],
         ];
 
         $admin = null;
+        $created = [];
 
         foreach ($accounts as $account) {
-            $user = User::updateOrCreate(
+            // withTrashed + 清空 deleted_at：让 seed 可重复执行
+            // （软删除的账号仍占用 email 唯一索引，否则二次 seed 会撞唯一键）
+            $user = User::withTrashed()->updateOrCreate(
                 ['email' => $account['email']],
                 [
                     'name' => $account['name'],
                     'display_name' => $account['name'],
                     'password' => $account['password'],
                     'role' => $account['role'],
+                    'is_active' => true,
                     'email_verified_at' => now(),
+                    'deleted_at' => null,
                 ],
             );
 
+            $created[$account['email']] = $user;
             $admin ??= $user;
         }
 
+        $this->seedUserActivity($admin, $created);
+
         return $admin;
+    }
+
+    /**
+     * 生成真实的操作日志与账号状态。
+     *
+     * 刻意走 UserManager 而不是直接 `UserActivityLog::create([...])`：
+     * 这样种子数据里的日志措辞、字段级前后值与生产完全一致 ——
+     * 手写字符串的话，改了服务层文案就会让演示数据变成过时的假象。
+     *
+     * @param  array<string, User>  $users
+     */
+    private function seedUserActivity(User $admin, array $users): void
+    {
+        $manager = app(UserManager::class);
+
+        // 登录痕迹（同时写入 logged_in 日志）
+        foreach (['reviewer@terra.local', 'editor@terra.local'] as $email) {
+            $manager->logLogin($users[$email]);
+        }
+
+        // 把示例账号真的停用一次，从而得到一条 deactivated 日志与对应的字段变化
+        $manager->setActive($users['disabled@terra.local'], false, $admin);
     }
 
     // ------------------------------------------------------------------ 阵营

@@ -30,11 +30,15 @@
 /sources/{slug}       单个出处：原文录入 + 触发梳理 + 该出处条目
 /proposals            AI 审核台（提案队列 + 梳理表单）
 /anomalies            一致性收件箱（巡检产出的异常）
+/admin/users          账号管理（仅管理员）：搜索筛选表格 + 批量操作 + 弹窗表单
+/admin/users/{id}     账号详情：基本资料 + 贡献统计 + 操作日志
 /login                登录
 ```
 
-四页的划分对应四种角色动作：**读**（时间线）、**写**（抽屉）、**灌语料**（出处）、**裁决**（审核台 / 收件箱）。
-刻意没有把 AI 审核台做成时间线的一个模式 —— 它是「AI 内容进入时间线前必须经过的关卡」，独立成页才有仪式感与责任感。
+五页的划分对应五种角色动作：**读**（时间线）、**写**（抽屉）、**灌语料**（出处）、
+**裁决**（审核台 / 收件箱）、**管人**（账号管理）。
+刻意没有把 AI 审核台做成时间线的一个模式 —— 它是「AI 内容进入时间线前必须经过的关卡」，独立成页才有仪式感与责任感；
+账号管理同样独立，因为它是唯一会改变「谁能进来」的地方。
 
 ### 1.2 时间线页
 
@@ -227,6 +231,39 @@ ORDER BY (date_precision = 'unknown') ASC,  -- 未定位排最后
 原因是实测踩到的：`User::create([...])` 不会把未提交的列补进属性数组，
 于是 `$user->strict_source_scope` 会读到 null，而 `null` 是 falsy —— 出处范围限制被静默绕过。
 **权限判断的默认方向必须是更严，而不是更松**，这一条写进了模型注释与测试。
+
+### 3.4 账号管理：三条防「把自己锁在门外」的硬约束
+
+用户管理最容易出的不是功能缺陷，而是权限事故。三条约束集中在 `UserManager`
+（账号写入的唯一入口，与 `EventWriter` 同构），每条都对应一个真实事故场景：
+
+| 约束 | 事故场景 |
+| --- | --- |
+| **删除 / 禁用自己一律拒绝** | 这两种操作会立刻让自己失去访问权，几乎只可能是误点 |
+| **不能掏空最后一个启用中的管理员** | 若允许，系统会进入「谁都进不了管理页」的死局，只能改库 |
+| **一切变更留痕** | 「谁在什么时候改了什么」是账号维度最容易说不清的问题 |
+
+几处刻意的设计：
+
+- **不变量用统一检查而不是各处特判**。「降级自己」为什么被拦？不是因为「自己」这个身份，
+  而是因为它会让启用中的管理员归零。把这条写成 `assertNotLastActiveAdmin()` 之后，
+  它是唯一且可测的规则，将来放宽自保护也不会失守。
+- **两层判定各司其职**。`UserPolicy` 负责「角色够不够」并给视图提供按钮可见性，
+  自保护两条返回 `Response::deny('原因')` 而不是 `false` —— 空的 403 会让人以为是权限配错了；
+  `UserManager` 再守一次真正的跨行不变量，因为策略可能被绕过（命令、队列、新入口）。
+- **禁用必须立刻生效**。Laravel 的 session guard 只在登录那一刻验凭据，
+  因此加了 `EnsureAccountIsActive` 中间件在每个已登录请求上复核状态 ——
+  否则「刚被禁用的人」能靠既有会话继续写入到会话自然过期。
+- **删除是软删除**（与 `events` 一致），因为本项目的核心价值是「谁改的」：
+  硬删除会把 `events.created_by` / `event_revisions.user_id` 等外键置空，等于抹掉归属。
+  代价是邮箱唯一索引仍被占用，因此校验必须包含软删除行并提示「可先恢复该账号」——
+  校验若放行而数据库唯一索引拒绝，用户拿到的是 500 而不是可读的提示。
+- **重置密码只回显一次**。管理员无法查看既有密码（哈希不可逆），只能重置为新的随机密码；
+  明文仅在响应里出现一次，界面再用一次性弹窗承接（`data-after-close="reload"` 保证
+  无论用哪种方式关窗都会刷新列表）。
+- **操作日志的列名叫 `field_changes` 而不是 `changes`**：Eloquent 的 `HasAttributes`
+  自带 `protected $changes`，重名会导致「类外走 `__get` 拿到数据库列、类内直接命中内部空数组」
+  的分裂行为，且不报任何错。为此补了 `ModelAttributeCollisionTest` 用反射守住所有模型。
 
 ---
 
@@ -435,6 +472,8 @@ WHERE id = ? AND version = ?
 - **没有实时协同编辑**（无 OT/CRDT）。多人同时编辑同一条目靠乐观锁 + 合并，而不是实时同步。
 - **相对时间只解决了「解析与标记」**，锚点自动回填尚未实现：`precision = relative` 的条目会先进入「时间未定」泳道，并由巡检告警，等人工指定锚点。
 - **一致性巡检是规则式的**，不是语义推理。它能发现「结果早于起因」，但发现不了「起因与结果其实无关」。
+- **账号管理没有审计日志的导出与保留期策略**。日志只增不改且会一直留着，量级在几十人的团队里没问题，
+  但没有归档或导出功能。
 - **种子数据集是起始语料，不是权威年表**。其中大量条目在社区考据中属于推断而非官方明写 —— 这正是产品要解决的问题本身，条目上的 `date_confidence` 会如实标注。
   其中《大地巡礼》来源的条目**一律不附引文、不写年份**：原文尚未逐页录入，而编造引文会直接摧毁 L3「引用可定位」这条防幻觉主力。
   系统因此选择把「引文待补」作为**显式的待办状态**呈现（出处页会写「该出处尚未附引文」），而不是留白让人误以为已经核对过。
@@ -471,8 +510,8 @@ http://arknight.lancelot.com
 
 ```
 app/
-├─ Enums/            UserRole, DatePrecision, DateConfidence, EventStatus,
-│                    SourceType, ProposalStatus, AnomalyType, ...
+├─ Enums/            UserRole, UserStatus, UserAction, DatePrecision, DateConfidence,
+│                    EventStatus, SourceType, ProposalStatus, AnomalyType, ...
 ├─ Support/
 │   ├─ TerraDate.php         网格索引、区间语义、季节/年月边界
 │   ├─ TerraDateParser.php   纪年文本 → 区间（含纪元前与相对时间）
@@ -482,12 +521,18 @@ app/
 │   ├─ EventLockService.php         编辑租约（软锁）
 │   ├─ TimelineConsistencyChecker.php 规则巡检
 │   ├─ ProposalApplier.php          人工放行 AI 提案（两级闸门）
+│   ├─ UserManager.php              账号写入唯一入口：防锁死约束 + 操作日志
 │   └─ Ai/                          AiDriver / Heuristic / OpenAI 兼容 / AiEventSynthesizer
-├─ Policies/         权限矩阵
-├─ Http/Controllers/ Timeline / Event / AiProposal / Anomaly / Source / Auth
-└─ Models/           Event, Era, Faction, Character, Source, Tag,
-                     EventRevision, Annotation, EventLock, AiProposal, TimelineAnomaly
+├─ Policies/         权限矩阵（UserPolicy 的自保护返回带原因的 403）
+├─ Http/
+│   ├─ Controllers/  Timeline / Event / AiProposal / Anomaly / Source / User / Auth
+│   ├─ Middleware/   EnsureAccountIsActive（禁用后既有会话立即失效）
+│   └─ Requests/     StoreUserRequest / UpdateUserRequest / BulkUserActionRequest 等
+└─ Models/           Event, Era, Faction, Character, Source, Tag, EventRevision,
+                     Annotation, EventLock, AiProposal, TimelineAnomaly, UserActivityLog
 public/assets/       app.css, app.js（无构建步骤）
-resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录
-tests/               112 项测试，覆盖时间解析边界、协作不变量、校验闸门、检索语义、种子数据完整性
+resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录 / 账号管理
+                     + vendor/pagination/hud.blade.php（替换 Laravel 默认 Tailwind 分页）
+tests/               166 项测试，覆盖时间解析边界、协作不变量、校验闸门、检索语义、
+                     种子数据完整性、账号管理不变量、迁移注释与列名冲突守卫
 ```

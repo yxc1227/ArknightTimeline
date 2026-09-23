@@ -46,6 +46,14 @@
                     @endif
                 </span>
             </a>
+
+            {{-- 账号管理只对管理员可见：非管理员连入口都不必看到 --}}
+            @if (auth()->user()->isAdmin())
+                <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'is-active' : '' }}">
+                    <span class="nav__en">Account</span>
+                    <span class="nav__zh">账号管理</span>
+                </a>
+            @endif
         @endauth
     </nav>
 
@@ -85,7 +93,9 @@
             synthesize: @json(route('ai.synthesize')),
             anomalies: @json(url('/anomalies')),
             anomaliesScan: @json(route('anomalies.scan')),
-            sources: @json(url('/sources'))
+            sources: @json(url('/sources')),
+            users: @json(url('/admin/users')),
+            usersBulk: @json(route('admin.users.bulk'))
         }
     };
 </script>

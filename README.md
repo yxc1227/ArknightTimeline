@@ -32,6 +32,7 @@
 | **协作安全** | 乐观锁 + 字段级三方合并 + 编辑租约 + 全量版本链 |
 | **一致性巡检** | 因果倒置、时代错位、出处矛盾、疑似重复、锚点失效，收敛式异常收件箱 |
 | **编辑权限** | 四级角色 + 出处归属 + 条目冻结/锁定 |
+| **账号管理** | 列表搜索/筛选/排序/分页、增删改、重置密码、启用禁用、批量操作、操作日志（仅管理员） |
 
 ## 快速开始
 
@@ -71,6 +72,7 @@ php artisan serve
 | `reviewer@terra.local` | `terra-reviewer` | 审核员 |
 | `editor@terra.local` | `terra-editor` | 编辑者 |
 | `viewer@terra.local` | `terra-viewer` | 访客 |
+| `disabled@terra.local` | `terra-disabled` | 编辑者（**已禁用**，用于演示状态筛选，无法登录） |
 
 浏览时间线无需登录，直接打开首页即可。
 
@@ -78,7 +80,7 @@ php artisan serve
 
 ```bash
 php artisan migrate:fresh --seed          # 重建数据库 + 灌入起始语料
-php artisan test                          # 运行测试（112 项 / 818 断言）
+php artisan test                          # 运行测试（166 项 / 1042 断言）
 ./vendor/bin/pint                         # 代码风格（Laravel 官方风格）
 
 php artisan timeline:scan                 # 全量一致性体检，结果汇入异常收件箱
@@ -97,6 +99,8 @@ php artisan timeline:purge-locks          # 回收过期的编辑租约（定时
 | `/sources/{slug}` | 单个出处：原文编辑 + 触发 AI 梳理 + 该出处条目清单 |
 | `/proposals` | AI 审核台。触发梳理、逐条核验引文、采纳 / 合并 / 驳回 |
 | `/anomalies` | 一致性收件箱。巡检产出的异常，可标记解决 / 忽略 / 全量体检 |
+| `/admin/users` | 账号管理（仅管理员）。搜索/筛选/排序表格 + 批量操作 + 新建/编辑/重置密码弹窗 |
+| `/admin/users/{id}` | 账号详情。基本资料 + 贡献统计 + 操作日志（字段级前后值） |
 | `/login` | 登录 |
 
 ## 核心设计
@@ -166,15 +170,35 @@ date_confidence       confirmed / inferred / disputed / unknown
 | **采纳 / 合并 / 驳回 AI 提案** | — | — | ✔ | ✔ |
 | 标记已校验、裁定争议、锁定条目 | — | — | ✔ | ✔ |
 | 回滚版本、处置一致性异常 | — | — | ✔ | ✔ |
+| **账号管理（增删改 / 重置密码 / 启用禁用）** | — | — | — | ✔ |
 
 角色之外还叠加：条目进入 `disputed` / `deprecated` 时正文冻结（editor 只能提交建议）、
 reviewer 锁定后 editor 完全不可写、出处归属（`source_user`）限制 editor 的改动范围。
+
+### 5. 账号管理：三条硬约束防「把自己锁在门外」
+
+用户管理最容易出的不是功能缺陷，而是权限事故。`UserManager`（服务层，唯一写入入口）守着三条：
+
+| 约束 | 原因 |
+| --- | --- |
+| **删除 / 禁用自己一律拒绝** | 这两种操作会立刻让自己失去访问权，几乎只可能是误点 |
+| **不能掏空最后一个启用中的管理员** | 降级自己只在「还有其他启用中的管理员」时允许，否则系统会进入没人能管理账号的死局 |
+| **一切变更留痕** | 每次写入追加一条操作日志，记录操作人、字段级前后值与来源 IP |
+
+另外两点：
+
+- **禁用立刻生效**：Laravel 的 session guard 只在登录那一刻验凭据，所以加了 `active` 中间件
+  在每个已登录请求上复核账号状态——否则「刚被禁用的人」能靠既有会话继续写入
+- **删除是软删除**（与 `events` 一致）：条目归属与操作日志全部保留，可随时恢复。
+  代价是邮箱唯一索引仍被占用，因此表单校验会明确提示「若属于已删除账号，可先恢复它」
+- 页面上的按钮先用 `UserPolicy` 过滤（含带原因的 403），服务层再兜一层不变量：
+  策略可能被绕过（命令、队列、新入口），而服务层是唯一入口
 
 ## 技术栈
 
 - **后端**：Laravel 13 · PHP 8.3+（本项目运行于 8.4）· MySQL
 - **前端**：Blade + 原生 CSS/JS（**零构建步骤**，不依赖 Node）
-- **测试**：PHPUnit 12（112 项 / 818 断言，含种子数据完整性）
+- **测试**：PHPUnit 12（166 项 / 1042 断言，含种子数据完整性与守卫测试）
 - **AI**：驱动可插拔——离线规则抽取兜底，或任意兼容 OpenAI Chat Completions 的服务
 
 ### AI 驱动配置
@@ -206,23 +230,29 @@ app/
 │   ├─ EventLockService.php            编辑租约（软锁）
 │   ├─ TimelineConsistencyChecker.php  规则巡检
 │   ├─ ProposalApplier.php             人工放行 AI 提案（两级闸门）
+│   ├─ UserManager.php                 账号写入唯一入口：防锁死约束 + 操作日志
 │   └─ Ai/                             驱动抽象 / 规则抽取 / OpenAI 兼容 / 梳理流水线
-├─ Policies/         权限矩阵
-├─ Http/             Timeline / Event / AiProposal / Anomaly / Source / Auth 控制器与表单校验
-└─ Models/           Event, Era, Faction, Character, Source, Tag,
-                     EventRevision, Annotation, EventLock, AiProposal, TimelineAnomaly
+├─ Policies/         权限矩阵（含 UserPolicy 的自保护带原因 403）
+├─ Http/
+│   ├─ Controllers/  Timeline / Event / AiProposal / Anomaly / Source / User / Auth
+│   ├─ Middleware/   EnsureAccountIsActive（禁用后既有会话立即失效）
+│   └─ Requests/     表单校验
+└─ Models/           Event, Era, Faction, Character, Source, Tag, EventRevision,
+                     Annotation, EventLock, AiProposal, TimelineAnomaly, UserActivityLog
 
-database/migrations/ 字典层 / 事件表 / 关系表 / 协作表 / 用户角色
-database/seeders/    起始语料（51 事件、7 纪元、27 阵营、37 人物、36 出处）
+database/migrations/ 字典层 / 事件表 / 关系表 / 协作表 / 用户角色 / 账号状态与操作日志
+database/seeders/    起始语料（51 事件、7 纪元、27 阵营、37 人物、36 出处、5 账号）
 docs/DESIGN.md       完整设计说明
 public/assets/       app.css, app.js（无构建步骤）
-resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录
-tests/               单元 + 功能测试
+resources/views/     布局 / 时间线 / 审核台 / 收件箱 / 出处 / 登录 / 账号管理
+tests/               单元 + 功能测试（含迁移注释与列名冲突守卫）
 ```
 
 ## ⚠️ 关于种子数据
 
 `TimelineSeeder` 灌入的是**起始语料，不是权威年表**。数据分三层来源，各自的可靠性不同：
+
+(账号部分：预置 5 个演示账号，其中一个处于「已禁用」状态，用于演示状态筛选与徽章。)
 
 | 来源 | 条目数 | 时间性质 | 状态 |
 | --- | --- | --- | --- |
@@ -279,6 +309,13 @@ php artisan test
 - **检索语义**：区间重叠（跨年季节）、未定位排序、子阵营包含、多条件组合、缩放宽表
 - **种子数据完整性**：每条 `date_display` 重新解析后必须与落库索引一致、未定位条目必须被约束在泳道内、
   纪元区间不重叠、引文不得凭空出现、母阵营筛选能带出子阵营条目
+- **账号管理**：越权访问、搜索（含 LIKE 通配符转义）、状态与角色筛选、排序白名单、
+  软删除可见性，以及**三条防锁死约束**——不能删/禁用自己、不能掏空最后一个启用中的管理员、
+  禁用后既有会话立即失效
+- **迁移注释**：每个列定义必须带 `comment()`，且不得使用无法携带注释的 `timestamps()`；
+  表清单守卫确保新增表不会漏出检查范围
+- **列名冲突守卫**：任何列名都不得与 Eloquent 内部属性重名（`changes` 就撞过
+  `HasAttributes::$changes`，会让模型内部方法静默读到空数组）
 
 最后一项是把起始语料**当成代码来测**——手写数据里一个错字就会让条目排到错误的位置，
 而页面不会报错、只会安静地显示错的东西。

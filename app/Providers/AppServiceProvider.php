@@ -9,6 +9,7 @@ use App\Models\TimelineAnomaly;
 use App\Services\Ai\AiDriver;
 use App\Services\Ai\HeuristicAiDriver;
 use App\Services\Ai\OpenAiCompatibleDriver;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -27,6 +28,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // 默认分页视图输出 Tailwind 类名，而本项目零构建、没有 Tailwind，
+        // 因此统一改用自带的 HUD 风格分页视图，避免分页退化成裸链接。
+        Paginator::defaultView('vendor.pagination.hud');
+        Paginator::defaultSimpleView('vendor.pagination.hud');
+
         $this->shareNavigationCounters();
     }
 

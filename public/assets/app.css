@@ -1249,3 +1249,252 @@ mark.hit { background: var(--accent); color: var(--accent-ink); }
     .sidebar__scroll { overflow-y: visible; padding-bottom: 0; }
     .sidebar__head { border-bottom: none; padding-bottom: 0; }
 }
+
+/* ==========================================================================
+   账号管理
+   --------------------------------------------------------------------------
+   这一块引入两种新布局，都是为了「数据表格 + 表单弹窗」这类管理界面：
+     · .tbl--stack   宽表在窄屏折叠成卡片（纯 CSS，靠 td[data-label]）
+     · .form-grid    弹窗内的两列表单，窄屏自动单列
+   其余组件（徽章、按钮、分页、弹窗）复用全站已有的母题，不另起一套。
+   ========================================================================== */
+
+/* 筛选栏里的表单需要自己撑起 flex 高度，否则内部的滚动区算不出可用高度 */
+.sidebar__form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+input[type='checkbox'] { accent-color: var(--accent); cursor: pointer; }
+
+/* ---------------------------------------------------------------- 头像方块 */
+
+/* 用首字代替图片：零资源依赖，且与「等宽 + 直角」的语言一致 */
+.avatar {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    user-select: none;
+}
+
+.avatar--lg { width: 48px; height: 48px; flex-basis: 48px; font-size: 19px; }
+
+.avatar[data-status='disabled'] { background: transparent; border-color: var(--border-strong); color: var(--text-faint); }
+.avatar[data-status='trashed'] { background: transparent; border-color: rgba(255, 82, 82, .4); color: var(--danger); }
+
+/* ---------------------------------------------------------------- 列表单元 */
+
+.user-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }
+
+.user-cell__name { color: var(--text); font-weight: 600; }
+.user-cell__name:hover { color: var(--accent); }
+
+.row-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.tbl input[type='checkbox'] { width: 14px; height: 14px; display: block; }
+
+/* 已删除账号整行降权，但不能到看不清的程度 —— 管理员还要操作它 */
+tr.is-trashed td { opacity: .62; }
+tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-color: var(--danger); }
+
+/* ---------------------------------------------------------------- 排序表头 */
+
+.th-sort { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.th-sort:hover { color: var(--accent); text-decoration: none; }
+.th-sort.is-active { color: var(--accent); }
+.th-sort__arrow { font-size: 9px; }
+
+/* ---------------------------------------------------------------- 批量操作栏 */
+
+/* 默认不占位：勾选后才出现，避免平时给页面增加视觉重量 */
+.bulk-bar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    border-left-width: 3px;
+}
+
+.bulk-bar.is-open { display: flex; }
+.bulk-bar strong { font-size: 12.5px; margin-right: 4px; }
+.bulk-bar strong span { font-family: var(--mono); color: var(--accent); }
+
+/* ---------------------------------------------------------------- 表格加载态 */
+
+.table-wrap { overflow-x: auto; transition: opacity .15s; }
+.table-wrap.is-loading { opacity: .4; pointer-events: none; }
+
+/* ---------------------------------------------------------------- 详情页 */
+
+.profile-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+
+/* auto-fit + minmax 让两张卡片在窄屏自动叠成一列，不需要写媒体查询 */
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-bottom: 18px;
+}
+
+.stat { background: var(--bg-raised); padding: 11px 12px; }
+
+.stat__value {
+    display: block;
+    font-size: 21px;
+    color: var(--accent);
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat__label {
+    display: block;
+    margin-top: 3px;
+    font-family: var(--label);
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+/* ---------------------------------------------------------------- 操作日志 */
+
+.log-row {
+    border-left: 2px solid var(--border);
+    padding: 9px 0 9px 12px;
+    margin-bottom: 9px;
+    font-size: 12.5px;
+}
+
+.log-row:hover { border-left-color: var(--accent); }
+
+.log-row__head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+
+/* 字段级变化：字段名 + 旧值 → 新值，与冲突面板的三方比对同一视觉语言 */
+.diff-list { margin-top: 7px; display: flex; flex-direction: column; gap: 3px; }
+
+.diff-list__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11.5px;
+}
+
+.diff-list__field { color: var(--text-faint); min-width: 84px; }
+.diff-list__from { color: var(--text-dim); text-decoration: line-through; text-decoration-color: var(--text-faint); }
+.diff-list__arrow { color: var(--accent); }
+.diff-list__to { color: var(--text); }
+
+/* ---------------------------------------------------------------- 弹窗表单 */
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0 14px;
+}
+
+.password-reveal {
+    font-family: var(--mono);
+    font-size: 17px;
+    letter-spacing: .12em;
+    text-align: center;
+    padding: 14px;
+    margin-top: 4px;
+    background: var(--bg-input);
+    border: 1px dashed var(--accent-line);
+    color: var(--accent);
+    word-break: break-all;
+    user-select: all;
+}
+
+/* ---------------------------------------------------------------- 分页补充 */
+
+.pagination .is-disabled { color: var(--text-faint); opacity: .5; cursor: not-allowed; }
+
+.pagination__meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: .04em;
+    border: none !important;
+    padding-left: 2px !important;
+    align-self: center;
+}
+
+/* ---------------------------------------------------------------- 窄屏适配 */
+
+@media (max-width: 900px) {
+    /* 宽表折叠成卡片。纯 CSS 方案（td[data-label] + ::before），
+       不依赖 JS 渲染两套 DOM，也就不会出现「移动端与桌面端数据不一致」。 */
+    .tbl--stack thead { display: none; }
+
+    .tbl--stack,
+    .tbl--stack tbody,
+    .tbl--stack tr,
+    .tbl--stack td { display: block; width: 100%; }
+
+    .tbl--stack tr {
+        border: 1px solid var(--border);
+        border-left: 2px solid var(--border-strong);
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        background: var(--bg-raised);
+    }
+
+    .tbl--stack tr:hover td { background: transparent; }
+
+    .tbl--stack td {
+        border: none;
+        padding: 4px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .tbl--stack td::before {
+        content: attr(data-label);
+        flex: 0 0 auto;
+        font-family: var(--label);
+        font-size: 10px;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+    }
+
+    /* 主列与操作列本身就是卡片的标题与动作区，再加标签只会更乱 */
+    .tbl--stack td[data-label='User'],
+    .tbl--stack td[data-label='Action'] { justify-content: flex-start; }
+
+    .tbl--stack td[data-label='User']::before,
+    .tbl--stack td[data-label='Action']::before { display: none; }
+
+    .tbl--stack td[data-label='Select'] { justify-content: flex-end; }
+
+    .detail-grid { grid-template-columns: 1fr; }
+    .row-actions { width: 100%; }
+}

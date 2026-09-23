@@ -2,6 +2,7 @@
 
 use App\Exceptions\EditConflictException;
 use App\Exceptions\WriteDeniedException;
+use App\Http\Middleware\EnsureAccountIsActive;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,7 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // `active`：每个已登录请求都复核账号状态。Laravel 的 session guard 只在登录
+        // 那一刻验凭据，没有这道中间件的话，「刚被禁用的人」能靠既有会话继续写入。
+        $middleware->alias([
+            'active' => EnsureAccountIsActive::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

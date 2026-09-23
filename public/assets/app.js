@@ -1451,6 +1451,481 @@
         return { boot };
     })();
 
+    /* ------------------------------------------------------------------ 账号管理 */
+
+    const Users = (() => {
+        const urls = APP.urls || {};
+
+        /**
+         * 表单字段。
+         *
+         * ⚠️ 必须用元素引用而不是 `form.name`：HTMLFormElement 上已经有一个内建的
+         * `name` 属性（返回表单自身的 name 特性，是字符串），
+         * 因此 `form.name.value` 会直接抛错。这是最容易踩的 DOM 命名冲突之一。
+         */
+        const F = () => ({
+            name: $('#uf-name'),
+            display: $('#uf-display'),
+            email: $('#uf-email'),
+            password: $('#uf-password'),
+            role: $('#uf-role'),
+            active: $('#uf-active'),
+            scope: $('#uf-scope'),
+        });
+
+        /** 统一给按钮加上「禁用 + 转圈」，避免重复点击与无反馈的等待。 */
+        async function withBusy(button, label, fn) {
+            if (!button) return fn();
+
+            const original = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = `<span class="spinner"></span> ${esc(label)}`;
+
+            try {
+                return await fn();
+            } finally {
+                button.disabled = false;
+                button.innerHTML = original;
+            }
+        }
+
+        const success = (message, delay = 700) => {
+            toast(message, 'ok');
+            setTimeout(() => location.reload(), delay);
+        };
+
+        /* ---------------------------------------------------------- 弹窗 */
+
+        function openModal(selector) {
+            $(selector)?.classList.add('is-open');
+        }
+
+        /**
+         * 关闭弹窗。若弹窗内含 `data-after-close="reload"`，
+         * 则无论用哪种方式关闭（按钮 / 遮罩 / Esc）都会刷新列表 ——
+         * 一次性密码这类「关掉就再也看不到」的内容必须保持行为一致。
+         */
+        function closeModal(target) {
+            const mask = typeof target === 'string' ? $(target) : target;
+            if (!mask) return;
+
+            const needsReload = !!mask.querySelector('[data-after-close="reload"]');
+            mask.classList.remove('is-open');
+
+            if (needsReload) setTimeout(() => location.reload(), 260);
+        }
+
+        function closeAllModals() {
+            $$('.modal-mask.is-open').forEach((mask) => closeModal(mask));
+        }
+
+        /* ---------------------------------------------------------- 一次性密码 */
+
+        function showPassword(password, targetName, generated) {
+            $('#password-value').textContent = password;
+            $('#password-target').textContent = targetName
+                ? `${generated ? '系统生成' : '按指定值设置'} · ${targetName}`
+                : '';
+
+            openModal('#password-modal');
+        }
+
+        /**
+         * 复制到剪贴板。
+         *
+         * http 站点不是安全上下文，`navigator.clipboard` 会直接是 undefined，
+         * 因此必须保留选区 + execCommand 的回退路径，否则按钮在内网 http 上完全无效。
+         */
+        async function copyText(text, node) {
+            if (navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (_) { /* 落到回退方案 */ }
+            }
+
+            if (!node) return false;
+
+            try {
+                const range = document.createRange();
+                range.selectNodeContents(node);
+
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+
+                return document.execCommand('copy');
+            } catch (_) {
+                return false;
+            }
+        }
+
+        /* ---------------------------------------------------------- 筛选 */
+
+        function submitFilters(form) {
+            // 服务端渲染的列表，加载态只能在跳转前用一个视觉占位表达
+            $('#users-table-wrap')?.classList.add('is-loading');
+            form.submit();
+        }
+
+        function bindFilters() {
+            const form = $('#user-filter-form');
+            if (!form) return;
+
+            $$('[data-autosubmit]', form).forEach((field) => {
+                if (field.tagName === 'SELECT') {
+                    field.addEventListener('change', () => submitFilters(form));
+                    return;
+                }
+
+                // 文本框用防抖，并且只在值真的变了才提交 ——
+                // 否则「打字后又删回原样」也会触发一次无意义的整页刷新
+                const initial = field.value;
+                field.addEventListener('input', debounce(() => {
+                    if (field.value !== initial) submitFilters(form);
+                }, 600));
+            });
+        }
+
+        /* ---------------------------------------------------------- 批量选择 */
+
+        function selectedIds() {
+            return $$('.row-check:checked').map((box) => Number(box.value));
+        }
+
+        function syncBulkBar() {
+            const ids = selectedIds();
+
+            $('#bulk-count').textContent = String(ids.length);
+            $('#bulk-bar')?.classList.toggle('is-open', ids.length > 0);
+        }
+
+        function bindSelection() {
+            $('#select-all')?.addEventListener('change', (e) => {
+                $$('.row-check:not([disabled])').forEach((box) => { box.checked = e.target.checked; });
+                syncBulkBar();
+            });
+
+            document.addEventListener('change', (e) => {
+                if (e.target.classList?.contains('row-check')) syncBulkBar();
+            });
+
+            $('#bulk-clear')?.addEventListener('click', () => {
+                $$('.row-check').forEach((box) => { box.checked = false; });
+                const all = $('#select-all');
+                if (all) all.checked = false;
+                syncBulkBar();
+            });
+        }
+
+        function showBulkResult(data) {
+            $('#bulk-summary').textContent = data.message;
+
+            const host = $('#bulk-skipped');
+            const skipped = data.skipped || [];
+
+            host.innerHTML = skipped.length
+                ? '<div class="section-label" data-en="Skipped">以下账号被跳过</div>'
+                    + skipped.map((row) => `<div class="card">
+                        <strong>${esc(row.name)}</strong>
+                        <div class="faint small" style="margin-top:3px">${esc(row.reason)}</div>
+                    </div>`).join('')
+                : '';
+
+            openModal('#bulk-modal');
+        }
+
+        async function runBulk(action, button) {
+            const ids = selectedIds();
+            if (!ids.length) return;
+
+            const verb = { activate: '启用', deactivate: '禁用', delete: '删除' }[action] || action;
+            const warning = action === 'delete'
+                ? `确认删除所选的 ${ids.length} 个账号？\n\n`
+                    + '删除是软删除：条目归属与操作日志都会保留，可在「只看已删除」中恢复。\n'
+                    + '（当前登录账号会被自动跳过）'
+                : `确认${verb}所选的 ${ids.length} 个账号？\n\n（当前登录账号会被自动跳过）`;
+
+            if (!confirm(warning)) return;
+
+            await withBusy(button, '处理中…', async () => {
+                const { ok, data } = await api(urls.usersBulk, { method: 'POST', body: { action, ids } });
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '批量操作失败');
+                    return;
+                }
+
+                // 有跳过项时展开明细，而不是用一句「已完成」掩盖部分失败
+                if ((data.skipped || []).length) {
+                    showBulkResult(data);
+                    return;
+                }
+
+                success(data.message);
+            });
+        }
+
+        /* ---------------------------------------------------------- 单条操作 */
+
+        function openUserModal(payload) {
+            const mask = $('#user-modal');
+            const form = $('#user-form');
+            if (!mask || !form) return;
+
+            const fields = F();
+            const mode = payload ? 'edit' : 'create';
+
+            mask.dataset.mode = mode;
+            form.reset();
+
+            const title = $('#user-modal-title');
+            if (title) {
+                // 英文微标签由 CSS 的 attr(data-en) 生成，因此要连属性一起改
+                title.dataset.en = mode === 'edit' ? 'Edit' : 'Create';
+                title.textContent = mode === 'edit' ? `编辑账号 · ${payload.label}` : '新建账号';
+            }
+
+            $$('[data-only="create"]', mask).forEach((el) => {
+                el.style.display = mode === 'create' ? '' : 'none';
+            });
+
+            if (payload) {
+                form.dataset.userId = payload.id;
+                fields.name.value = payload.name || '';
+                fields.display.value = payload.display_name || '';
+                fields.email.value = payload.email || '';
+                fields.role.value = payload.role || 'viewer';
+                fields.active.checked = !!payload.is_active;
+                fields.scope.checked = !!payload.strict_source_scope;
+            } else {
+                delete form.dataset.userId;
+                fields.role.value = 'viewer';
+                fields.active.checked = true;
+                fields.scope.checked = true;
+            }
+
+            openModal('#user-modal');
+            setTimeout(() => fields.name?.focus(), 60);
+        }
+
+        async function submitUserForm(event) {
+            event.preventDefault();
+
+            const form = $('#user-form');
+            const fields = F();
+            const id = form?.dataset.userId;
+            const isEdit = !!id;
+
+            const body = {
+                name: fields.name.value.trim(),
+                display_name: fields.display.value.trim() || null,
+                email: fields.email.value.trim(),
+                role: fields.role.value,
+                is_active: fields.active.checked,
+                strict_source_scope: fields.scope.checked,
+            };
+
+            if (!isEdit) body.password = fields.password.value.trim() || null;
+
+            // 客户端只做「空值」这种最明显的拦截，格式与唯一性以服务端为准
+            if (!body.name || !body.email) {
+                toast('登录名与邮箱为必填项。', 'warn');
+                (!body.name ? fields.name : fields.email).focus();
+                return;
+            }
+
+            await withBusy($('#user-submit'), '保存中…', async () => {
+                const { ok, data } = await api(isEdit ? `${urls.users}/${id}` : urls.users, {
+                    method: isEdit ? 'PUT' : 'POST',
+                    body,
+                });
+
+                if (!ok) {
+                    toast(validationMessage(data), 'danger', '保存失败');
+                    return;
+                }
+
+                if (fields.password) fields.password.value = '';
+                closeModal('#user-modal');
+
+                if (data.password) {
+                    // 新建且密码由系统生成：必须先把密码交给操作者，再考虑刷新
+                    showPassword(data.password, data.user?.label, data.password_generated);
+                    return;
+                }
+
+                success(data.message);
+            });
+        }
+
+        async function runToggle(button) {
+            const id = button.dataset.toggle;
+            const isActive = button.dataset.active === '1';
+            const name = button.dataset.name || '该账号';
+
+            const message = isActive
+                ? `确认禁用「${name}」？\n\n该账号将无法登录，已登录的会话会在下一次请求时被强制退出。\n条目归属与操作日志全部保留。`
+                : `确认启用「${name}」？该账号将恢复登录权限。`;
+
+            if (!confirm(message)) return;
+
+            await withBusy(button, '处理中…', async () => {
+                const { ok, data } = await api(`${urls.users}/${id}/toggle`, {
+                    method: 'POST',
+                    body: { active: !isActive },
+                });
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '操作失败');
+                    return;
+                }
+
+                success(data.message);
+            });
+        }
+
+        async function runDelete(button) {
+            const id = button.dataset.delete;
+            const name = button.dataset.name || '该账号';
+
+            const reason = prompt(
+                `确认删除账号「${name}」？\n\n`
+                + '删除是软删除：其条目归属与操作日志全部保留，可在「只看已删除」中恢复。\n\n'
+                + '可填写删除原因（会记入操作日志，可留空）：',
+                '',
+            );
+
+            if (reason === null) return; // 用户取消
+
+            await withBusy(button, '删除中…', async () => {
+                const { ok, data } = await api(`${urls.users}/${id}`, {
+                    method: 'DELETE',
+                    body: { reason: reason.trim() || null },
+                });
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '删除失败');
+                    return;
+                }
+
+                success(data.message);
+            });
+        }
+
+        async function runRestore(button) {
+            const id = button.dataset.restore;
+
+            if (!confirm('确认恢复该账号？恢复后即可继续登录，历史归属不变。')) return;
+
+            await withBusy(button, '恢复中…', async () => {
+                const { ok, data } = await api(`${urls.users}/${id}/restore`, { method: 'POST', body: {} });
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '恢复失败');
+                    return;
+                }
+
+                success(data.message);
+            });
+        }
+
+        async function runResetPassword(button) {
+            const id = button.dataset.reset;
+            const name = button.dataset.name || '该账号';
+
+            if (!confirm(
+                `确认重置「${name}」的密码？\n\n`
+                + '原密码会立即失效，系统将生成一个新的随机密码，并且只展示一次。',
+            )) return;
+
+            await withBusy(button, '重置中…', async () => {
+                const { ok, data } = await api(`${urls.users}/${id}/password`, { method: 'POST', body: {} });
+
+                if (!ok) {
+                    toast(data.message || validationMessage(data), 'danger', '重置失败');
+                    return;
+                }
+
+                showPassword(data.password, name, data.password_generated);
+            });
+        }
+
+        /* ---------------------------------------------------------- 装配 */
+
+        function bindActions() {
+            // 事件委托：列表页与详情页共用同一套按钮，逐个绑定会有两处漏绑的风险
+            document.addEventListener('click', (event) => {
+                const target = event.target.closest(
+                    '[data-new-user],[data-edit],[data-delete],[data-toggle],[data-reset],[data-restore],[data-bulk],[data-close-modal],[data-copy-password]',
+                );
+
+                if (!target) return;
+
+                if (target.hasAttribute('data-new-user')) {
+                    openUserModal(null);
+                    return;
+                }
+
+                if (target.dataset.edit) {
+                    try {
+                        openUserModal(JSON.parse(target.dataset.payload || '{}'));
+                    } catch (_) {
+                        toast('无法解析账号数据，请刷新页面重试。', 'danger');
+                    }
+                    return;
+                }
+
+                if (target.dataset.toggle) { runToggle(target); return; }
+                if (target.dataset.delete) { runDelete(target); return; }
+                if (target.dataset.reset) { runResetPassword(target); return; }
+                if (target.dataset.restore) { runRestore(target); return; }
+                if (target.dataset.bulk) { runBulk(target.dataset.bulk, target); return; }
+
+                if (target.hasAttribute('data-close-modal')) {
+                    // 「取消」只关窗；带 data-after-close 的按钮由 closeModal 统一触发刷新
+                    const mask = target.closest('.modal-mask');
+                    const isCancel = target.textContent.trim() === '取消';
+                    if (isCancel && mask) {
+                        mask.classList.remove('is-open');
+                    } else {
+                        closeModal(mask);
+                    }
+                }
+            });
+
+            // 点击遮罩关闭 / Esc 关闭
+            $$('.modal-mask').forEach((mask) => {
+                mask.addEventListener('mousedown', (event) => {
+                    if (event.target === mask) closeModal(mask);
+                });
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') closeAllModals();
+            });
+
+            $('#user-form')?.addEventListener('submit', submitUserForm);
+
+            $('#copy-password')?.addEventListener('click', async () => {
+                const node = $('#password-value');
+                const ok = await copyText(node?.textContent?.trim() || '', node);
+                toast(ok ? '密码已复制到剪贴板。' : '浏览器拒绝了自动复制，请手动选中复制。', ok ? 'ok' : 'warn');
+            });
+        }
+
+        function boot() {
+            bindFilters();
+
+            // 详情页没有表格与批量栏，这些绑定各自做了空值保护
+            bindSelection();
+            bindActions();
+            syncBulkBar();
+        }
+
+        return { boot };
+    })();
+
     /* ------------------------------------------------------------------ 分派 */
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1458,5 +1933,6 @@
         if (PAGE === 'proposals') Proposals.boot();
         if (PAGE === 'anomalies') Anomalies.boot();
         if (PAGE === 'sources') Sources.boot();
+        if (PAGE === 'users' || PAGE === 'user-show') Users.boot();
     });
 })();
