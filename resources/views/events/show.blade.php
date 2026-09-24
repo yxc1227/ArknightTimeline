@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', ($data['event']['title'] ?? '条目').' · 时间线条目 · 明日方舟时间线')
+@section('title', ($data['event']['title'] ?? '条目').' · 时间线条目 · 源石纪年')
 @section('page', 'event-show')
 
 @section('content')

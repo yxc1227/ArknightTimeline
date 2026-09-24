@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', '登录 · 明日方舟时间线')
+@section('title', '登录 · 源石纪年')
 @section('page', 'login')
 
 @php

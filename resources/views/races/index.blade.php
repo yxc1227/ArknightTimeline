@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', '种族 · 明日方舟时间线')
+@section('title', '种族 · 源石纪年')
 @section('page', 'races')
 
 @section('content')

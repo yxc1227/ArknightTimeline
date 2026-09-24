@@ -243,7 +243,7 @@ class OperatorProfileTest extends TestCase
     {
         $html = $this->get(route('timeline.index'))->assertOk()->getContent();
 
-        $this->assertStringContainsString('明日方舟时间线', $html);
+        $this->assertStringContainsString('源石纪年', $html);
         $this->assertStringNotContainsString('泰拉时间线', $html);
     }
 

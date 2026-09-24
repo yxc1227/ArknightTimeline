@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $world->label().'词条 · 明日方舟时间线')
+@section('title', $world->label().'词条 · 源石纪年')
 @section('page', 'terms')
 
 @section('content')

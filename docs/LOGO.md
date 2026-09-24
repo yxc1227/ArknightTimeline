@@ -70,12 +70,12 @@
 {{-- 顶栏：标记是装饰，站点名就在旁边，重复朗读只是噪音 --}}
 <a class="brand" href="{{ route('timeline.index') }}">
     <x-logo class="brand__mark"/>
-    <span>明日方舟时间线</span>
-    <span class="brand__sub">Arknights Timeline ://</span>
+    <span>源石纪年</span>
+    <span class="brand__sub">Originium Chronicle ://</span>
 </a>
 
 {{-- 独立出现（登录卡片、关于页）：给 label --}}
-<x-logo class="logo--lg" label="明日方舟时间线"/>
+<x-logo class="logo--lg" label="源石纪年"/>
 
 {{-- 单色：印刷、水印、浅底区块 --}}
 <x-logo class="logo--ink"/>
