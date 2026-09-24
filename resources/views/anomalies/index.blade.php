@@ -4,7 +4,57 @@
 @section('page', 'anomalies')
 
 @section('content')
-    <div style="flex:1;min-width:0">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    <aside class="sidebar">
+        <form method="GET" action="{{ route('anomalies.index') }}" class="sidebar__form">
+            <x-filter-head :reset-url="route('anomalies.index')"
+                           placeholder="搜索告警正文"
+                           :q="$filters['q']"/>
+
+            <div class="sidebar__scroll">
+                <details class="filter-group" open>
+                    <summary data-en="Type">类型</summary>
+                    <div class="filter-group__body">
+                        <select name="type" data-autosubmit>
+                            <option value="">全部</option>
+                            @foreach (\App\Enums\AnomalyType::cases() as $type)
+                                <option value="{{ $type->value }}" @selected(request('type') === $type->value)>{{ $type->label() }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+
+                <details class="filter-group" open>
+                    <summary data-en="Severity">级别</summary>
+                    <div class="filter-group__body">
+                        <select name="severity" data-autosubmit>
+                            <option value="">全部</option>
+                            @foreach (\App\Enums\AnomalySeverity::cases() as $severity)
+                                <option value="{{ $severity->value }}" @selected(request('severity') === $severity->value)>{{ $severity->label() }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+
+                <details class="filter-group" open>
+                    <summary data-en="Status">状态</summary>
+                    <div class="filter-group__body">
+                        <select name="status" data-autosubmit>
+                            <option value="open" @selected(request('status', 'open') === 'open')>未处置</option>
+                            <option value="resolved" @selected(request('status') === 'resolved')>已解决</option>
+                            <option value="ignored" @selected(request('status') === 'ignored')>已忽略</option>
+                            <option value="all" @selected(request('status') === 'all')>全部</option>
+                        </select>
+                        <div class="faint small" style="margin-top:8px">
+                            缺省只看未处置：销案是自动的，这里剩下的都代表当下仍然存在的问题。
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </form>
+    </aside>
+
+    <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Consistency Inbox">时间线一致性收件箱</span>
@@ -25,36 +75,6 @@
                 @endforeach
                 @if (empty($summary)) <span>NO OPEN ISSUE // 当前没有未处置异常</span> @endif
             </div>
-
-            <form method="GET" class="row" style="align-items:flex-end">
-                <div class="field">
-                    <label>类型</label>
-                    <select name="type" onchange="this.form.submit()">
-                        <option value="">全部</option>
-                        @foreach (\App\Enums\AnomalyType::cases() as $type)
-                            <option value="{{ $type->value }}" @selected(request('type') === $type->value)>{{ $type->label() }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="field">
-                    <label>级别</label>
-                    <select name="severity" onchange="this.form.submit()">
-                        <option value="">全部</option>
-                        @foreach (\App\Enums\AnomalySeverity::cases() as $severity)
-                            <option value="{{ $severity->value }}" @selected(request('severity') === $severity->value)>{{ $severity->label() }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="field">
-                    <label>状态</label>
-                    <select name="status" onchange="this.form.submit()">
-                        <option value="open" @selected(request('status', 'open') === 'open')>未处置</option>
-                        <option value="resolved" @selected(request('status') === 'resolved')>已解决</option>
-                        <option value="ignored" @selected(request('status') === 'ignored')>已忽略</option>
-                        <option value="all" @selected(request('status') === 'all')>全部</option>
-                    </select>
-                </div>
-            </form>
         </div>
 
         <div class="panel">
@@ -109,5 +129,5 @@
 
             {{ $anomalies->links() }}
         </div>
-    </div>
+    </main>
 @endsection

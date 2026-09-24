@@ -101,6 +101,60 @@ class DictionaryPagesTest extends TestCase
     }
 
     /**
+     * 各页的侧栏检索（与时间线同形的那套）：命中只留命中项，
+     * 地名树必须连祖先一起留下 —— 读者要看的是「它挂在树的哪个位置」，
+     * 只给一行孤零零的匹配项，层级信息反而丢了。
+     */
+    public function test_keyword_and_type_filters_narrow_the_dictionary_pages(): void
+    {
+        $this->race('德拉克');
+        $this->race('阿戈尔');
+
+        $this->place('乌萨斯', 'nation');
+        $parent = $this->place('维多利亚', 'nation');
+        $this->place('伦蒂尼姆', 'settlement', $parent);
+        $this->place('测试城');
+
+        $this->term('源石技艺', 'term');
+        // 第二个词条不用「天灾」这类词：它会撞上泰拉切换器的固定文案（「源石与天灾之下的诸国」）
+        $this->term('圣愚', 'concept');
+
+        $this->organization('莱茵生命', 'enterprise');
+        $this->organization('测试商会', 'society');
+
+        // 种族：按名称 / 英文名 / 说明匹配
+        $this->get(route('races.index', ['q' => '德拉克']))
+            ->assertOk()
+            ->assertSee('德拉克')
+            ->assertDontSee('阿戈尔');
+
+        // 地名：命中子节点时父链必须保留
+        $this->get(route('places.index', ['q' => '伦蒂尼姆']))
+            ->assertOk()
+            ->assertSee('伦蒂尼姆')
+            ->assertSee('维多利亚')
+            ->assertDontSee('测试城');
+
+        // 地名：类型筛选同样只留命中项与其祖先
+        $this->get(route('places.index', ['kind' => 'settlement']))
+            ->assertOk()
+            ->assertSee('伦蒂尼姆')
+            ->assertDontSee('乌萨斯');
+
+        // 词条：按分类收敛
+        $this->get(route('terms.index', ['category' => 'term']))
+            ->assertOk()
+            ->assertSee('源石技艺')
+            ->assertDontSee('圣愚');
+
+        // 组织：按类型收敛（政体与地域本来就不在这一页）
+        $this->get(route('organizations.index', ['kind' => 'society']))
+            ->assertOk()
+            ->assertSee('测试商会')
+            ->assertDontSee('莱茵生命');
+    }
+
+    /**
      * 组织按世界分列。
      *
      * 泰拉与塔卫二各有一批自己的组织，混在一页里读者无从判断某个名字属于哪边的历史。

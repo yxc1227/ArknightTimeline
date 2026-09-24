@@ -182,6 +182,20 @@ class TimelinePageTest extends TestCase
             ->assertSee('已录入');
     }
 
+    /** 出处库的侧栏检索：名称 / 编号 / 说明任一命中即算找到。 */
+    public function test_sources_page_keyword_search_narrows_the_library(): void
+    {
+        $this->source('大地巡旅', 'terra-tour-fixture');
+        $this->source('第一章 剧情文本', 'chapter-1');
+
+        $editor = $this->user(UserRole::Editor, 'editor-source-search@example.test');
+
+        $this->actingAs($editor)->get(route('sources.index', ['q' => '大地巡旅']))
+            ->assertOk()
+            ->assertSee('大地巡旅')
+            ->assertDontSee('第一章 剧情文本');
+    }
+
     public function test_source_detail_page_exposes_the_synthesize_entry(): void
     {
         $source = $this->source('主线 · 序章', 'prologue', '泰拉历1096年12月23日，切尔诺伯格事变爆发。');

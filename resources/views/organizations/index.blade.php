@@ -4,7 +4,8 @@
 @section('page', 'organizations')
 
 @section('content')
-    <main class="main main--wide">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    <aside class="sidebar">
         {{--
             世界切换器与时间线、地名页同形。
             组织按世界分列：泰拉与塔卫二各有一批自己的组织（莱茵生命在泰拉、终末地工业在塔卫二），
@@ -30,6 +31,35 @@
 
         <p class="world-switch__tagline faint small">{{ $world->tagline() }}</p>
 
+        <form method="GET" action="{{ route('organizations.index') }}" class="sidebar__form">
+            {{-- 世界必须随表单回传：改关键词 / 类型时不能被送回另一个世界 --}}
+            <input type="hidden" name="world" value="{{ $world->value }}">
+
+            <x-filter-head :reset-url="route('organizations.index', ['world' => $world->value])"
+                           placeholder="搜索名称 / 全称 / 说明"
+                           :q="$filters['q']"/>
+
+            <div class="sidebar__scroll">
+                <details class="filter-group" open>
+                    <summary data-en="Kind">组织类型</summary>
+                    <div class="filter-group__body">
+                        {{-- 政体与地域不在此列：它们有疆域与层级，在地名页 --}}
+                        <select name="kind" data-autosubmit>
+                            <option value="">全部类型</option>
+                            @foreach ($kindOptions as $option)
+                                <option value="{{ $option->value }}" @selected($filters['kind'] === $option->value)>
+                                    {{ $option->label() }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+            </div>
+        </form>
+    </aside>
+
+    {{-- ============================ 组织主栏 ============================ --}}
+    <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Organizations">{{ $world->label() }}组织</span>
@@ -47,6 +77,18 @@
                 会在两页<strong>都</strong>列出（罗德岛协建了终末地工业，就是这种情况），
                 而不是被拆成两份。
             </div>
+
+            @if ($groups === [])
+                <div class="empty">
+                    @if ($filters['q'] || $filters['kind'])
+                        {{-- 「没搜到」与「还没收录」要分开说：前者该调筛选，后者是语料的缺口 --}}
+                        没有符合筛选条件的组织。<br>
+                        <span class="small">换个关键词，或点侧栏「重置」看全部。</span>
+                    @else
+                        尚未收录{{ $world->label() }}的组织。
+                    @endif
+                </div>
+            @endif
 
             @foreach ($groups as $group)
                 <div class="section-label">{{ $group['kind']->label() }}</div>
@@ -95,10 +137,6 @@
                     </div>
                 @endforeach
             @endforeach
-
-            @if ($groups === [])
-                <div class="empty">尚未收录{{ $world->label() }}的组织。</div>
-            @endif
         </div>
     </main>
 @endsection

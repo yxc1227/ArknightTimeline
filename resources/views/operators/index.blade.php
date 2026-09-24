@@ -4,7 +4,9 @@
 @section('page', 'operators')
 
 @section('content')
-    <main class="main main--wide">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    {{-- 与时间线同形：固定头（标题 + 重置 + 关键词）+ 滚动筛选组，名单在右侧主栏 --}}
+    <aside class="sidebar">
         {{--
             世界切换器。
             与时间线同形、同语言：两个世界的名单是**两套独立的人名单**，
@@ -32,6 +34,61 @@
 
         <p class="world-switch__tagline faint small">{{ $world->tagline() }}</p>
 
+        <form method="GET" action="{{ route('operators.index') }}" class="sidebar__form">
+            {{-- 世界与人物类型必须随表单回传：改关键词 / 阵营时不能被送回另一个世界、另一类名单 --}}
+            <input type="hidden" name="world" value="{{ $world->value }}">
+            <input type="hidden" name="kind" value="{{ $filters['kind']->value }}">
+
+            <x-filter-head
+                :reset-url="route('operators.index', ['world' => $world->value, 'kind' => $filters['kind']->value])"
+                placeholder="搜索名称 / 代号 / 头衔 / 种族"
+                :q="$filters['q']"/>
+
+            <div class="sidebar__scroll">
+                <details class="filter-group" open>
+                    <summary data-en="Kind">人物类型</summary>
+                    <div class="filter-group__body">
+                        {{--
+                            人物分三档，页面上分开列：干员有代号、在役于某支队伍；
+                            历史人物有头衔与在位期；剧情人物是当代但非干员的人（组织创办者一类）。
+                            混在一个网格里，读者会分不清谁还在名单上 —— 这正是当初把 kind 分出来的原因。
+                            档数变了时这里不该是第二个要改的地方：选项由枚举生成，不在视图里再抄一遍标签与取值。
+                        --}}
+                        <div class="chips">
+                            @foreach (\App\Enums\CharacterKind::cases() as $option)
+                                <a class="chip" data-clickable="1"
+                                   data-active="{{ $filters['kind']->value === $option->value ? '1' : '0' }}"
+                                   href="{{ route('operators.index', ['world' => $world->value, 'kind' => $option->value]) }}">
+                                    {{ $option->label() }}
+                                    {{ str_pad((string) $counters['kinds'][$option->value], 2, '0', STR_PAD_LEFT) }}
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                </details>
+
+                <details class="filter-group" open>
+                    <summary data-en="Faction">阵营</summary>
+                    <div class="filter-group__body">
+                        {{-- 只列「该世界里这类人物确实归属」的阵营：列一个点进去是空列表的选项没有意义。
+                             阵营选项跟着当前的类型走：历史人物几乎没有阵营归属，
+                             给历史人物列表挂一份「用不到的阵营下拉」只是噪音。 --}}
+                        <select name="faction" data-autosubmit>
+                            <option value="">全部阵营</option>
+                            @foreach ($factions as $faction)
+                                <option value="{{ $faction->id }}" @selected($filters['faction'] === $faction->id)>
+                                    {{ $faction->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+            </div>
+        </form>
+    </aside>
+
+    {{-- ============================ 名单主栏 ============================ --}}
+    <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Operators">{{ $world->label() }}人员简介</span>
@@ -51,67 +108,24 @@
                 —— 每张卡片与详情页都有对应链接。本仓库不复制对方的内容，
                 因为一份落后于对方更新的人物档案，恰恰是本项目最无法追溯的东西。
             </div>
-
-            {{--
-                人物分三档，页面上分开列：
-                干员有代号、在役于某支队伍；历史人物有头衔与在位期；
-                剧情人物是当代但非干员的人（组织创办者一类）。
-                混在一个网格里，读者会分不清谁还在名单上 —— 这正是当初把 kind 分出来的原因。
-
-                三档由枚举生成，不在视图里再抄一遍标签与取值：
-                档数变了（比如再加一档）时，这里不该是第二个要改的地方。
-            --}}
-            <div class="chips" style="margin-bottom:10px">
-                @foreach (\App\Enums\CharacterKind::cases() as $option)
-                    <a class="chip" data-clickable="1"
-                       data-active="{{ $filters['kind'] === $option->value ? '1' : '0' }}"
-                       href="{{ route('operators.index', ['world' => $world->value, 'kind' => $option->value]) }}">
-                        {{ $option->label() }}
-                        {{ str_pad((string) $counters['kinds'][$option->value], 2, '0', STR_PAD_LEFT) }}
-                    </a>
-                @endforeach
-            </div>
-
-            <form method="GET" action="{{ route('operators.index') }}" class="filter-head" style="gap:10px;flex-wrap:wrap">
-                {{-- 世界与人物类型都必须随表单一起回传，否则筛选一下就被送回另一个世界 / 另一类名单 --}}
-                <input type="hidden" name="world" value="{{ $world->value }}">
-                <input type="hidden" name="kind" value="{{ $filters['kind'] }}">
-
-                <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="搜索名称 / 代号 / 头衔 / 种族"
-                       style="flex:1 1 220px;min-width:180px">
-
-                <select name="faction" style="flex:0 1 190px" onchange="this.form.submit()">
-                    <option value="">全部阵营</option>
-                    @foreach ($factions as $faction)
-                        <option value="{{ $faction->id }}" @selected($filters['faction'] === $faction->id)>
-                            {{ $faction->name }}
-                        </option>
-                    @endforeach
-                </select>
-
-                <button class="btn btn--sm" type="submit">筛选</button>
-
-                @if ($filters['q'] || $filters['faction'])
-                    <a class="btn btn--ghost btn--sm"
-                       href="{{ route('operators.index', ['world' => $world->value, 'kind' => $filters['kind']]) }}">
-                        <x-icon name="reset"/>重置
-                    </a>
-                @endif
-            </form>
         </div>
 
         @if ($characters->isEmpty())
             <div class="panel">
                 <div class="empty">
-                    这里还没有收录{{ $world->label() }}的人员。<br>
-                    <span class="small">
-                        @if ($counters['other_world'] > 0)
-                            另一个世界已经收录了 {{ $counters['other_world'] }} 位，
-                            可用上方切换器查看。
-                        @elseif ($filters['q'] || $filters['faction'])
-                            换个关键词，或点「重置」看全部 {{ $counters['total'] }} 位。
-                        @endif
-                    </span>
+                    @if ($filters['q'] || $filters['faction'])
+                        {{-- 「没搜到」与「根本没有人」要分开说：前者该调筛选，后者该去别的世界看 --}}
+                        没有符合筛选条件的{{ $world->label() }}人员。<br>
+                        <span class="small">换个关键词，或点侧栏「重置」看全部。</span>
+                    @else
+                        这里还没有收录{{ $world->label() }}的人员。<br>
+                        <span class="small">
+                            @if ($counters['other_world'] > 0)
+                                另一个世界已经收录了 {{ $counters['other_world'] }} 位，
+                                可用侧栏切换器查看。
+                            @endif
+                        </span>
+                    @endif
                 </div>
             </div>
         @else
@@ -143,7 +157,7 @@
                                  每个都能点着筛 —— 多记的那一条若点不动，读者读不出它的用处。 --}}
                             @foreach ($character->factions as $faction)
                                 <a class="chip" data-clickable="1"
-                                   href="{{ route('operators.index', ['world' => $world->value, 'kind' => $filters['kind'], 'faction' => $faction->id]) }}">
+                                   href="{{ route('operators.index', ['world' => $world->value, 'kind' => $filters['kind']->value, 'faction' => $faction->id]) }}">
                                     {{ $faction->name }}
                                 </a>
                             @endforeach

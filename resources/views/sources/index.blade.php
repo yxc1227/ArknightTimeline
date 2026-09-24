@@ -4,7 +4,31 @@
 @section('page', 'sources')
 
 @section('content')
-    <div style="flex:1;min-width:0">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    <aside class="sidebar">
+        <form method="GET" action="{{ route('sources.index') }}" class="sidebar__form">
+            <x-filter-head :reset-url="route('sources.index')"
+                           placeholder="搜索名称 / 编号 / 说明"
+                           :q="$filters['q']"/>
+
+            <div class="sidebar__scroll">
+                <details class="filter-group" open>
+                    <summary data-en="Type">载体类型</summary>
+                    <div class="filter-group__body">
+                        <select name="type" data-autosubmit>
+                            <option value="">全部</option>
+                            @foreach ($types as $value => $label)
+                                <option value="{{ $value }}" @selected($filters['type'] === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+            </div>
+        </form>
+    </aside>
+
+    {{-- ============================ 语料库主栏 ============================ --}}
+    <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Source Library">出处与语料库</span>
@@ -15,18 +39,6 @@
                 「原文」字段是整个溯源机制的基础 —— 提交引用时记录的字符偏移就是相对这段文本计算的。
                 为了让人工能核验 AI 的产出，建议把主线章节、活动剧情文本、设定集段落完整录入。
             </div>
-
-            <form method="GET" class="row" style="align-items:flex-end">
-                <div class="field" style="max-width:220px">
-                    <label>载体类型</label>
-                    <select name="type" onchange="this.form.submit()">
-                        <option value="">全部</option>
-                        @foreach ($types as $value => $label)
-                            <option value="{{ $value }}" @selected(request('type') === $value)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            </form>
         </div>
 
         <div class="panel">
@@ -75,5 +87,5 @@
 
             {{ $sources->links() }}
         </div>
-    </div>
+    </main>
 @endsection

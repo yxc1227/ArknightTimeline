@@ -21,9 +21,18 @@ class SourceController extends Controller
 {
     public function index(Request $request): View
     {
+        // 侧栏筛选（与时间线同形）。类型不在枚举里时按「未筛选」处理：
+        // 手改 URL 得到的是完整列表，而不是一张谁也不明白为什么空着的表
+        $type = SourceType::tryFrom((string) $request->string('type')->value()) ?? null;
+        $keyword = trim((string) $request->string('q')->value());
+
         $sources = Source::query()
             ->withCount('events')
-            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')->value()))
+            ->when($type !== null, fn ($query) => $query->where('type', $type->value))
+            ->when($keyword !== '', fn ($query) => $query->where(fn ($search) => $search
+                ->where('name', 'like', "%{$keyword}%")
+                ->orWhere('code', 'like', "%{$keyword}%")
+                ->orWhere('description', 'like', "%{$keyword}%")))
             ->orderBy('type')
             ->orderBy('release_order')
             ->paginate(50)
@@ -33,6 +42,7 @@ class SourceController extends Controller
             // 语料库列表刻意不按世界过滤：出处是「我们手上有哪些资料」，
             // 两个世界的资料同屏可见才便于盘点（行内会标出各自的世界）
             'sources' => $sources,
+            'filters' => ['q' => $keyword, 'type' => $type?->value],
             'types' => SourceType::options(),
             'worlds' => World::options(),
             'eras' => Era::ofWorld(World::fromRequest($request->string('world')->value()))->leaves()->ordered()->get(),

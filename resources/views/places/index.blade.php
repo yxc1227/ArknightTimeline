@@ -4,7 +4,8 @@
 @section('page', 'places')
 
 @section('content')
-    <main class="main main--wide">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    <aside class="sidebar">
         {{--
             世界切换器与时间线、干员简介同形。
             地名是四个大类里**唯一分世界**的一类（四号谷地不在泰拉），因此只有这一页需要它。
@@ -29,6 +30,34 @@
 
         <p class="world-switch__tagline faint small">{{ $world->tagline() }}</p>
 
+        <form method="GET" action="{{ route('places.index') }}" class="sidebar__form">
+            {{-- 世界必须随表单回传：改关键词 / 类型时不能被送回另一个世界 --}}
+            <input type="hidden" name="world" value="{{ $world->value }}">
+
+            <x-filter-head :reset-url="route('places.index', ['world' => $world->value])"
+                           placeholder="搜索名称 / 别名 / 说明"
+                           :q="$filters['q']"/>
+
+            <div class="sidebar__scroll">
+                <details class="filter-group" open>
+                    <summary data-en="Kind">地名类型</summary>
+                    <div class="filter-group__body">
+                        {{-- 别名是数据而不是匹配规则，因此搜索同样认别名：
+                             条目里写「乌萨斯」时，读者就该能靠它搜到「乌萨斯帝国」 --}}
+                        <select name="kind" data-autosubmit>
+                            <option value="">全部类型</option>
+                            @foreach ($kinds as $value => $label)
+                                <option value="{{ $value }}" @selected($filters['kind'] === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+            </div>
+        </form>
+    </aside>
+
+    {{-- ============================ 地名主栏 ============================ --}}
+    <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Places">{{ $world->label() }}地名</span>
@@ -45,7 +74,15 @@
             </div>
 
             @if ($places === [])
-                <div class="empty">尚未收录{{ $world->label() }}的地名。</div>
+                <div class="empty">
+                    @if ($filtered)
+                        {{-- 「没搜到」与「还没收录」要分开说：前者该调筛选，后者是语料的缺口 --}}
+                        没有符合筛选条件的地名。<br>
+                        <span class="small">换个关键词，或点侧栏「重置」看全部。</span>
+                    @else
+                        尚未收录{{ $world->label() }}的地名。
+                    @endif
+                </div>
             @else
                 <table class="tbl">
                     <thead>
@@ -73,7 +110,11 @@
                                         <span class="faint small">又称 {{ implode('、', $place->aliases) }}</span>
                                     @endif
                                     @if ($node['depth'] === 0 && $place->children->isNotEmpty())
-                                        <span class="faint small">（{{ $place->children->count() }} 个下辖）</span>
+                                        @unless ($filtered)
+                                            {{-- 这个数字说的是「全部下辖」；树被筛过之后行数对不上它，
+                                                 与其让读者对着行数数不齐，不如在筛选中把它收起来 --}}
+                                            <span class="faint small">（{{ $place->children->count() }} 个下辖）</span>
+                                        @endunless
                                     @endif
                                 </div>
                                 @if (filled($place->description))

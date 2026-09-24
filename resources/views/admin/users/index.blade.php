@@ -32,22 +32,16 @@
 @section('content')
     {{-- ============================ 搜索与筛选 ============================ --}}
     <aside class="sidebar">
-        <form method="GET" action="{{ route('admin.users.index') }}" class="sidebar__form" id="user-filter-form">
+        {{-- data-loading-target：提交前给表格盖半透明，加载态只能在这个阶段表达（通用绑定读取它） --}}
+        <form method="GET" action="{{ route('admin.users.index') }}" class="sidebar__form"
+              data-loading-target="#users-table-wrap">
             {{-- 排序状态随筛选一起提交，否则改动筛选会把排序重置掉 --}}
             <input type="hidden" name="sort" value="{{ $sort }}">
             <input type="hidden" name="direction" value="{{ $direction }}">
 
-            <div class="sidebar__head">
-                <div class="filter-head">
-                    <strong data-en="Filter">搜索与筛选</strong>
-                    <a class="btn btn--ghost btn--sm" href="{{ route('admin.users.index') }}">重置</a>
-                </div>
-
-                <div class="field" style="margin-bottom:0">
-                    <input type="search" name="q" value="{{ $filters['q'] }}"
-                           placeholder="登录名 / 昵称 / 邮箱" data-autosubmit>
-                </div>
-            </div>
+            <x-filter-head :reset-url="route('admin.users.index')"
+                           placeholder="登录名 / 昵称 / 邮箱"
+                           :q="$filters['q']"/>
 
             <div class="sidebar__scroll">
                 <details class="filter-group" open>

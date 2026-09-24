@@ -31,16 +31,23 @@ class AiProposalController extends Controller
     {
         Gate::authorize('viewAny', AiProposal::class);
 
+        // 状态 / 出处 / 批次在侧栏各有自己的筛选项，关键词只搜标题与摘要
+        $keyword = trim((string) $request->string('q')->value());
+
         $proposals = AiProposal::query()
             ->with(['source', 'era', 'duplicateOf', 'reviewer'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->value()))
             ->when($request->filled('batch_id'), fn ($q) => $q->where('batch_id', $request->string('batch_id')->value()))
             ->when($request->filled('source_id'), fn ($q) => $q->where('source_id', $request->integer('source_id')))
+            ->when($keyword !== '', fn ($query) => $query->where(fn ($search) => $search
+                ->where('title', 'like', "%{$keyword}%")
+                ->orWhere('summary', 'like', "%{$keyword}%")))
             ->latest()
             ->paginate(30)
             ->withQueryString();
 
         return view('proposals.index', [
+            'filters' => ['q' => $keyword],
             'proposals' => $proposals,
             'counters' => [
                 'pending' => AiProposal::where('status', ProposalStatus::Pending->value)->count(),

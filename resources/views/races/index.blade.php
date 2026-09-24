@@ -4,7 +4,18 @@
 @section('page', 'races')
 
 @section('content')
-    <main class="main main--wide">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    {{-- 种族是共享维度、不分世界，侧栏因此只有关键词检索，没有切换器 --}}
+    <aside class="sidebar">
+        <form method="GET" action="{{ route('races.index') }}" class="sidebar__form">
+            <x-filter-head :reset-url="route('races.index')"
+                           placeholder="搜索名称 / 英文名 / 说明"
+                           :q="$filters['q']"/>
+        </form>
+    </aside>
+
+    {{-- ============================ 种族主栏 ============================ --}}
+    <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Races">种族</span>
@@ -20,7 +31,19 @@
                 只登记名称与人物归属，描述留空 —— <strong>宁可缺失也不要写错</strong>。
             </div>
 
-            @forelse ($races as $race)
+            @if ($races->isEmpty())
+                <div class="empty">
+                    @if ($filters['q'])
+                        {{-- 「没搜到」与「还没收录」要分开说：前者该换关键词，后者是语料的缺口 --}}
+                        没有符合筛选条件的种族。<br>
+                        <span class="small">换个关键词，或点侧栏「重置」看全部。</span>
+                    @else
+                        尚未收录任何种族。
+                    @endif
+                </div>
+            @endif
+
+            @foreach ($races as $race)
                 <div class="card" id="race-{{ $race->slug }}">
                     <div class="row" style="align-items:baseline">
                         <strong>{{ $race->name }}</strong>
@@ -41,9 +64,7 @@
                         </p>
                     @endif
                 </div>
-            @empty
-                <div class="empty">尚未收录任何种族。</div>
-            @endforelse
+            @endforeach
         </div>
     </main>
 @endsection

@@ -4,7 +4,50 @@
 @section('page', 'proposals')
 
 @section('content')
-    <div style="flex:1;min-width:0">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    <aside class="sidebar">
+        <form method="GET" action="{{ route('proposals.index') }}" class="sidebar__form">
+            <x-filter-head :reset-url="route('proposals.index')"
+                           placeholder="搜索标题 / 摘要"
+                           :q="$filters['q']"/>
+
+            <div class="sidebar__scroll">
+                <details class="filter-group" open>
+                    <summary data-en="Status">状态</summary>
+                    <div class="filter-group__body">
+                        <select name="status" data-autosubmit>
+                            <option value="">全部</option>
+                            @foreach (['pending' => '待审阅', 'duplicate' => '疑似重复', 'unverified' => '出处缺失', 'applied' => '已入库', 'rejected' => '已驳回'] as $value => $label)
+                                <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+
+                <details class="filter-group" open>
+                    <summary data-en="Source">出处</summary>
+                    <div class="filter-group__body">
+                        <select name="source_id" data-autosubmit>
+                            <option value="">全部</option>
+                            @foreach ($sources as $source)
+                                <option value="{{ $source->id }}" @selected((int) request('source_id') === $source->id)>{{ $source->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+
+                <details class="filter-group">
+                    <summary data-en="Batch">批次</summary>
+                    <div class="filter-group__body">
+                        {{-- 批号是一次 AI 梳理的唯一标识：排查「某一批为什么错了」时按它收敛 --}}
+                        <input type="text" name="batch_id" value="{{ request('batch_id') }}" placeholder="batch id" data-autosubmit>
+                    </div>
+                </details>
+            </div>
+        </form>
+    </aside>
+
+    <main class="main">
 
         {{-- ===================== 触发 AI 梳理 ===================== --}}
         <div class="panel">
@@ -85,34 +128,13 @@
                 </span>
             </div>
 
-            <form method="GET" class="row" style="align-items:flex-end;margin-bottom:12px">
-                <div class="field">
-                    <label>状态</label>
-                    <select name="status" onchange="this.form.submit()">
-                        <option value="">全部</option>
-                        @foreach (['pending' => '待审阅', 'duplicate' => '疑似重复', 'unverified' => '出处缺失', 'applied' => '已入库', 'rejected' => '已驳回'] as $value => $label)
-                            <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
-                        @endforeach
-                    </select>
+            {{-- 全选与批量采纳是**操作**不是筛选：筛选在侧栏，这里只对当前页做批量处理 --}}
+            @if ($canReview)
+                <div class="row" style="margin-bottom:12px">
+                    <label class="check"><input type="checkbox" id="pick-all"> 全选本页</label>
+                    <button type="button" class="btn" id="bulk-approve">批量采纳</button>
                 </div>
-                <div class="field">
-                    <label>出处</label>
-                    <select name="source_id" onchange="this.form.submit()">
-                        <option value="">全部</option>
-                        @foreach ($sources as $source)
-                            <option value="{{ $source->id }}" @selected((int) request('source_id') === $source->id)>{{ $source->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                @if ($canReview)
-                    <div class="field" style="max-width:190px">
-                        <label class="check"><input type="checkbox" id="pick-all"> 全选本页</label>
-                    </div>
-                    <div style="flex:0 0 auto">
-                        <button type="button" class="btn" id="bulk-approve">批量采纳</button>
-                    </div>
-                @endif
-            </form>
+            @endif
 
             <div id="proposals-host">
                 @forelse ($proposals as $proposal)
@@ -293,5 +315,5 @@
 
             {{ $proposals->links() }}
         </div>
-    </div>
+    </main>
 @endsection

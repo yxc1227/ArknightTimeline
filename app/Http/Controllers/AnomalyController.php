@@ -23,11 +23,15 @@ class AnomalyController extends Controller
 
     public function index(Request $request): View
     {
+        // 类型 / 级别 / 状态在侧栏各有自己的下拉，关键词只搜告警正文，各管各的维度
+        $keyword = trim((string) $request->string('q')->value());
+
         $anomalies = TimelineAnomaly::query()
             ->with(['event', 'relatedEvent'])
             ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')->value()))
             ->when($request->filled('severity'), fn ($q) => $q->where('severity', $request->string('severity')->value()))
             ->when($request->input('status', 'open') !== 'all', fn ($q) => $q->where('status', $request->input('status', 'open')))
+            ->when($keyword !== '', fn ($query) => $query->where('message', 'like', "%{$keyword}%"))
             ->orderByRaw("case severity when 'error' then 0 when 'warning' then 1 else 2 end")
             ->latest()
             ->paginate(40)
@@ -37,6 +41,7 @@ class AnomalyController extends Controller
             'anomalies' => $anomalies,
             'summary' => $this->checker->openSummary(),
             'canReview' => $request->user()?->canReview() ?? false,
+            'filters' => ['q' => $keyword],
         ]);
     }
 

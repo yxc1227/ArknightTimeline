@@ -1662,30 +1662,7 @@
 
         /* ---------------------------------------------------------- 筛选 */
 
-        function submitFilters(form) {
-            // 服务端渲染的列表，加载态只能在跳转前用一个视觉占位表达
-            $('#users-table-wrap')?.classList.add('is-loading');
-            form.submit();
-        }
-
-        function bindFilters() {
-            const form = $('#user-filter-form');
-            if (!form) return;
-
-            $$('[data-autosubmit]', form).forEach((field) => {
-                if (field.tagName === 'SELECT') {
-                    field.addEventListener('change', () => submitFilters(form));
-                    return;
-                }
-
-                // 文本框用防抖，并且只在值真的变了才提交 ——
-                // 否则「打字后又删回原样」也会触发一次无意义的整页刷新
-                const initial = field.value;
-                field.addEventListener('input', debounce(() => {
-                    if (field.value !== initial) submitFilters(form);
-                }, 600));
-            });
-        }
+        // 筛选表单的绑定在 SidebarForms（全站服务端侧栏统一走它），这里不再各绑一份
 
         /* ---------------------------------------------------------- 批量选择 */
 
@@ -2063,8 +2040,6 @@
         }
 
         function boot() {
-            bindFilters();
-
             // 详情页没有表格与批量栏，这些绑定各自做了空值保护
             bindSelection();
             bindActions();
@@ -2220,9 +2195,51 @@
         return { boot };
     })();
 
+    /* ------------------------------------------------------------------ 服务端筛选侧栏 */
+
+    // 账号管理开创、现在全部列表页共用的形态：GET 表单包住三段式侧栏，
+    // select 改动即提交，文本输入防抖后提交（值没变就不提交）。
+    // 时间线不走这里 —— 它的筛选是纯客户端的 data-filter，见 Timeline.bindFilters。
+    const SidebarForms = (() => {
+        function bind() {
+            $$('form.sidebar__form').forEach((form) => {
+                if (form.dataset.bound) return;
+                form.dataset.bound = '1';
+
+                // data-loading-target 指向提交时要盖半透明的列表容器（如账号表）；
+                // 没有就不做加载态 —— 整页跳转本身就是反馈
+                const loading = form.dataset.loadingTarget ? $(form.dataset.loadingTarget) : null;
+
+                const submit = () => {
+                    loading?.classList.add('is-loading');
+                    form.submit();
+                };
+
+                $$('[data-autosubmit]', form).forEach((field) => {
+                    if (field.tagName === 'SELECT') {
+                        field.addEventListener('change', submit);
+                        return;
+                    }
+
+                    // 文本框用防抖，并且只在值真的变了才提交 ——
+                    // 否则「打字后又删回原样」也会触发一次无意义的整页刷新
+                    const initial = field.value;
+                    field.addEventListener('input', debounce(() => {
+                        if (field.value !== initial) submit();
+                    }, 600));
+                });
+            });
+        }
+
+        return { bind };
+    })();
+
     /* ------------------------------------------------------------------ 分派 */
 
     document.addEventListener('DOMContentLoaded', () => {
+        // 侧栏表单先于页面模块统一绑定，各模块不再重复实现
+        SidebarForms.bind();
+
         if (PAGE === 'timeline') Timeline.boot();
         if (PAGE === 'proposals') Proposals.boot();
         if (PAGE === 'anomalies') Anomalies.boot();

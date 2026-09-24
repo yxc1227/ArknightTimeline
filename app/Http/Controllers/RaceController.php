@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Race;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
@@ -15,10 +16,14 @@ use Illuminate\View\View;
  */
 class RaceController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        // 种族不分世界，搜索同样不分世界：一份字典查两边的历史
+        $keyword = trim((string) $request->string('q')->value());
+
         return view('races.index', [
-            'races' => $this->races(),
+            'races' => $this->races($keyword),
+            'filters' => ['q' => $keyword],
         ]);
     }
 
@@ -30,10 +35,14 @@ class RaceController extends Controller
      *
      * @return Collection<int, Race>
      */
-    private function races(): Collection
+    private function races(string $keyword = ''): Collection
     {
         return Race::query()
             ->withCount('characters')
+            ->when($keyword !== '', fn ($query) => $query->where(fn ($search) => $search
+                ->where('name', 'like', "%{$keyword}%")
+                ->orWhere('english', 'like', "%{$keyword}%")
+                ->orWhere('description', 'like', "%{$keyword}%")))
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();

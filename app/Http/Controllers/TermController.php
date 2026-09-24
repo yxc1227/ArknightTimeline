@@ -31,7 +31,14 @@ class TermController extends Controller
     public function index(Request $request): View
     {
         $world = World::fromRequest($request->string('world')->value());
-        $terms = $this->terms($world);
+
+        // 侧栏筛选（与时间线同形）。category 不在字典里时按「未筛选」处理：
+        // 手改 URL 得到的是完整列表，而不是一张谁也不明白为什么空着的列表
+        $categoryRaw = $request->string('category')->value();
+        $category = array_key_exists($categoryRaw, Term::CATEGORIES) ? $categoryRaw : null;
+        $keyword = trim((string) $request->string('q')->value());
+
+        $terms = $this->terms($world, $keyword, $category);
 
         return view('terms.index', [
             'world' => $world,
@@ -39,6 +46,8 @@ class TermController extends Controller
             'terms' => $terms,
             'visible' => $terms->flatten()->count(),
             'shared' => Term::whereNull('world')->count(),
+            'categories' => Term::CATEGORIES,
+            'filters' => ['q' => $keyword, 'category' => $category],
         ]);
     }
 
@@ -49,9 +58,14 @@ class TermController extends Controller
      *
      * @return Collection<string, Collection<int, Term>>
      */
-    private function terms(World $world): Collection
+    private function terms(World $world, string $keyword = '', ?string $category = null): Collection
     {
         return Term::visibleIn($world)
+            ->when($category !== null, fn ($query) => $query->where('category', $category))
+            ->when($keyword !== '', fn ($query) => $query->where(fn ($search) => $search
+                ->where('name', 'like', "%{$keyword}%")
+                ->orWhere('origin', 'like', "%{$keyword}%")
+                ->orWhere('definition', 'like', "%{$keyword}%")))
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()

@@ -29,13 +29,27 @@ class OrganizationController extends Controller
     public function index(Request $request): View
     {
         $world = World::fromRequest($request->string('world')->value());
-        $organizations = $this->organizations($world);
+
+        // 侧栏筛选（与时间线同形）。kind 只认组织类：政体与地域在地名页，
+        // 拿它们筛这一页只会得到一张谁也不明白为什么空着的列表
+        $kind = FactionKind::tryFrom((string) $request->string('kind')->value());
+        if ($kind !== null && ! in_array($kind->value, FactionKind::organizationValues(), true)) {
+            $kind = null;
+        }
+
+        $keyword = trim((string) $request->string('q')->value());
+
+        $organizations = $this->organizations($world, $keyword, $kind);
 
         return view('organizations.index', [
             'world' => $world,
             'worlds' => World::switcherOptions(),
             'groups' => $this->groups($organizations),
             'total' => $organizations->count(),
+            // 下拉选项固定取组织类全集：跟着当前结果动态生成的话，
+            // 「筛到只剩一种类型」之后下拉里也只剩那一种，想换回去只能靠重置
+            'kindOptions' => FactionKind::organizationOrder(),
+            'filters' => ['q' => $keyword, 'kind' => $kind?->value],
         ]);
     }
 
@@ -44,10 +58,15 @@ class OrganizationController extends Controller
      *
      * @return Collection<int, Faction>
      */
-    private function organizations(World $world): Collection
+    private function organizations(World $world, string $keyword = '', ?FactionKind $kind = null): Collection
     {
         return Faction::query()
             ->organizations()
+            ->when($kind !== null, fn ($query) => $query->where('kind', $kind->value))
+            ->when($keyword !== '', fn ($query) => $query->where(fn ($search) => $search
+                ->where('name', 'like', "%{$keyword}%")
+                ->orWhere('full_name', 'like', "%{$keyword}%")
+                ->orWhere('description', 'like', "%{$keyword}%")))
             // children 供「下属 …」显示；
             // parent 的计数同样要预载 —— 归属推导要沿上级链走，
             // 上级身上没有计数就会各自回查一次，而「内部部门」正好都要走这一步

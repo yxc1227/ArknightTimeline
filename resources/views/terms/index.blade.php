@@ -4,7 +4,8 @@
 @section('page', 'terms')
 
 @section('content')
-    <main class="main main--wide">
+    {{-- ============================ 检索与筛选侧栏 ============================ --}}
+    <aside class="sidebar">
         {{-- 世界切换器与时间线、地名、组织页同形 --}}
         <div class="world-switch">
             @foreach ($worlds as $option)
@@ -26,6 +27,32 @@
 
         <p class="world-switch__tagline faint small">{{ $world->tagline() }}</p>
 
+        <form method="GET" action="{{ route('terms.index') }}" class="sidebar__form">
+            {{-- 世界必须随表单回传：改关键词 / 分类时不能被送回另一个世界 --}}
+            <input type="hidden" name="world" value="{{ $world->value }}">
+
+            <x-filter-head :reset-url="route('terms.index', ['world' => $world->value])"
+                           placeholder="搜索名称 / 出处 / 释义"
+                           :q="$filters['q']"/>
+
+            <div class="sidebar__scroll">
+                <details class="filter-group" open>
+                    <summary data-en="Category">分类</summary>
+                    <div class="filter-group__body">
+                        <select name="category" data-autosubmit>
+                            <option value="">全部分类</option>
+                            @foreach ($categories as $value => $label)
+                                <option value="{{ $value }}" @selected($filters['category'] === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </details>
+            </div>
+        </form>
+    </aside>
+
+    {{-- ============================ 词条主栏 ============================ --}}
+    <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Terms">{{ $world->label() }}词条</span>
@@ -65,13 +92,18 @@
                     </div>
                 @endforeach
             @empty
-                {{-- 空页要说清**为什么空**：否则读者会以为这一页坏了 --}}
+                {{-- 空页要说清**为什么空**：没搜到该调筛选，没收录是语料的缺口，混在一起读者会以为页面坏了 --}}
                 <div class="empty">
-                    本仓库尚未收录{{ $world->label() }}的词条。<br>
-                    <span class="small">
-                        现有条目全部出自《大地巡旅》—— 一部<strong>泰拉视角</strong>的著作，
-                        因此都归在泰拉名下；塔卫二的词条等对应的出处录入后补充。
-                    </span>
+                    @if ($filters['q'] || $filters['category'])
+                        没有符合筛选条件的词条。<br>
+                        <span class="small">换个关键词，或点侧栏「重置」看全部。</span>
+                    @else
+                        本仓库尚未收录{{ $world->label() }}的词条。<br>
+                        <span class="small">
+                            现有条目全部出自《大地巡旅》—— 一部<strong>泰拉视角</strong>的著作，
+                            因此都归在泰拉名下；塔卫二的词条等对应的出处录入后补充。
+                        </span>
+                    @endif
                 </div>
             @endforelse
         </div>
