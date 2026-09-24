@@ -48,27 +48,31 @@
             读者在条目里碰到的是**具体一类**名词：地点、组织、种族、术语各是一个问题，
             给它们各一个入口，才不用先猜它被归在哪一类。
 
-            这四个刻意**不配图标**：注册表里现有图标各有既定的单一含义
-            （`operators` 是干员、`account` 是账号…），借来当「组织」「种族」的图标会破坏
-            「一枚图标一个意思」这条规矩；而随手画四个新图标，又会绕开图标表的导出流程。
-            等图标表补上对应的四枚再配 —— 在那之前留空比配错好。
+            四枚图标与四类一一对应，且按「提问」画而不是画成同一个「词典」的样子
+            （地名 = 定位、组织 = 旗帜、种族 = 谱系、词条 = 条目）——
+            它们在这里并排出现，若都长成一本书，图标就只是装饰了。
+            下方列表里其余部分刻意**不**配图标，理由见各自的注释。
         --}}
         <a href="{{ route('places.index') }}" class="{{ request()->routeIs('places.*') ? 'is-active' : '' }}">
+            <x-icon name="places" class="icon--lg"/>
             <span class="nav__en">Places</span>
             <span class="nav__zh">地名</span>
         </a>
 
         <a href="{{ route('organizations.index') }}" class="{{ request()->routeIs('organizations.*') ? 'is-active' : '' }}">
+            <x-icon name="organizations" class="icon--lg"/>
             <span class="nav__en">Org</span>
             <span class="nav__zh">组织</span>
         </a>
 
         <a href="{{ route('races.index') }}" class="{{ request()->routeIs('races.*') ? 'is-active' : '' }}">
+            <x-icon name="races" class="icon--lg"/>
             <span class="nav__en">Races</span>
             <span class="nav__zh">种族</span>
         </a>
 
         <a href="{{ route('terms.index') }}" class="{{ request()->routeIs('terms.*') ? 'is-active' : '' }}">
+            <x-icon name="terms" class="icon--lg"/>
             <span class="nav__en">Terms</span>
             <span class="nav__zh">词条</span>
         </a>
