@@ -94,7 +94,9 @@
                     @else
                         —
                     @endif
-                    <span class="faint small">（字典未收录即留空，宁可缺失也不要写错）</span>
+                    {{-- 留空有两种情形：字典没收录，或官方资料本身就写着「未公开」
+                         （阿戈尔系与炎-岁那几位都是后者）。两者都不该被填上 --}}
+                    <span class="faint small">（字典未收录、或官方资料标为「未公开」时留空 —— 宁可缺失也不要写错）</span>
                 </dd>
 
                 @if (filled($character->title) || $character->reign_start_index !== null)
