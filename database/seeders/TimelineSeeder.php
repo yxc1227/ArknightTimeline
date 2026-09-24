@@ -30,6 +30,7 @@ use App\Support\TerraTourCorpus;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Generator;
 
 /**
  * 起始语料。
@@ -339,6 +340,28 @@ class TimelineSeeder extends Seeder
             ['name' => '联盟工团', 'kind' => 'society', 'color' => '#8a9aa8', 'description' => '塔卫二上的生产与开拓组织，四号谷地最初由其选定为生产开拓区域。'],
             ['name' => '天使', 'kind' => 'military', 'color' => '#e2e8f0', 'description' => '塔卫二的主要敌对势力，第一次与第二次天使战争均与其进犯有关。'],
             ['name' => '裂地者', 'kind' => 'society', 'color' => '#f87171', 'description' => '雅各布·迈森手下的匪帮，后被文明环带摧毁。社区资料中亦写作「掠地者」，两种写法并存。'],
+
+            /*
+             * 以下九个势力来自 `docs/fz-干员一览.json`（终末地 Wiki 的干员名单，2026-09-24 抓取）。
+             * 那份名单只回答「谁属于哪个势力」，不含任何关于这些势力本身的说明，
+             * 因此这里**只登记名字与归属，说明一栏留空** —— 这不是偷懒：
+             * 这条数据的全部出处就是名单里的一个名字，多写一个字都是编。
+             *
+             * kind 分两档：
+             *  - 名字自己说出来的（「科学院」是机构、「铁誓军」是武装）照名字归类；
+             *  - 名字没说的（塞什卡、众生长地）按**最保守的「团体」**登记 ——
+             *    名单能证明的只有「它是有成员的团体」，至于是不是企业 / 武装 / 政体，不猜。
+             *    留在「未归类」不是更诚实的选项：那是一个待办状态，本项目不许它长期存在。
+             */
+            ['name' => '宏山科学院', 'kind' => 'agency'],
+            ['name' => '环塔商会', 'kind' => 'society'],
+            ['name' => '狼群氏族', 'kind' => 'society'],
+            ['name' => '塞什卡', 'kind' => 'society'],
+            ['name' => '众生长地', 'kind' => 'society'],
+            ['name' => '铁誓军', 'kind' => 'military'],
+            ['name' => '寂语修会', 'kind' => 'society'],
+            ['name' => '清波寨', 'kind' => 'society'],
+            ['name' => '应龙特勤队', 'kind' => 'military'],
 
             /*
              * 文明环带是**地域**而不是组织：它是塔卫二上的人类聚居带（四号谷地位于其边缘地区），
@@ -2075,37 +2098,36 @@ TXT,
     ];
 
     /**
-     * 泰拉干员名单：`docs/prts-干员一览.json`（PRTS「干员一览」的导出）。
+     * 终末地名单里的人物写法 → 本仓库的人物名。
      *
-     * 这是**核对与补全**，不是搬运：只取四项结构化事实 —— 中文名 / 英文代号 / 种族 / 势力。
-     * 简介正文、星级、职业、数值一律不入库：完整档案在对方站点，
-     * 而人物的 `description` 永远由本仓库撰写，这里一律留空（页面显示为「待补」）。
+     * 名单把管理员按性别拆成两行（管理员·男 / 管理员·女，共用英文代号 Endministrator），
+     * 而本仓库的「管理员」是同一个人 —— 三行并排出现只会让读者困惑。
+     * 这里把两个变体都指回那一条。按英文代号去重挡住的是「变体之间互相重复」，
+     * 这张表挡住的是「变体与本仓库已有的条目重复」。
+     */
+    private const FZ_NAME_ALIASES = [
+        '管理员·男' => '管理员',
+        '管理员·女' => '管理员',
+    ];
+
+    /**
+     * 干员名单：`docs/prts-干员一览.json`（泰拉 ← PRTS）与
+     * `docs/fz-干员一览.json`（塔卫二 ← 终末地 Wiki fz.wiki）。
      *
-     * 数据源是**签入仓库的一份导出**而不是运行时抓取：运行环境没有外网，
+     * 这是**核对与补全**，不是搬运：只取结构化事实 —— 中文名 / 英文代号 / 种族 / 势力
+     * （PRTS 另有出身地）。简介正文、星级、职业、武器、元素与数值一律不入库：
+     * 完整档案在对方站点，而人物的 `description` 永远由本仓库撰写，这里一律留空
+     * （页面显示为「待补」）。
+     *
+     * 数据源是**签入仓库的导出**而不是运行时抓取：运行环境没有外网，
      * 而且种子必须可复现 —— 一次网络抖动不该让今天灌出来的库与昨天的不一样。
-     * 代价是它是快照：要更新，重新导出那份文件即可（导出的日期见文件本身）。
+     * 代价是它们是快照：要更新，重新导出那份文件即可（导出的日期见文件本身）。
      *
      * **只新增、不覆盖**：已有人员的字段是人工核过的（其中一批正是对着 PRTS 逐条核的），
      * 让一份批量导出把它们冲掉是本末倒置。
      */
     private function seedOperatorRoster(): void
     {
-        $path = base_path('docs/prts-干员一览.json');
-
-        if (! is_file($path)) {
-            $this->command?->warn('未找到 docs/prts-干员一览.json，跳过干员名单。');
-
-            return;
-        }
-
-        $rows = json_decode((string) file_get_contents($path), true);
-
-        if (! is_array($rows)) {
-            $this->command?->warn('docs/prts-干员一览.json 不是合法 JSON，跳过干员名单。');
-
-            return;
-        }
-
         $factions = Faction::pluck('id', 'name');
         $races = Race::pluck('id', 'name');
         $places = Place::get();
@@ -2115,58 +2137,36 @@ TXT,
         $order = (int) Character::max('sort_order') + 1;
         $added = 0;
         $enriched = 0;
+        $skipped = [];
 
-        foreach ($rows as $row) {
-            $name = trim((string) ($row['zh'] ?? ''));
-
-            if ($name === '') {
-                continue;
-            }
-
-            $codename = trim((string) ($row['en'] ?? ''));
-            $birthPlace = trim((string) ($row['birth_place'] ?? ''));
-            $affiliations = $this->rosterAffiliations($row, $factions);
-
+        foreach ($this->rosterEntries($factions, $skipped) as $entry) {
             /** @var Character|null $character */
-            $character = $known->get($name);
+            $character = $known->get($entry['name']);
 
             if ($character !== null) {
                 $enriched++;
-
-                /*
-                 * 已有条目：**只补不覆盖**。
-                 *
-                 * 人工核过的东西（简介、代号、种族）一律不碰；这里补的是名单里有、
-                 * 而此前结构上根本记不下的两样 —— 多出来的那些归属，与出身地。
-                 * 覆盖会让一份批量导出把逐条核对过的字段冲掉，那是本末倒置。
-                 */
-                $character->factions()->syncWithoutDetaching($affiliations);
-
-                if (blank($character->birth_place) && $birthPlace !== '') {
-                    $character->forceFill([
-                        'birth_place' => $birthPlace,
-                        'birth_place_id' => $this->resolveBirthPlace($birthPlace, $places),
-                    ])->save();
-                }
+                $this->fillMissingFacts($character, $entry, $races, $places);
 
                 continue;
             }
 
             $character = Character::create([
-                'slug' => 'chr-'.md5($name),
-                'name' => $name,
-                'codename' => $codename === '' ? null : $codename,
-                'world' => World::Terra->value,
-                'birth_place' => $birthPlace === '' ? null : $birthPlace,
-                'birth_place_id' => $birthPlace === '' ? null : $this->resolveBirthPlace($birthPlace, $places),
+                'slug' => 'chr-'.md5($entry['name']),
+                'name' => $entry['name'],
+                'codename' => $entry['codename'],
+                'world' => $entry['world'],
+                'birth_place' => $entry['birth_place'],
+                'birth_place_id' => $entry['birth_place'] === null
+                    ? null
+                    : $this->resolveBirthPlace($entry['birth_place'], $places),
                 /*
                  * 种族只在它是**规范种族名**时落库 —— 名单里混着「未公开」「未知」「不明」
                  * 「未录入」「矮人（自称）」「未知（疑似黎博利）」「因经纪公司要求不公开」
-                 * 这类**不是种族**的写法。它们一个都不进字典，正确表达是留空
-                 * （字典里查不到即为 null）。「卡特斯/奇美拉」同理：那是一个复合写法，
-                 * 由人工判定后写进具体的那一个。
+                 * 这类**不是种族**的写法，fz 的「■■」（Wiki 对未公开信息的遮盖）同理。
+                 * 它们一个都不进字典，正确表达是留空（字典里查不到即为 null）。
+                 * 「卡特斯/奇美拉」这类复合写法由人工判定后写进具体的那一个。
                  */
-                'race_id' => $races[trim((string) ($row['race'] ?? ''))] ?? null,
+                'race_id' => $races[$entry['race'] ?? ''] ?? null,
                 'kind' => CharacterKind::Operator->value,
                 'title' => null,
                 'reign_start_index' => null,
@@ -2176,15 +2176,195 @@ TXT,
                 'sort_order' => $order++,
             ]);
 
-            $character->factions()->syncWithoutDetaching($affiliations);
-            $known->put($name, $character);
+            $character->factions()->syncWithoutDetaching($entry['affiliations']);
+            $known->put($entry['name'], $character);
             $added++;
         }
 
-        $this->command?->info(
-            '干员名单：共 '.count($rows).' 条，新增 '.$added.' 位，'
-            .'其余 '.$enriched.' 位只补归属与出身地。'
-        );
+        foreach ($skipped as $note) {
+            $this->command?->warn('干员名单：跳过 —— '.$note);
+        }
+
+        $this->command?->info('干员名单：新增 '.$added.' 位，补全 '.$enriched.' 位，跳过 '.count($skipped).' 条。');
+    }
+
+    /**
+     * 两份名单归一后的流。
+     *
+     * 两份导出的字段名不同（PRTS：`zh`/`en`/`race`/`group|team|nation`/`birth_place`；
+     * fz：`name`/`nameEn`/`race`/`faction`），归一成同一形状之后，
+     * 「只新增不覆盖」这条规则只写一遍。
+     *
+     * @param  Collection<string, int>  $factions
+     * @param  list<string>  $skipped  out：跳过原因，原样打印给跑种子的人看
+     * @return \Generator<int, array{
+     *     world: string, name: string, codename: string|null, race: string|null,
+     *     affiliations: array<int, array{sort_order: int}>, birth_place: string|null
+     * }>
+     */
+    private function rosterEntries(Collection $factions, array &$skipped): Generator
+    {
+        // 「管理员·男 / 管理员·女」共用英文代号 Endministrator（见 fzRosterEntry）
+        $seenCodenames = [];
+
+        foreach ([
+            ['docs/prts-干员一览.json', 'prts'],
+            ['docs/fz-干员一览.json', 'fz'],
+        ] as [$path, $source]) {
+            foreach ($this->loadRosterRows($path, $source) as $row) {
+                $entry = $source === 'fz'
+                    ? $this->fzRosterEntry($row, $factions, $seenCodenames, $skipped)
+                    : $this->prtsRosterEntry($row, $factions);
+
+                if ($entry !== null) {
+                    yield $entry;
+                }
+            }
+        }
+    }
+
+    /**
+     * 读一份名单快照，取出条目数组。
+     *
+     * PRTS 的导出顶层就是数组；fz 的导出带 source / fetched 等元信息，条目在 `entries` 里。
+     * 文件缺失不是错误（名单是可选的），但必须**说出来**：静默跳过会让
+     * 「少了 31 位塔卫二人员」看起来像「本来就没有」。
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function loadRosterRows(string $path, string $source): array
+    {
+        if (! is_file(base_path($path))) {
+            $this->command?->warn('未找到 '.$path.'，跳过这份名单。');
+
+            return [];
+        }
+
+        $data = json_decode((string) file_get_contents(base_path($path)), true);
+
+        if (! is_array($data)) {
+            $this->command?->warn($path.' 不是合法 JSON，跳过这份名单。');
+
+            return [];
+        }
+
+        return $source === 'fz' ? ($data['entries'] ?? []) : $data;
+    }
+
+    /**
+     * PRTS 名单的一条 → 统一形状。
+     *
+     * @param  Collection<string, int>  $factions
+     * @return array{world: string, name: string, codename: string|null, race: string|null,
+     *     affiliations: array<int, array{sort_order: int}>, birth_place: string|null}|null
+     */
+    private function prtsRosterEntry(array $row, Collection $factions): ?array
+    {
+        $name = trim((string) ($row['zh'] ?? ''));
+
+        if ($name === '') {
+            return null;
+        }
+
+        $birthPlace = trim((string) ($row['birth_place'] ?? ''));
+
+        return [
+            'world' => World::Terra->value,
+            'name' => $name,
+            'codename' => trim((string) ($row['en'] ?? '')) ?: null,
+            'race' => trim((string) ($row['race'] ?? '')) ?: null,
+            'affiliations' => $this->rosterAffiliations($row, $factions),
+            'birth_place' => $birthPlace ?: null,
+        ];
+    }
+
+    /**
+     * 终末地名单的一条 → 统一形状。
+     *
+     * 「管理员·男 / 管理员·女」共用英文代号 Endministrator：那是**同一个人**的两个性别版本，
+     * 不是两个人 —— 已有的「管理员」就是它。按英文代号去重，而不是把两个变体都建出来：
+     * 三个管理员并排出现，读者只会困惑。
+     *
+     * @param  Collection<string, int>  $factions
+     * @param  array<string, string>  $seenCodenames
+     * @param  list<string>  $skipped
+     * @return array{world: string, name: string, codename: string|null, race: string|null,
+     *     affiliations: array<int, array{sort_order: int}>, birth_place: string|null}|null
+     */
+    private function fzRosterEntry(array $row, Collection $factions, array &$seenCodenames, array &$skipped): ?array
+    {
+        $name = trim((string) ($row['name'] ?? ''));
+
+        if ($name === '') {
+            return null;
+        }
+
+        // 同一个人在两边叫法不同时，以本仓库的名字落库（见 FZ_NAME_ALIASES）
+        $name = self::FZ_NAME_ALIASES[$name] ?? $name;
+
+        $codename = trim((string) ($row['nameEn'] ?? ''));
+
+        if ($codename !== '' && isset($seenCodenames[$codename])) {
+            // 提示里用来源的原名 ——「管理员·女（与 管理员 共用…）」才读得出说的是哪一行
+            $skipped[] = trim((string) ($row['name'] ?? '')).'（与 '.$seenCodenames[$codename]
+                .' 共用英文代号 '.$codename.'，是同一个人的另一个版本）';
+
+            return null;
+        }
+
+        if ($codename !== '') {
+            $seenCodenames[$codename] = $name;
+        }
+
+        // 势力照抄来源写法：「■■」是 Wiki 对未公开信息的遮盖，不是势力名 ——
+        // 来源自己说「不告诉你」，这与「我们漏登了一个势力」是两回事：前者留空，后者才要报警
+        $faction = trim((string) ($row['faction'] ?? ''));
+        $factionId = $factions[$faction] ?? null;
+
+        if ($faction !== '' && $faction !== '■■' && $factionId === null) {
+            // 阵营表理应接得住名单里的每一个势力；接不住时说出来，而不是静默丢掉归属
+            $skipped[] = $name.'（势力「'.$faction.'」不在阵营表里，归属没有挂上）';
+        }
+
+        return [
+            'world' => World::Talos->value,
+            'name' => $name,
+            'codename' => $codename ?: null,
+            'race' => trim((string) ($row['race'] ?? '')) ?: null,
+            'affiliations' => $factionId === null ? [] : [$factionId => ['sort_order' => 0]],
+            // 终末地的名单没有出身地一栏
+            'birth_place' => null,
+        ];
+    }
+
+    /**
+     * 已有条目：**只补不覆盖**。
+     *
+     * 人工核过的东西（简介、代号、以及一切非空的字段）一律不碰；这里补的是
+     * 名单里有、而此前结构上记不下的东西 —— 多出来的那些归属、出身地，与空着的种族。
+     * 覆盖会让一份批量导出把逐条核对过的字段冲掉，那是本末倒置。
+     *
+     * @param  Collection<string, int>  $races
+     * @param  Collection<int, Place>  $places
+     */
+    private function fillMissingFacts(Character $character, array $entry, Collection $races, Collection $places): void
+    {
+        $character->factions()->syncWithoutDetaching($entry['affiliations']);
+
+        $fill = [];
+
+        if (blank($character->race_id) && $entry['race'] !== null && isset($races[$entry['race']])) {
+            $fill['race_id'] = $races[$entry['race']];
+        }
+
+        if (blank($character->birth_place) && $entry['birth_place'] !== null) {
+            $fill['birth_place'] = $entry['birth_place'];
+            $fill['birth_place_id'] = $this->resolveBirthPlace($entry['birth_place'], $places);
+        }
+
+        if ($fill !== []) {
+            $character->forceFill($fill)->save();
+        }
     }
 
     /**

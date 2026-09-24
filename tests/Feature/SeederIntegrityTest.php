@@ -918,6 +918,48 @@ class SeederIntegrityTest extends TestCase
     }
 
     /**
+     * 塔卫二人员来自 `docs/fz-干员一览.json`（终末地 Wiki 的干员名单）。
+     *
+     * 名单把管理员按性别拆成两行（共用英文代号 Endministrator），而本仓库的
+     * 「管理员」是同一个人 —— 三个条目并排出现，读者只会困惑。
+     */
+    public function test_talos_roster_is_imported_from_the_endfield_wiki(): void
+    {
+        // 已有条目不被覆盖：管理员的人工简介与归属都还在
+        $endministrator = Character::where('name', '管理员')->firstOrFail();
+        $this->assertStringContainsString('失去记忆', (string) $endministrator->description);
+        $this->assertSame('终末地工业', $endministrator->factions->first()->name);
+        $this->assertNull($endministrator->codename);
+
+        // 性别变体没有变成独立的三行
+        $this->assertSame(1, Character::where('name', 'like', '管理员%')->count());
+
+        // 名单里的人带代号、种族与势力进来
+        $wolf = Character::where('name', '狼卫')->firstOrFail();
+        $this->assertSame('Wulfgard', $wolf->codename);
+        $this->assertSame('鲁珀', $wolf->race->name);
+        $this->assertSame('狼群氏族', $wolf->factions->first()->name);
+        $this->assertSame(World::Talos, $wolf->world());
+
+        // 清波寨既是地名树里的聚落、也是名单里的势力 —— 两个维度各自回答不同的问题
+        $this->assertSame('清波寨', Character::where('name', '汤汤')->firstOrFail()->factions->first()->name);
+
+        // 名单给出的种族全部对得上字典（「■■」这类遮盖写法不算数，但管理员那两条已归并）
+        $this->assertSame(
+            0,
+            Character::ofWorld(World::Talos)->where('kind', 'operator')
+                ->whereNotNull('codename')->whereNull('race_id')->count(),
+            '有带代号的人员没有对上种族字典',
+        );
+
+        // 名单里的势力要在组织页上看得见 —— 只进库不上页，等于没完善
+        $this->get(route('organizations.index', ['world' => World::Talos->value]))
+            ->assertOk()
+            ->assertSee('宏山科学院')
+            ->assertSee('应龙特勤队');
+    }
+
+    /**
      * 归属改走枢轴之后（一人可属多个阵营），这里查的是另一半：
      * **没有人一个归属都没有**。「指向不存在的阵营」由外键拦住，
      * 而「导入漏了归属」数据库不会报错，只会在页面上少一行。
