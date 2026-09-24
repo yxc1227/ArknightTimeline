@@ -105,7 +105,16 @@ table.tbl td[id],
 table.tbl tbody tr:has(td:target) td { background: var(--accent-soft); }
 table.tbl tbody tr:has(td:target) td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
-/* 技术网格底纹 + 顶部暖光。网格是 HUD 风格最廉价也最有效的空间暗示。 */
+/*
+ * 全站底纹，自上而下四层：
+ *   1-2. 技术网格 —— HUD 风格最廉价也最有效的空间暗示；
+ *   3.   等高线地貌 —— 《终末地》的制图语言：极细极淡的等值线 + 一根标志黄
+ *        主等高线 + 伪高程标注，让「近黑」成为一片可阅读的地形而非死色。
+ *        资产由 php artisan bg:contours 生成（App\Support\ContourField），
+ *        cover 裁切 + non-scaling-stroke，任意视口下线宽恒为 1px；
+ *   4.   顶部暖光 —— 压在最上层，给地貌罩一点标志黄的体温。
+ * 层与层都是固定层（position: fixed），随滚动保持静止，内容在其上滑动。
+ */
 body::before {
     content: '';
     position: fixed;
@@ -115,8 +124,11 @@ body::before {
     background-image:
         linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+        url('bg-contours.svg'),
         radial-gradient(ellipse 90% 50% at 50% -10%, rgba(255, 212, 0, 0.07), transparent 70%);
-    background-size: 48px 48px, 48px 48px, 100% 100%;
+    background-size: 48px 48px, 48px 48px, cover, 100% 100%;
+    background-repeat: repeat, repeat, no-repeat, no-repeat;
+    background-position: 0 0, 0 0, center 42%, center;
 }
 
 a { color: var(--accent); text-decoration: none; }

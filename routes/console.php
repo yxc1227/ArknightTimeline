@@ -163,6 +163,27 @@ Artisan::command('logo:export', function () {
 })->purpose('从 App\Support\Logo 导出浏览器图标文件');
 
 /*
+|--------------------------------------------------------------------------
+| 终末地风格等高线背景
+|--------------------------------------------------------------------------
+|
+| 全站背景的地貌层（body::before 第三层）由 App\Support\ContourField
+| 程序化生成：值噪声高度场 + marching squares 抽等值线。
+| 资产是固定 SEED 的确定性输出 —— 改参数重跑本命令即可再生成，
+| 图像可以 diff，不存在「一次性死资产」。
+*/
+
+Artisan::command('bg:contours', function () {
+    $svg = \App\Support\ContourField::svg();
+    $path = public_path('assets/bg-contours.svg');
+    file_put_contents($path, $svg . "\n");
+
+    $this->info('已生成 public/assets/bg-contours.svg（' . strlen($svg) . ' 字节）。');
+
+    return self::SUCCESS;
+})->purpose('生成终末地风格等高线全站背景（App\Support\ContourField）');
+
+/*
 | 巡检频率的选择依据：时间线内容的写入是低频的（日均几十次），
 | 而全量巡检随条目数线性增长，因此按小时而非按分钟执行；
 | 写入时的即时体检已经覆盖了「新问题立刻可见」的需求。
