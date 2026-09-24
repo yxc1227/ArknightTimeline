@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 #[Fillable([
     'name', 'slug', 'world', 'codename', 'birth_place', 'birth_place_id', 'race_id',
     'kind', 'title', 'reign_start_index', 'reign_end_index',
-    'description', 'wiki_slug', 'sort_order',
+    'description', 'wiki_slug', 'avatar', 'sort_order',
 ])]
 class Character extends Model
 {
@@ -248,6 +248,19 @@ class Character extends Model
         return (string) (parse_url((string) ($this->wiki()['base'] ?? ''), PHP_URL_HOST) ?: '');
     }
 
+    /* ------------------------------------------------------------------ 头像 */
+
+    /**
+     * 头像地址。
+     *
+     * 库里存的是相对路径，这里负责变成可用的 URL。名单没给图、文件缺失的人物
+     * 为 null —— 视图据此退回「首字方块」，绝不渲染一张碎图出来。
+     */
+    public function avatarUrl(): ?string
+    {
+        return filled($this->avatar) ? asset((string) $this->avatar) : null;
+    }
+
     /* ------------------------------------------------------------------ 查询 */
 
     /**
@@ -329,6 +342,7 @@ class Character extends Model
             'wiki_url' => $this->wikiUrl(),
             'wiki_label' => $this->wikiLabel(),
             'profile_url' => route('operators.show', $this),
+            'avatar' => $this->avatarUrl(),
         ];
     }
 }

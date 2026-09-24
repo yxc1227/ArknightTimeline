@@ -24,6 +24,7 @@ use App\Services\EventWriter;
 use App\Services\Identity\ExternalProfile;
 use App\Services\Identity\IdentityManager;
 use App\Services\UserManager;
+use App\Support\CharacterAvatars;
 use App\Support\CorpusLocator;
 use App\Support\TerraDate;
 use App\Support\TerraTourCorpus;
@@ -75,6 +76,8 @@ class TimelineSeeder extends Seeder
          * 顺序错了不会报错，只会一条都对不上。
          */
         $this->seedOperatorRoster();
+        // 头像接在名单之后：先有人物，才谈得上把头像挂到人身上
+        $this->seedCharacterAvatars();
         $this->seedTerms();
         $this->seedSources();
         /*
@@ -2186,6 +2189,35 @@ TXT,
         }
 
         $this->command?->info('干员名单：新增 '.$added.' 位，补全 '.$enriched.' 位，跳过 '.count($skipped).' 条。');
+    }
+
+    /**
+     * 头像接入。
+     *
+     * 接在名单之后：先有人物，才谈得上把头像挂到人身上。清单与图片都是
+     * 本地资产（与名单同一套规矩，缺失照常跑完），但少了什么必须说出来 ——
+     * 尤其「名单之外」的名字：那说明清单与名单开始脱节了，该重新抓一份。
+     */
+    private function seedCharacterAvatars(): void
+    {
+        $stats = CharacterAvatars::associate(base_path('docs/manifest.json'), public_path('assets/avatars'));
+
+        if ($stats === null) {
+            $this->command?->warn('未找到或无法解析 docs/manifest.json，跳过头像接入。');
+
+            return;
+        }
+
+        foreach ($stats['unknown'] as $name) {
+            $this->command?->warn('头像清单：名单之外的人物 —— '.$name);
+        }
+
+        $this->command?->info(sprintf(
+            '头像接入：关联 %d 人，文件缺失 %d 张，名单之外 %d 个。',
+            $stats['linked'],
+            $stats['missing_file'],
+            count($stats['unknown']),
+        ));
     }
 
     /**

@@ -8,7 +8,13 @@
         {{-- ============================ 概要 ============================ --}}
         <div class="panel">
             <div class="profile-head">
-                <span class="operator-mark" aria-hidden="true">{{ mb_substr($character->name, 0, 1) }}</span>
+                @if ($character->avatarUrl())
+                    {{-- 有真头像就用真头像：与首字方块同一几何，只是把绘制交给图片；名字就在旁边，alt 留空 --}}
+                    <img class="operator-mark operator-mark--img" src="{{ $character->avatarUrl() }}"
+                         alt="" width="52" height="52">
+                @else
+                    <span class="operator-mark" aria-hidden="true">{{ mb_substr($character->name, 0, 1) }}</span>
+                @endif
 
                 <div style="flex:1;min-width:0">
                     <div class="row" style="align-items:center;gap:9px;flex-wrap:wrap">

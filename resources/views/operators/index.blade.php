@@ -133,17 +133,24 @@
                 @foreach ($characters as $character)
                     <article class="operator-card">
                         <header class="operator-card__head">
-                            <div style="min-width:0">
-                                <a class="operator-card__name" href="{{ route('operators.show', $character) }}">
-                                    {{ $character->name }}
-                                </a>
-                                @if (filled($character->codename))
-                                    <div class="operator-card__code mono">{{ $character->codename }}</div>
-                                @elseif (filled($character->reignLabel()))
-                                    {{-- 历史人物没有代号，第二行给头衔与在位期 ——
-                                         这正是它们与干员最关键的区别，也是能在时间线上对齐的事实 --}}
-                                    <div class="operator-card__code mono">{{ $character->reignLabel() }}</div>
+                            <div class="operator-card__id">
+                                @if ($character->avatarUrl())
+                                    {{-- 头像是来源维基的头像图：名字就在旁边，alt 留空免得读屏重复 --}}
+                                    <img class="operator-card__avatar" src="{{ $character->avatarUrl() }}"
+                                         alt="" loading="lazy" width="52" height="52">
                                 @endif
+                                <div style="min-width:0">
+                                    <a class="operator-card__name" href="{{ route('operators.show', $character) }}">
+                                        {{ $character->name }}
+                                    </a>
+                                    @if (filled($character->codename))
+                                        <div class="operator-card__code mono">{{ $character->codename }}</div>
+                                    @elseif (filled($character->reignLabel()))
+                                        {{-- 历史人物没有代号，第二行给头衔与在位期 ——
+                                             这正是它们与干员最关键的区别，也是能在时间线上对齐的事实 --}}
+                                        <div class="operator-card__code mono">{{ $character->reignLabel() }}</div>
+                                    @endif
+                                </div>
                             </div>
 
                             @unless ($character->hasProfile())
