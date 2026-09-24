@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\World;
+use App\Support\TerraDate;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -18,7 +19,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  *   终末地工业的组建方之一 —— 而一个人物的档案不会横跨两个世界。）
  */
 #[Fillable([
-    'name', 'slug', 'world', 'codename', 'faction_id', 'race',
+    'name', 'slug', 'world', 'codename', 'faction_id', 'race_id',
+    'kind', 'title', 'reign_start_index', 'reign_end_index',
     'description', 'wiki_slug', 'sort_order',
 ])]
 class Character extends Model
@@ -50,6 +52,56 @@ class Character extends Model
     public function faction(): BelongsTo
     {
         return $this->belongsTo(Faction::class);
+    }
+
+    /**
+     * 种族（字典）。
+     *
+     * 原先这里是一个自由字符串，写错字不会有任何东西报错；现在它是外键，
+     * 「菲林」写成「菲琳」会在写入时就被字典拒绝。
+     */
+    public function race(): BelongsTo
+    {
+        return $this->belongsTo(Race::class);
+    }
+
+    /** 种族名。没有字典条目时为 null —— 宁可缺失，也不要写错。 */
+    public function raceName(): ?string
+    {
+        return $this->race?->name;
+    }
+
+    /**
+     * 是否为历史人物。
+     *
+     * 书里满是君主、贵族与学者（伊戈尔、赫尔昏佐伦、科西嘉一世…），
+     * 他们与干员是两类实体：干员有代号与干员页，历史人物有头衔与在位期。
+     * 不区分的话，干员名单里会混进一堆几百年前的皇帝。
+     */
+    public function isHistorical(): bool
+    {
+        return $this->kind === 'historical';
+    }
+
+    /**
+     * 头衔与在位期的展示文本，如「乌萨斯皇帝 · 在位 969 — 1077」。
+     *
+     * 区间只有一端时如实说「起于 / 止于」，两端都没有就只给头衔 ——
+     * 书里大量在位者的即位年或退位年并未载明，这里绝不补一个看起来合理的数。
+     */
+    public function reignLabel(): ?string
+    {
+        $reign = match (true) {
+            $this->reign_start_index === null && $this->reign_end_index === null => null,
+            $this->reign_start_index === null => '止于 '.TerraDate::describeIndex((int) $this->reign_end_index, '泰拉历'),
+            $this->reign_end_index === null => '起于 '.TerraDate::describeIndex($this->reign_start_index, '泰拉历'),
+            default => '在位 '.TerraDate::describeIndex($this->reign_start_index, '泰拉历')
+                .' — '.TerraDate::describeIndex((int) $this->reign_end_index, '泰拉历'),
+        };
+
+        $parts = array_filter([$this->title, $reign]);
+
+        return $parts === [] ? null : implode(' · ', $parts);
     }
 
     public function events(): BelongsToMany
@@ -88,7 +140,8 @@ class Character extends Model
         $facts = array_values(array_filter([
             '所属世界：'.$this->world()->label(),
             filled($this->faction?->name) ? '所属阵营：'.$this->faction->name : null,
-            filled($this->race) ? '种族：'.$this->race : null,
+            filled($this->raceName()) ? '种族：'.$this->raceName() : null,
+            $this->reignLabel(),
         ]));
 
         // 优先用 withCount 预载的计数：卡片网格一页 24 张，
@@ -140,6 +193,18 @@ class Character extends Model
         return (string) ($this->wiki()['label'] ?? '维基');
     }
 
+    /**
+     * 是否给出外部维基链接。
+     *
+     * 干员一律给：对方维基的条目名默认可从姓名推导，且确实普遍存在。
+     * 历史人物则只在**显式指定了条目名**时才给 —— 书里那些君主、贵族在对方站点的
+     * 条目名五花八门（本名 / 称号 / 译名），拿本名去猜多半会指向一个不存在的页面。
+     */
+    public function showsWikiLink(): bool
+    {
+        return ! $this->isHistorical() || filled($this->wiki_slug);
+    }
+
     /** 外链的目标站点（用于界面上「这条链接会带你离开本站」的提示）。 */
     public function wikiHost(): string
     {
@@ -148,7 +213,19 @@ class Character extends Model
 
     /* ------------------------------------------------------------------ 查询 */
 
-    /** 关键词：名称 / 代号 / 种族。 */
+    /**
+     * 只要干员（排除历史人物）。
+     *
+     * 「干员简介」这个模块服务的是**能出勤的干员**；历史人物（几百年前的君主、
+     * 贵族与学者）混进同一份名单，读者会分不清谁还在名单上。历史人物仍然
+     * 可以参与时间线筛选 —— 那正是他们最该出现的地方。
+     */
+    public function scopeOperators(Builder $query): Builder
+    {
+        return $query->where('kind', 'operator');
+    }
+
+    /** 关键词：名称 / 代号 / 头衔 / 种族。 */
     public function scopeSearch(Builder $query, ?string $term): Builder
     {
         $term = trim((string) $term);
@@ -164,7 +241,11 @@ class Character extends Model
         return $query->where(function (Builder $inner) use ($needle) {
             $inner->whereRaw('lower(name) like ?', [$needle])
                 ->orWhereRaw('lower(coalesce(codename, \'\')) like ?', [$needle])
-                ->orWhereRaw('lower(coalesce(race, \'\')) like ?', [$needle]);
+                ->orWhereRaw('lower(coalesce(title, \'\')) like ?', [$needle])
+                // 种族改走字典：用子查询而不是 join，避免与 withCount 之类的聚合互相干扰
+                ->orWhereIn('race_id', Race::query()
+                    ->whereRaw('lower(name) like ?', [$needle])
+                    ->pluck('id'));
         });
     }
 
@@ -179,7 +260,12 @@ class Character extends Model
             'world_label' => $this->world()->label(),
             'faction_id' => $this->faction_id,
             'faction' => $this->relationLoaded('faction') ? $this->faction?->name : null,
-            'race' => $this->race,
+            'race_id' => $this->race_id,
+            // 前端一直用 race 这个键拿种族名，保留键名以免接口消费方被无谓地打断
+            'race' => $this->raceName(),
+            'kind' => $this->kind,
+            'title' => $this->title,
+            'reign_label' => $this->reignLabel(),
             'has_profile' => $this->hasProfile(),
             'wiki_url' => $this->wikiUrl(),
             'wiki_label' => $this->wikiLabel(),

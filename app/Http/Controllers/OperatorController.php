@@ -28,16 +28,30 @@ class OperatorController extends Controller
     {
         $world = World::fromRequest($request->string('world')->value());
 
+        /*
+         * 人物分两类，页面上分开列：
+         *
+         *  - `operator` 干员（默认）：有代号、在役，名单服务的是「这支队伍里有谁」；
+         *  - `historical` 历史人物：几百年前的君主与贵族，卡片给的是头衔与在位期。
+         *
+         * 两者混在一个网格里，读者会分不清谁还在名单上 —— 而这也正是把它们区分开的原因。
+         * 缺省仍是干员，因此老链接与既有书签的行为不变。
+         */
+        $kind = $request->string('kind')->value() === 'historical' ? 'historical' : 'operator';
+
         $filters = [
             'q' => trim((string) $request->string('q')->value()) ?: null,
             'faction' => $request->integer('faction') ?: null,
+            'kind' => $kind,
         ];
 
         // withCount 而不是在视图里逐张卡查一次：卡片网格一页 24 张，
         // 那会变成 24 次查询，而且是在最显眼的页面上
         $query = Character::query()
             ->ofWorld($world)
-            ->with('faction')
+            ->where('kind', $kind)
+            // race 也要预载：卡片上的种族要链到资料集，需要 slug；不预载就是每张卡一次查询
+            ->with(['faction', 'race'])
             ->withCount('events')
             ->search($filters['q']);
 
@@ -57,22 +71,30 @@ class OperatorController extends Controller
             // 只列出「在这个世界里确实有人物归属」的阵营：
             // 列一个点进去是空列表的选项没有意义，而跨世界的阵营
             // （罗德岛同时出现在两边）会在各自的名单里各自出现
+            // 阵营选项跟着当前的类型走：历史人物几乎没有阵营归属，
+            // 给干员列表挂一份「历史人物用不到的阵营下拉」只是噪音
             'factions' => Faction::whereIn(
                 'id',
-                Character::ofWorld($world)->whereNotNull('faction_id')->distinct()->pluck('faction_id'),
+                Character::ofWorld($world)->where('kind', $kind)->whereNotNull('faction_id')->distinct()->pluck('faction_id'),
             )->orderBy('sort_order')->get(),
             'counters' => [
-                'total' => Character::ofWorld($world)->count(),
-                'with_profile' => Character::ofWorld($world)
+                'total' => Character::ofWorld($world)->where('kind', $kind)->count(),
+                'with_profile' => Character::ofWorld($world)->where('kind', $kind)
                     ->whereNotNull('description')->where('description', '!=', '')->count(),
-                'other_world' => Character::ofWorld($world === World::Terra ? World::Talos : World::Terra)->count(),
+                'other_world' => Character::ofWorld($world === World::Terra ? World::Talos : World::Terra)
+                    ->where('kind', $kind)->count(),
+                // 两类各自的总数：切换器要显示「另一边还有多少」，
+                // 否则读者会以为历史人物不存在（它们本来就不在默认列表里）
+                'operators' => Character::ofWorld($world)->where('kind', 'operator')->count(),
+                'historical' => Character::ofWorld($world)->where('kind', 'historical')->count(),
             ],
         ]);
     }
 
     public function show(Character $character): View
     {
-        $character->load('faction');
+        // race 一并预载：页面上的种族要链到资料集，需要 slug
+        $character->load(['faction', 'race']);
 
         /*
          * 关联条目按世界分组。

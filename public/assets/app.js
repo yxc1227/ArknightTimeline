@@ -244,8 +244,10 @@
                 return;
             }
 
-            // 分组：按纪元顺序，未归属纪元与「时间未定」各自成组
+            // 分组：先按「时代」分期，再按纪元顺序；未归属纪元与「时间未定」各自成组
             const eraOrder = (options.eras || []).map((e) => e.id);
+            const eraById = new Map((options.eras || []).map((e) => [e.id, e]));
+            const periodOrder = new Map((options.era_periods || []).map((p, i) => [p.id, i]));
             const groups = new Map();
 
             state.events.forEach((event) => {
@@ -257,33 +259,93 @@
                 groups.get(key).push(event);
             });
 
+            /*
+             * 排序权重 = [时代序号, 纪元序号]。
+             * 让同一时代下的纪元连在一起，是「结晶时代」这一层能被看见的前提 ——
+             * 按纪元顺序平铺的话，797–1101 那一整段看起来就只是若干个互不相干的时期。
+             * 两个无归属组排在最后（时代序号 2）。
+             */
+            const rank = (key) => {
+                if (key === 'unanchored') return [2, 9e6];
+                if (key === 'no-era') return [2, 9e6 + 1];
+
+                const era = eraById.get(Number(key.slice(4)));
+                const period = era && era.period ? periodOrder.get(era.period.id) : -1;
+
+                return [period + 1, eraOrder.indexOf(era ? era.id : -1)];
+            };
+
             const sortedKeys = [...groups.keys()].sort((a, b) => {
-                if (a === 'unanchored') return 1;
-                if (b === 'unanchored') return -1;
-                if (a === 'no-era') return 1;
-                if (b === 'no-era') return -1;
-                return eraOrder.indexOf(Number(a.split(':')[1])) - eraOrder.indexOf(Number(b.split(':')[1]));
+                const [periodA, orderA] = rank(a);
+                const [periodB, orderB] = rank(b);
+
+                return periodA === periodB ? orderA - orderB : periodA - periodB;
             });
+
+            let lastPeriodId = null;
 
             host.innerHTML = sortedKeys.map((key) => {
                 const items = groups.get(key);
 
                 if (key === 'unanchored') {
+                    lastPeriodId = null;
+
                     return band('时间未定', `未能在文本中定位到${calendar()}区间，等待人工补全`, '#5c7189', items.length)
                         + items.map(card).join('');
                 }
 
                 if (key === 'no-era') {
+                    lastPeriodId = null;
+
                     return band('未归属纪元', '尚未挂载到任何时期', '#5c7189', items.length)
                         + items.map(card).join('');
                 }
 
                 const era = items[0].era;
-                return band(era.name, `${era.date_label}${era.subtitle ? ' · ' + era.subtitle : ''}`, era.color, items.length)
+                const period = era.period || null;
+                // 只在时代变化时插一次分期标题，而不是每个纪元都重复一遍
+                const header = period && period.id !== lastPeriodId ? periodHeader(period) : '';
+                lastPeriodId = period ? period.id : null;
+
+                return header
+                    + band(era.name, `${era.date_label}${era.subtitle ? ' · ' + era.subtitle : ''}`, era.color, items.length)
                     + items.map(card).join('');
             }).join('') + (state.hasMore
                 ? `<div class="load-more"><button class="btn" id="load-more">加载更多（剩余 ${num(state.total - state.events.length)} 条）</button></div>`
                 : '');
+        }
+
+        /**
+         * 分期标题。
+         *
+         * 比纪元色带高一层，只回答「下面这几段同属一个时代」——
+         * 「结晶时代」是原书年表自己给出的分期名，此前它只活在数据里，
+         * 界面上完全看不到 797–1101 那一段其实是一个整体。
+         */
+        function periodHeader(period) {
+            return `<div class="era-period">
+                <span class="era-period__bar" style="background:${esc(period.color)}"></span>
+                <span class="era-period__name">${esc(period.name)}</span>
+                <span class="era-period__range">${esc(period.date_label || '')}</span>
+            </div>`;
+        }
+
+        /**
+         * 发生地的展示单元。
+         *
+         * `location` 是照原文抄下来的文本，`place` 是能点进去的地名树节点 ——
+         * 原文只在它比字典名多出信息时才显示（「维多利亚 · 伦蒂尼姆」），
+         * 否则会出现「维多利亚（国家）」这种自己重复自己的读法；两者都没有才落到「—」。
+         * 链接新窗口打开：读者多半正停在某个筛选与滚动位置上，不该被一次点击打断。
+         */
+        function locationCell(event) {
+            if (!event.place) return esc(event.location || '—');
+
+            const anchor = `${APP.urls.places}?world=${encodeURIComponent(event.world)}#place-${encodeURIComponent(event.place.slug)}`;
+            const raw = event.location && event.location !== event.place.name ? `${esc(event.location)} ` : '';
+
+            return `${raw}<a href="${anchor}" target="_blank" rel="noopener noreferrer">${esc(event.place.name)}</a>`
+                + ` <span class="faint">（${esc(event.place.kind_label)}）</span>`;
         }
 
         function band(name, range, color, count) {
@@ -376,6 +438,20 @@
                 // 纪元分界刻度
                 ctx.fillStyle = eraBand.color + '55';
                 ctx.fillRect(x, 0, 1, height);
+            });
+
+            /*
+             * 时代分界：在顶部压一条窄带，让「这几段同属一个时代」在刻度条上也成立。
+             * 画在纪元色带之后、柱状之前 —— 柱子最高只到 height-14，因此压不到这条 3px 的带子。
+             */
+            (options.era_periods || []).forEach((period) => {
+                const from = Math.floor(period.start_index / daysPerYear);
+                const to = Math.ceil(period.end_index / daysPerYear);
+                const x = ((from - min) / span) * width;
+                const w = Math.max(2, ((to - from) / span) * width);
+
+                ctx.fillStyle = period.color + 'aa';
+                ctx.fillRect(x, 0, Math.min(w, width - x), 3);
             });
 
             // 年度分布：常态灰柱，只有明显的高峰才用标志黄点出来
@@ -636,7 +712,7 @@
                 <dl class="kv">
                     <dt>游戏内纪元</dt><dd class="mono">${esc(event.date.display)} <span class="faint">（${esc(event.date.precision_label)} · ${esc(event.date.confidence_label)}）</span></dd>
                     <dt>所属纪元</dt><dd>${event.era ? `${esc(event.era.name)} <span class="faint small">${esc(event.era.date_label)}</span>` : '<span class="faint">未归属</span>'}</dd>
-                    <dt>发生地</dt><dd>${esc(event.location || '—')}</dd>
+                    <dt>发生地</dt><dd>${locationCell(event)}</dd>
                     <dt>状态</dt><dd><span class="badge ${esc(event.status.badge)}">${esc(event.status.label)}</span> ${event.is_locked ? '<span class="badge badge--muted">已锁定</span>' : ''}</dd>
                     <dt>版本</dt><dd class="mono">VER ${pad(event.version)} // ${esc(stamp(event.updated_at))}</dd>
                 </dl>
@@ -1259,6 +1335,10 @@
             });
 
             window.addEventListener('resize', debounce(renderScrubber, 200));
+
+            // 首屏先读一次筛选。少了这一步，URL 里带来的条件只会「在下拉里被选中」而不过滤 ——
+            // 从资料集点「伦蒂尼姆的条目」进来却看到整条时间线，比不做这个链接更误导人。
+            readFilters();
 
             load();
         }

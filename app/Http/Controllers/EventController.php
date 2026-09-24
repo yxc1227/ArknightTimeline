@@ -41,7 +41,7 @@ class EventController extends Controller
      */
     public function show(Request $request, Event $event): \Symfony\Component\HttpFoundation\Response
     {
-        $event->load(['era', 'sources', 'characters', 'factions', 'tags', 'annotations.user', 'causedBy', 'parent']);
+        $event->load(['era', 'sources', 'characters', 'factions', 'tags', 'annotations.user', 'causedBy', 'parent', 'place']);
 
         $payload = [
             'event' => $event->toApiArray(),
@@ -53,7 +53,8 @@ class EventController extends Controller
             'reference' => [
                 // 纪元选项按条目自身的世界收敛：给泰拉条目列出塔罗斯历的纪元，
                 // 只会诱使用户选出一个跨世界的归属，然后被 EventWriter 拒绝
-                'eras' => Era::ofWorld($event->world())->ordered()->get(['id', 'name', 'slug']),
+                // 挂载只允许挂在叶子纪元上，因此下拉里不该出现父级「时代」
+                'eras' => Era::ofWorld($event->world())->leaves()->ordered()->get(['id', 'name', 'slug']),
                 'sources' => Source::orderBy('name')->get(['id', 'name', 'type', 'code']),
                 'characters' => Character::orderBy('name')->limit(600)->get(['id', 'name', 'codename']),
                 'factions' => Faction::orderBy('name')->get(['id', 'name', 'color']),

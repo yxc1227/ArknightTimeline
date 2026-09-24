@@ -381,7 +381,10 @@ final class TimelineConsistencyChecker
      */
     public function reindexEraAssignments(): int
     {
-        $eras = Era::ordered()->get();
+        // 只用**叶子**纪元。父级「时代」的区间是子纪元的并集，
+        // 让它参与分配会把条目塞进一个纯标签里；更糟的是此后「时代错位」再也报不出来 ——
+        // 父的区间必然覆盖子纪元中的一切，错位会被父级悄悄兜住。
+        $eras = Era::leaves()->ordered()->get();
         $updated = 0;
 
         foreach ($eras as $era) {

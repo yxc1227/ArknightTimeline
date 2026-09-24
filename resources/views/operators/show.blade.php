@@ -31,20 +31,32 @@
                                 {{ $character->faction->name }}
                             </a>
                         @endif
-                        @if (filled($character->race))
-                            <span class="chip">{{ $character->race }}</span>
+                        @if (filled($character->raceName()))
+                            <a class="chip" data-clickable="1"
+                               href="{{ route('races.index') }}#race-{{ $character->race?->slug }}">
+                                {{ $character->raceName() }}
+                            </a>
+                        @endif
+                        @if (filled($character->title))
+                            <span class="chip chip--accent">{{ $character->title }}</span>
                         @endif
                         <span class="chip">{{ $eventCount }} 条相关条目</span>
                     </div>
                 </div>
 
                 <div class="row-actions">
-                    {{-- 权威资料的外链放在最显眼的位置：本页只给「与时间线相关的那一行」 --}}
-                    <a class="btn btn--primary btn--sm" href="{{ $character->wikiUrl() }}"
-                       target="_blank" rel="noopener noreferrer">
-                        在 {{ $character->wikiLabel() }} 查看完整资料 ↗
+                    {{-- 权威资料的外链放在最显眼的位置：本页只给「与时间线相关的那一行」。
+                         历史人物只在显式指定了对方条目名时才给链接 —— 拿本名去猜多半是死链。 --}}
+                    @if ($character->showsWikiLink())
+                        <a class="btn btn--primary btn--sm" href="{{ $character->wikiUrl() }}"
+                           target="_blank" rel="noopener noreferrer">
+                            在 {{ $character->wikiLabel() }} 查看完整资料 ↗
+                        </a>
+                    @endif
+                    <a class="btn btn--ghost btn--sm"
+                       href="{{ route('operators.index', ['world' => $character->world()->value, 'kind' => $character->kind]) }}">
+                        <x-icon name="back"/>返回列表
                     </a>
-                    <a class="btn btn--ghost btn--sm" href="{{ route('operators.index', ['world' => $character->world()->value]) }}">返回列表</a>
                 </div>
             </div>
         </div>
@@ -74,12 +86,36 @@
                 <dt>所属世界</dt><dd>{{ $character->world()->label() }}（{{ $character->world()->englishLabel() }}）</dd>
                 <dt>阵营</dt><dd>{{ $character->faction?->name ?? '—' }}</dd>
                 <dt>种族</dt>
-                <dd>{{ $character->race ?: '—' }} <span class="faint small">（不确定时留空，宁可缺失也不要写错）</span></dd>
+                <dd>
+                    @if (filled($character->raceName()))
+                        <a href="{{ route('races.index') }}#race-{{ $character->race?->slug }}">
+                            {{ $character->raceName() }}
+                        </a>
+                    @else
+                        —
+                    @endif
+                    <span class="faint small">（字典未收录即留空，宁可缺失也不要写错）</span>
+                </dd>
+
+                @if (filled($character->title) || $character->reign_start_index !== null)
+                    {{-- 头衔与在位期只对历史人物有意义；区间只有一端时如实说「起于 / 止于」 --}}
+                    <dt>头衔</dt><dd>{{ $character->title ?: '—' }}</dd>
+                    <dt>在位</dt>
+                    <dd>
+                        {{ $character->reignLabel() ?: '—' }}
+                        <span class="faint small">（书里未载的一端不补，宁可缺失也不要写错）</span>
+                    </dd>
+                @endif
+
                 <dt>外部资料</dt>
                 <dd style="word-break:break-all">
-                    <a href="{{ $character->wikiUrl() }}" target="_blank" rel="noopener noreferrer">
-                        {{ $character->wikiUrl() }}
-                    </a>
+                    @if ($character->showsWikiLink())
+                        <a href="{{ $character->wikiUrl() }}" target="_blank" rel="noopener noreferrer">
+                            {{ $character->wikiUrl() }}
+                        </a>
+                    @else
+                        <span class="faint">历史人物不猜对方站点的条目名 —— 本名与称号、译名往往并不一致。</span>
+                    @endif
                 </dd>
             </dl>
         </div>

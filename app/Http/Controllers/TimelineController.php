@@ -11,6 +11,7 @@ use App\Models\Character;
 use App\Models\Era;
 use App\Models\Event;
 use App\Models\Faction;
+use App\Models\Place;
 use App\Models\Source;
 use App\Models\Tag;
 use App\Services\TimelineConsistencyChecker;
@@ -40,7 +41,9 @@ class TimelineController extends Controller
             'filterOptions' => $this->dictionaries($world),
             'worlds' => World::switcherOptions(),
             'activeWorld' => $world,
-            'eras' => Era::ofWorld($world)->ordered()->get(),
+            // 只给叶子纪元：父级「时代」是分期标签，选中它只会得到一个空列表。
+            // 预载 parent 是为了在视图里按「时代」分组显示（<optgroup>）。
+            'eras' => Era::ofWorld($world)->leaves()->with('parent')->ordered()->get(),
             'activeEra' => $request->query('era'),
             'anomalySummary' => $this->checker->openSummary($world),
         ]);
@@ -61,7 +64,7 @@ class TimelineController extends Controller
         $page = max(1, $request->integer('page', 1));
 
         $query = Event::query()
-            ->with(['era', 'sources', 'characters', 'factions', 'tags'])
+            ->with(['era', 'sources', 'characters', 'factions', 'tags', 'place'])
             ->withCount(['annotations', 'anomalies'])
             ->filter($filters);
 
@@ -146,7 +149,23 @@ class TimelineController extends Controller
         return [
             'world' => $world->value,
             'worlds' => World::switcherOptions(),
-            'eras' => Era::ofWorld($world)->ordered()->get()->map(fn (Era $e) => $e->toApiArray()),
+            // 只给叶子纪元：父级「时代」是分期标签而非条目的桶，列进筛选只会给出一个空结果。
+            // 预载 parent 是为了让每个纪元带上自己的「时代」，界面据此分组。
+            'eras' => Era::ofWorld($world)->leaves()->with('parent')->ordered()->get()
+                ->map(fn (Era $e) => $e->toApiArray()),
+            // 分期：只取真的有下辖纪元的顶层纪元。顶层而无子级的（如「远古 · 前纪元」）
+            // 自己就是一段完整叙事，不该再套一层同名标题。
+            'era_periods' => Era::ofWorld($world)->whereHas('children')->ordered()->get()
+                ->map(fn (Era $e) => [
+                    'id' => $e->id,
+                    'slug' => $e->slug,
+                    'name' => $e->name,
+                    'color' => $e->color,
+                    'date_label' => $e->date_label,
+                    // 刻度条要在分期边界压一条窄带，因此需要区间
+                    'start_index' => $e->start_index,
+                    'end_index' => $e->end_index,
+                ]),
             'factions' => Faction::whereHas('events', $appearsInWorld)
                 ->orderBy('sort_order')->get()->map(fn (Faction $f) => [
                     ...$f->toApiArray(),
@@ -154,6 +173,15 @@ class TimelineController extends Controller
                 ]),
             'characters' => Character::whereHas('events', $appearsInWorld)
                 ->orderBy('sort_order')->limit(400)->get()->map(fn (Character $c) => $c->toApiArray()),
+            // 地名下拉：只列真的挂着条目的那些 —— 点进去是空的选项只是噪音。
+            // 名字带上父级（「维多利亚 · 伦蒂尼姆」）以免同名的聚落难以分辨，
+            // 但只展开一层，够用且不必逐条回溯整条链。
+            'places' => Place::ofWorld($world)->whereHas('events')->with('parent')
+                ->orderBy('sort_order')->orderBy('id')->get()
+                ->map(fn (Place $p) => [
+                    'id' => $p->id,
+                    'name' => $p->parent ? $p->parent->name.' · '.$p->name : $p->name,
+                ]),
             'sources' => Source::ofWorld($world)
                 ->orderBy('type')->orderBy('release_order')->get()->map(fn (Source $s) => $s->toApiArray()),
             'tags' => Tag::orderBy('name')->get()->map(fn (Tag $t) => $t->toApiArray()),
@@ -164,12 +192,15 @@ class TimelineController extends Controller
                 'source_types' => SourceType::options(),
                 'precision_options' => collect(DatePrecision::cases())->mapWithKeys(fn ($c) => [$c->value => $c->label()])->all(),
             ],
-            'era_bands' => Era::ofWorld($world)->ordered()->get()->map(fn (Era $e) => [
+            // 色带同理：父级时代的色带会整段盖住子纪元，画出来是一块无信息的底色
+            'era_bands' => Era::ofWorld($world)->leaves()->ordered()->get()->map(fn (Era $e) => [
                 'slug' => $e->slug,
                 'name' => $e->name,
                 'color' => $e->color,
                 'start_index' => $e->start_index,
                 'end_index' => $e->end_index,
+                // 所属分期：刻度条据此在分期边界画更强的分界
+                'period_id' => $e->parent_id,
             ]),
             // 时间轴刻度：按十年给出锚点，供滑杆与刻度标签使用
             'scale' => [
@@ -196,6 +227,7 @@ class TimelineController extends Controller
             'source_id' => $request->integer('source_id') ?: null,
             'source_type' => $request->string('source_type')->value() ?: null,
             'faction_id' => $request->integer('faction_id') ?: null,
+            'place_id' => $request->integer('place_id') ?: null,
             'character_id' => $request->integer('character_id') ?: null,
             'tag_ids' => array_filter((array) $request->input('tag_ids', [])),
             'only_unanchored' => $request->boolean('only_unanchored'),

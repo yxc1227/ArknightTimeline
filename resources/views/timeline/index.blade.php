@@ -65,10 +65,25 @@
             <details class="filter-group">
                 <summary data-en="Era">纪元</summary>
                 <div class="filter-group__body">
+                    {{--
+                        按「时代」分组显示（<optgroup> 只是标题，不可选中）。
+                        父级时代是分期标签而非条目的桶 —— 选它只会得到一个空列表，
+                        所以这里让它在结构上可见、但无法被误选。
+                    --}}
                     <select data-filter="era_id">
                         <option value="">全部纪元</option>
-                        @foreach ($eras as $era)
-                            <option value="{{ $era->id }}" @selected($activeEra === $era->slug)>{{ $era->name }}</option>
+                        @foreach ($eras->groupBy(fn ($era) => $era->parent?->name ?? '') as $periodName => $group)
+                            @if ($periodName === '')
+                                @foreach ($group as $era)
+                                    <option value="{{ $era->id }}" @selected($activeEra === $era->slug)>{{ $era->name }}</option>
+                                @endforeach
+                            @else
+                                <optgroup label="{{ $periodName }}">
+                                    @foreach ($group as $era)
+                                        <option value="{{ $era->id }}" @selected($activeEra === $era->slug)>{{ $era->name }}</option>
+                                    @endforeach
+                                </optgroup>
+                            @endif
                         @endforeach
                     </select>
                 </div>
@@ -104,6 +119,20 @@
                             <option value="">全部阵营</option>
                             @foreach ($filterOptions['factions'] as $faction)
                                 <option value="{{ $faction['id'] }}">{{ $faction['name'] }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="field">
+                        {{-- 地名下拉预选中 URL 带来的 place_id：资料集里的「N 条」就是链到这里的。
+                             不预选的话，服务端过滤了、下拉却显示「全部地名」，
+                             读者一下拉就会把筛选清掉。 --}}
+                        <select data-filter="place_id">
+                            <option value="">全部地名</option>
+                            @foreach ($filterOptions['places'] as $place)
+                                <option value="{{ $place['id'] }}"
+                                        @selected((string) request('place_id') === (string) $place['id'])>
+                                    {{ $place['name'] }}
+                                </option>
                             @endforeach
                         </select>
                     </div>

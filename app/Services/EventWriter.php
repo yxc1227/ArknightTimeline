@@ -45,7 +45,7 @@ final class EventWriter
     public const EDITABLE_FIELDS = [
         'title', 'summary', 'details', 'location',
         'date_display', 'start_index', 'end_index', 'date_precision', 'date_confidence',
-        'era_id', 'sort_seq', 'parent_event_id', 'caused_by_event_id', 'status',
+        'era_id', 'place_id', 'sort_seq', 'parent_event_id', 'caused_by_event_id', 'status',
     ];
 
     /** 关系型字段。 */
@@ -65,6 +65,7 @@ final class EventWriter
         'date_precision' => '时间精度',
         'date_confidence' => '时间可信度',
         'era_id' => '所属纪元',
+        'place_id' => '发生地（字典）',
         'sort_seq' => '同日排序',
         'parent_event_id' => '上级事件',
         'caused_by_event_id' => '直接起因',

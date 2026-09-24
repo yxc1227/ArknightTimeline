@@ -10,8 +10,11 @@ use App\Models\Event;
 use App\Models\EventLock;
 use App\Models\EventRevision;
 use App\Models\Faction;
+use App\Models\Place;
+use App\Models\Race;
 use App\Models\Source;
 use App\Models\Tag;
+use App\Models\Term;
 use App\Models\TimelineAnomaly;
 use App\Models\User;
 use App\Models\UserActivityLog;
@@ -54,6 +57,9 @@ class ModelAttributeCollisionTest extends TestCase
         Character::class,
         Source::class,
         Tag::class,
+        Race::class,
+        Place::class,
+        Term::class,
         AiProposal::class,
         TimelineAnomaly::class,
     ];

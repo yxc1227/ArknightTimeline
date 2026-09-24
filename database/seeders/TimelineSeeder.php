@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\ChangeOrigin;
 use App\Enums\EventStatus;
+use App\Enums\FactionKind;
 use App\Enums\IdentityProvider;
 use App\Enums\SourceType;
 use App\Enums\World;
@@ -11,7 +12,10 @@ use App\Models\Character;
 use App\Models\Era;
 use App\Models\Event;
 use App\Models\Faction;
+use App\Models\Place;
+use App\Models\Race;
 use App\Models\Source;
+use App\Models\Term;
 use App\Models\Tag;
 use App\Models\User;
 use App\Services\Ai\AiEventSynthesizer;
@@ -23,6 +27,8 @@ use App\Support\CorpusLocator;
 use App\Support\TerraDate;
 use App\Support\TerraTourCorpus;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * 起始语料。
@@ -55,9 +61,31 @@ class TimelineSeeder extends Seeder
         $admin = $this->seedUsers();
         $this->seedFactions();
         $this->seedEras();
+        // 种族字典要先于人物：人物挂的是 race_id，字典不在就只有空值
+        $this->seedRaces();
         $this->seedCharacters();
         $this->seedTags();
+        // 地名树要先于条目：条目的 place_id 由 location 原文匹配而来
+        $this->seedPlaces();
+        $this->seedTerms();
         $this->seedSources();
+        /*
+         * 条目与示例提案**不是幂等的**：`EventWriter::create()` 每次都会新建一条，
+         * 所以再跑一次 `db:seed` 会让时间线直接翻倍 —— 而对本项目来说，
+         * 一份翻倍的年表比没有年表更糟，它恰好是「可被信赖」这件事的反面。
+         *
+         * 字典（种族 / 地名 / 词条 / 阵营）与出处走 updateOrCreate，重跑无妨，因此只跳过这几步。
+         * 需要让种子里的条目改动真正落库时，用 `migrate:fresh --seed`。
+         */
+        if (Event::exists()) {
+            $this->command?->warn(
+                '时间线已有 '.Event::count().' 条条目，跳过条目与示例提案的种子（字典仍会照常刷新）。'
+                .'要让种子里的条目改动生效，请运行 migrate:fresh --seed。'
+            );
+
+            return;
+        }
+
         $this->seedEvents($admin);
         $this->seedTerraTourEvents($admin);
         // 塔卫二与泰拉的条目分别灌入，纪元、出处与索引各自成体系
@@ -159,41 +187,65 @@ class TimelineSeeder extends Seeder
     private function seedFactions(): void
     {
         $tree = [
-            ['name' => '罗德岛', 'full_name' => '罗德岛制药公司', 'color' => '#38bdf8', 'children' => [
-                ['name' => '精英干员', 'color' => '#0ea5e9'],
-                ['name' => '医疗部', 'color' => '#22d3ee'],
+            ['name' => '罗德岛', 'kind' => 'enterprise', 'full_name' => '罗德岛制药公司', 'color' => '#38bdf8', 'children' => [
+                ['name' => '精英干员', 'kind' => 'agency', 'color' => '#0ea5e9'],
+                ['name' => '医疗部', 'kind' => 'agency', 'color' => '#22d3ee'],
             ]],
-            ['name' => '巴别塔', 'full_name' => '巴别塔（罗德岛前身）', 'color' => '#6366f1', 'description' => '罗德岛的前身组织，卡兹戴尔内战期间活跃，后改组为罗德岛。'],
-            ['name' => '整合运动', 'full_name' => '感染者反抗组织 · 整合运动', 'color' => '#f87171'],
-            ['name' => '乌萨斯帝国', 'color' => '#94a3b8', 'children' => [
-                ['name' => '乌萨斯军事委员会', 'color' => '#64748b'],
+            ['name' => '巴别塔', 'kind' => 'society', 'full_name' => '巴别塔（罗德岛前身）', 'color' => '#6366f1', 'description' => '罗德岛的前身组织，卡兹戴尔内战期间活跃，后改组为罗德岛。'],
+            ['name' => '整合运动', 'kind' => 'society', 'full_name' => '感染者反抗组织 · 整合运动', 'color' => '#f87171'],
+            ['name' => '乌萨斯帝国', 'kind' => 'polity', 'color' => '#94a3b8', 'children' => [
+                ['name' => '乌萨斯军事委员会', 'kind' => 'agency', 'color' => '#64748b'],
             ]],
-            ['name' => '龙门', 'full_name' => '龙门独立市', 'color' => '#fbbf24'],
-            ['name' => '维多利亚', 'full_name' => '维多利亚王国', 'color' => '#a78bfa'],
-            ['name' => '卡西米尔', 'full_name' => '卡西米尔骑士之国', 'color' => '#f472b6'],
-            ['name' => '哥伦比亚', 'color' => '#10b981', 'description' => '原为维多利亚殖民地，独立后迅速工业化，莱茵生命等大型研究机构以此为基地。', 'children' => [
-                // 莱茵生命是哥伦比亚的研究机构，挂到母政体下之后，
-                // 「按哥伦比亚筛选」会自动把莱茵生命相关的条目也带出来
-                ['name' => '莱茵生命', 'full_name' => '莱茵生命实验室', 'color' => '#34d399'],
+            ['name' => '龙门', 'kind' => 'polity', 'full_name' => '龙门独立市', 'color' => '#fbbf24', 'children' => [
+                ['name' => '企鹅物流', 'kind' => 'enterprise', 'full_name' => '企鹅物流 · Penguin Logistics', 'color' => '#fcd34d',
+                    'description' => '大帝在龙门创办的物流企业，要人护卫与货物运输之外也承接灰色业务。'],
+                ['name' => '鲤氏侦探事务所', 'kind' => 'enterprise', 'full_name' => '鲤氏侦探事务所 · Lee\'s Detective Agency', 'color' => '#fde68a',
+                    'description' => '老鲤在龙门经营的私人侦探事务所，兼作各方势力之间的中立咨询渠道。'],
             ]],
-            ['name' => '伊比利亚', 'color' => '#22d3ee'],
-            ['name' => '炎国', 'color' => '#fb923c'],
-            ['name' => '叙拉古', 'color' => '#c084fc'],
-            ['name' => '喀兰贸易', 'color' => '#60a5fa'],
-            ['name' => '谢拉格', 'color' => '#93c5fd'],
-            ['name' => '卡兹戴尔', 'full_name' => '卡兹戴尔 / 萨卡兹流亡政权', 'color' => '#ef4444'],
-            ['name' => '拉特兰', 'color' => '#e2e8f0'],
-            ['name' => '萨尔贡', 'color' => '#facc15'],
-            ['name' => '深池', 'full_name' => '维多利亚感染者组织 · 深池', 'color' => '#e879f9'],
+            ['name' => '维多利亚', 'kind' => 'polity', 'full_name' => '维多利亚王国', 'color' => '#a78bfa'],
+            ['name' => '卡西米尔', 'kind' => 'polity', 'full_name' => '卡西米尔骑士之国', 'color' => '#f472b6'],
+            ['name' => '哥伦比亚', 'kind' => 'polity', 'color' => '#10b981', 'description' => '原为维多利亚殖民地，独立后迅速工业化，莱茵生命等大型研究机构以此为基地。', 'children' => [
+                // 这些机构挂到母政体下之后，「按哥伦比亚筛选」会自动把它们的条目也带出来
+                ['name' => '莱茵生命', 'kind' => 'enterprise', 'full_name' => '莱茵生命实验室', 'color' => '#34d399'],
+                ['name' => '黑钢国际', 'kind' => 'enterprise', 'full_name' => '黑钢国际 · Black Steel Worldwide', 'color' => '#f59e0b',
+                    'description' => '巴伦基地起家的私人安全承包商，由萨科塔雇佣兵「桥夹」克里夫创办。'],
+                ['name' => '雷神工业', 'kind' => 'enterprise', 'full_name' => '雷神工业 · Raythean Industries', 'color' => '#22c55e',
+                    'description' => '两位创始人分别来自高卢与哥伦比亚的综合工业集团，以源石晶体单元研发见长。'],
+            ]],
+            ['name' => '伊比利亚', 'kind' => 'polity', 'color' => '#22d3ee'],
+            ['name' => '炎国', 'kind' => 'polity', 'color' => '#fb923c'],
+            ['name' => '叙拉古', 'kind' => 'polity', 'color' => '#c084fc'],
+            ['name' => '喀兰贸易', 'kind' => 'enterprise', 'color' => '#60a5fa'],
+            ['name' => '谢拉格', 'kind' => 'polity', 'color' => '#93c5fd'],
+            ['name' => '卡兹戴尔', 'kind' => 'polity', 'full_name' => '卡兹戴尔 / 萨卡兹流亡政权', 'color' => '#ef4444'],
+            ['name' => '拉特兰', 'kind' => 'polity', 'color' => '#e2e8f0'],
+            ['name' => '萨尔贡', 'kind' => 'polity', 'color' => '#facc15'],
+            ['name' => '深池', 'kind' => 'society', 'full_name' => '维多利亚感染者组织 · 深池', 'color' => '#e879f9'],
 
             // 《大地巡旅》「国家与地区」卷覆盖、但此前未进入检索维度的政体。
             // 只填在有把握的字段上：不做正式国名的推测，拿不准的一律留空。
-            ['name' => '莱塔尼亚', 'color' => '#818cf8', 'description' => '以双王共治体制与术师传统著称的政体。'],
-            ['name' => '米诺斯', 'color' => '#2dd4bf', 'description' => '由多个城邦构成的地区，保有古老的信仰与竞技传统。'],
-            ['name' => '玻利瓦尔', 'color' => '#fb7185', 'description' => '长期陷入内乱与外部势力干涉的地区。'],
-            ['name' => '雷姆必拓', 'color' => '#a3a3a3', 'description' => '以矿业与资源贸易立身的企业化政体。'],
-            ['name' => '萨米', 'color' => '#bae6fd', 'description' => '泰拉北境雪原地区，以部族与萨满信仰为组织形态。'],
-            ['name' => '阿戈尔', 'color' => '#0891b2', 'description' => '与深海威胁直接相关的海洋文明。'],
+            ['name' => '莱塔尼亚', 'kind' => 'polity', 'color' => '#818cf8', 'description' => '以双王共治体制与术师传统著称的政体。'],
+            ['name' => '米诺斯', 'kind' => 'polity', 'color' => '#2dd4bf', 'description' => '由多个城邦构成的地区，保有古老的信仰与竞技传统。'],
+            ['name' => '玻利瓦尔', 'kind' => 'polity', 'color' => '#fb7185', 'description' => '长期陷入内乱与外部势力干涉的地区。'],
+            ['name' => '雷姆必拓', 'kind' => 'polity', 'color' => '#a3a3a3', 'description' => '以矿业与资源贸易立身的企业化政体。'],
+            ['name' => '萨米', 'kind' => 'polity', 'color' => '#bae6fd', 'description' => '泰拉北境雪原地区，以部族与萨满信仰为组织形态。'],
+            ['name' => '阿戈尔', 'kind' => 'polity', 'color' => '#0891b2', 'description' => '与深海威胁直接相关的海洋文明。'],
+            // 这两行此前只由条目引用时自动建档（slug 是随机串），因此一直没有颜色与类型。
+            // 点名登记之后，它们才会作为政体出现在地名树与资料集里，而不是停在「未归类」。
+            ['name' => '高卢', 'kind' => 'polity', 'color' => '#fde047', 'description' => '1031 年四国战争后从地缘政治版图上消失的帝国。'],
+            ['name' => '极东', 'kind' => 'polity', 'color' => '#fda4af', 'description' => '东国在阵营表里的写法：夹在乌萨斯与炎国两大地缘实体之间。'],
+
+            /*
+             * ---- 《大地巡旅》「组织」卷登记、但无归属政体的组织 ----
+             *
+             * 锈锤与太阳谷都不属于任何现存国家的下属机构，因此保持为顶层：
+             * 锈锤是跨越国界的松散团体，太阳谷的厂区社区自成一体
+             * （书中提到它出现在雷姆必拓一带，但并未称其为该政体的下属机构，不臆断）。
+             */
+            ['name' => '锈锤', 'kind' => 'society', 'color' => '#a8a29e',
+                'description' => '活动于荒野的松散团体，主张对「文明」本身复仇，被多国列为重大治安问题。'],
+            ['name' => '太阳谷机械工业', 'kind' => 'enterprise', 'full_name' => '太阳谷机械工业 · Sun Valley Industries', 'color' => '#d6d3d1',
+                'description' => '厂区即生活社区的工业集团，口号是「工作，是为了更好的生活」。'],
 
             /*
              * ---- 塔卫二（《明日方舟：终末地》）----
@@ -204,6 +256,7 @@ class TimelineSeeder extends Seeder
              */
             [
                 'name' => '终末地工业',
+                'kind' => 'enterprise',
                 'full_name' => '终末地工业 · Endfield Industries',
                 'color' => '#57c7d4',
                 'description' => '塔卫二上最大的技术承包商，由罗德岛制药公司与其他合作方协同组建，'
@@ -211,15 +264,23 @@ class TimelineSeeder extends Seeder
                 'children' => [
                     [
                         'name' => '协议回收部门',
+                        'kind' => 'agency',
                         'color' => '#6fc3d4',
                         'description' => '管理员直接带领的一线部门，负责回收塔卫二上失落的「协议」。',
                     ],
                 ],
             ],
-            ['name' => '联盟工团', 'color' => '#8a9aa8', 'description' => '塔卫二上的生产与开拓组织，四号谷地最初由其选定为生产开拓区域。'],
-            ['name' => '天使', 'color' => '#e2e8f0', 'description' => '塔卫二的主要敌对势力，第一次与第二次天使战争均与其进犯有关。'],
-            ['name' => '裂地者', 'color' => '#f87171', 'description' => '雅各布·迈森手下的匪帮，后被文明环带摧毁。社区资料中亦写作「掠地者」，两种写法并存。'],
-            ['name' => '文明环带', 'color' => '#7dd3fc', 'description' => '塔卫二上的人类聚居带，四号谷地位于其边缘地区。'],
+            ['name' => '联盟工团', 'kind' => 'society', 'color' => '#8a9aa8', 'description' => '塔卫二上的生产与开拓组织，四号谷地最初由其选定为生产开拓区域。'],
+            ['name' => '天使', 'kind' => 'military', 'color' => '#e2e8f0', 'description' => '塔卫二的主要敌对势力，第一次与第二次天使战争均与其进犯有关。'],
+            ['name' => '裂地者', 'kind' => 'society', 'color' => '#f87171', 'description' => '雅各布·迈森手下的匪帮，后被文明环带摧毁。社区资料中亦写作「掠地者」，两种写法并存。'],
+
+            /*
+             * 文明环带是**地域**而不是组织：它是塔卫二上的人类聚居带（四号谷地位于其边缘地区），
+             * 只是历史原因一直登记在阵营表里。归入 polity / territory 之后，
+             * 它不会再出现在资料集的「组织」页 —— 那页要回答的是「谁在做」，
+             * 而聚居带回答的是「在哪里」。
+             */
+            ['name' => '文明环带', 'kind' => 'territory', 'color' => '#7dd3fc', 'description' => '塔卫二上的人类聚居带，四号谷地位于其边缘地区。'],
         ];
 
         foreach ($tree as $order => $faction) {
@@ -233,17 +294,32 @@ class TimelineSeeder extends Seeder
 
     private function upsertFaction(array $data, int $order, ?int $parentId = null): Faction
     {
-        return Faction::updateOrCreate(
-            ['slug' => $data['slug'] ?? 'fac-'.md5($data['name'])],
-            [
-                'name' => $data['name'],
-                'full_name' => $data['full_name'] ?? null,
-                'color' => $data['color'] ?? '#64748b',
-                'description' => $data['description'] ?? null,
-                'parent_id' => $parentId,
-                'sort_order' => $order,
-            ],
-        );
+        /*
+         * 按**名称**匹配，而不是按 slug。
+         *
+         * 条目引用一个尚未登记的阵营时，`EventWriter::firstOrCreateByName()` 会以
+         * 「缺省 slug 回落成随机串」的方式自动建档（「高卢」「极东」就是这么来的）。
+         * 若这里按 slug 匹配，种子会为同一个阵营再建一份 —— 两行同名阵营，
+         * 各自挂着一半条目，而界面上完全看不出区别。
+         */
+        $faction = Faction::firstOrNew(['name' => $data['name']]);
+
+        $faction->fill([
+            'full_name' => $data['full_name'] ?? null,
+            // 缺省落到「未归类」而不是政体：一个没归类的阵营应当显眼地待在那儿，
+            // 而不是悄悄混进政体、或悄悄混进组织（`FactionKind::Other`）
+            'kind' => $data['kind'] ?? FactionKind::Other->value,
+            'color' => $data['color'] ?? '#64748b',
+            'description' => $data['description'] ?? null,
+            'parent_id' => $parentId,
+            'sort_order' => $order,
+        ]);
+
+        // slug 只在新建时给：已存在的行（可能是自动建档的）保留它原本的标识
+        $faction->slug ??= $data['slug'] ?? 'fac-'.md5($data['name']);
+        $faction->save();
+
+        return $faction;
     }
 
     // ------------------------------------------------------------------ 纪元
@@ -258,16 +334,54 @@ class TimelineSeeder extends Seeder
      */
     private function seedEras(): void
     {
+        /*
+         * 两处刻意的取舍：
+         *
+         *  1. **「结晶时代」来自书里，不是自造的分期。**《大地巡旅》年表的标题行写着
+         *     「结晶时代 —— 泰拉历 797 年至今」，那是作者给这段历史的命名。此前的划分
+         *     直接把它切成「远古 · 前纪元 / 旧秩序的裂痕…」，等于丢掉了书里现成的口径。
+         *  2. **它的区间与子纪元重叠是当然的**：父是分期标签，子是条目的桶，
+         *     父的区间本来就是子的并集。因此「区间不重叠」这条不变量按**同级**判定。
+         *     为了让 797 这个起点是真的，`prehistory` 的终点从 999 收到 796 ——
+         *     797–999 另立一个子纪元，年表里那段（移动城市成型、伊比利亚黄金时代、
+         *     巫王崛起）从此有了自己的色带。
+         *
+         * `sort_order` 决定分组顺序；`parent` 在全部纪元建好后再统一回填。
+         */
         $eras = [
             [
                 'name' => '远古 · 前纪元',
                 'slug' => 'prehistory',
                 'subtitle' => '源石与文明的原点',
-                'date_label' => '泰拉历前 — 泰拉历 999 年',
+                'date_label' => '泰拉历前 — 泰拉历 796 年',
                 'start' => TerraDate::toIndex(-500),
-                'end' => TerraDate::toIndex(999, 12, 31),
+                'end' => TerraDate::toIndex(796, 12, 31),
                 'color' => '#808080',
-                'description' => '源石显现、源石技艺普及、各古老政体成型的时期。年表大量缺失，条目多需推断。',
+                'description' => '源石显现、源石技艺普及、各古老政体成型的时期。年表大量缺失，条目多需推断。'
+                    .'终点取 796 年：次年起进入书里所说的「结晶时代」。',
+            ],
+            [
+                'name' => '结晶时代',
+                'slug' => 'crystalline-era',
+                'subtitle' => '书里的分期：797 年至今',
+                'date_label' => '泰拉历 797 年 — 1101 年',
+                'start' => TerraDate::toIndex(797),
+                'end' => TerraDate::toIndex(1101, 12, 31),
+                'color' => '#6b6b6b',
+                'description' => '《大地巡旅》年表只收录这段时期：作者自述它始于 797 年七城联邦建成'
+                    .'第一座现代移动城市，并延续至今。它是一个**分期标签**，条目只挂下辖纪元。',
+            ],
+            [
+                'name' => '结晶时代 · 兴起',
+                'slug' => 'era-797-999',
+                'subtitle' => '移动城市与列国成型',
+                'date_label' => '泰拉历 797 年 — 999 年',
+                'start' => TerraDate::toIndex(797),
+                'end' => TerraDate::toIndex(999, 12, 31),
+                'color' => '#8a7c33',
+                'description' => '年表所记结晶时代的前半段：移动城市成为城市的标准形态，'
+                    .'伊比利亚的黄金时代、巫王治下的莱塔尼亚、维多利亚命名哥伦比亚皆在此期间。',
+                'parent' => 'crystalline-era',
             ],
             [
                 'name' => '旧秩序的裂痕',
@@ -278,6 +392,7 @@ class TimelineSeeder extends Seeder
                 'end' => TerraDate::toIndex(1093, 12, 31),
                 'color' => '#9a7d18',
                 'description' => '萨卡兹流亡、伊比利亚大静谧余波、乌萨斯与卡西米尔的长期对抗。',
+                'parent' => 'crystalline-era',
             ],
             [
                 'name' => '切城事变前夕',
@@ -287,6 +402,7 @@ class TimelineSeeder extends Seeder
                 'start' => TerraDate::toIndex(1094),
                 'end' => TerraDate::toIndex(1095, 12, 31),
                 'color' => '#c9a227',
+                'parent' => 'crystalline-era',
             ],
             [
                 'name' => '切尔诺伯格事变与龙门危机',
@@ -297,6 +413,7 @@ class TimelineSeeder extends Seeder
                 'end' => TerraDate::toIndex(1097, 12, 31),
                 'color' => '#ffd400',
                 'description' => '整合运动崛起、切尔诺伯格遭天灾、罗德岛介入救援并卷入龙门危机。',
+                'parent' => 'crystalline-era',
             ],
             [
                 'name' => '整合运动余波',
@@ -306,6 +423,7 @@ class TimelineSeeder extends Seeder
                 'start' => TerraDate::toIndex(1098),
                 'end' => TerraDate::toIndex(1099, 12, 31),
                 'color' => '#ffa32e',
+                'parent' => 'crystalline-era',
             ],
             [
                 'name' => '维多利亚战争',
@@ -315,6 +433,7 @@ class TimelineSeeder extends Seeder
                 'start' => TerraDate::toIndex(1100),
                 'end' => TerraDate::toIndex(1100, 12, 31),
                 'color' => '#ff7038',
+                'parent' => 'crystalline-era',
             ],
             [
                 'name' => '萨卡兹的终局',
@@ -324,11 +443,14 @@ class TimelineSeeder extends Seeder
                 'start' => TerraDate::toIndex(1101),
                 'end' => TerraDate::toIndex(1101, 12, 31),
                 'color' => '#ff4242',
+                'parent' => 'crystalline-era',
             ],
         ];
 
+        $ids = [];
+
         foreach ($eras as $order => $era) {
-            Era::updateOrCreate(
+            $model = Era::updateOrCreate(
                 ['slug' => $era['slug']],
                 [
                     'name' => $era['name'],
@@ -342,6 +464,18 @@ class TimelineSeeder extends Seeder
                     'sort_order' => $order,
                 ],
             );
+
+            $ids[$era['slug']] = $model->id;
+        }
+
+        // 父级在第二遍统一回填：数组里的先后只是书写顺序，
+        // 不该由此衍生出「新增一个写在父前面的子纪元就挂掉」这种脆弱约束。
+        foreach ($eras as $era) {
+            if (! isset($era['parent'])) {
+                continue;
+            }
+
+            Era::whereKey($ids[$era['slug']])->update(['parent_id' => $ids[$era['parent']] ?? null]);
         }
 
         $this->seedTalosEras();
@@ -474,7 +608,71 @@ class TimelineSeeder extends Seeder
             ['阿伯莉', null, '联盟工团', null, '四号谷地遇袭时牺牲。', null, 'talos'],
         ];
 
-        foreach ($characters as $order => $row) {
+        /*
+         * ---- 历史人物（《大地巡旅》各卷的君主、贵族与学者）----
+         *
+         * 与干员分开的理由见 Character::isHistorical()：干员有代号与干员页，
+         * 历史人物有头衔与在位期。把在位区间结构化之后，「1074 年乌萨斯『大叛乱』
+         * 发生在谁的在位期内」这类问题变成一次可查的事实，而不是要去详述里翻。
+         *
+         * 种族一律留空：书里多数时候没有点明，不猜。在位区间只写书里明写的年份 ——
+         * 即位年或退位年未载的**只写一端**，绝不补一个看起来合理的数。
+         *
+         * 格式：[姓名, 阵营, 头衔, 起始年 | null, 结束年 | null, 简介]
+         */
+        $historical = [
+            ['伊戈尔·拉齐萨尔', '乌萨斯帝国', '乌萨斯建国皇帝', 31, null,
+                '以骏鹰册封的军事头衔「养熊人」（拉齐萨尔）号令军队，率乌萨斯起义推翻骏鹰王国，31 年攻克圣骏堡并加冕。逝世于攻打东部山脉的军中，在位结束年份未载。'],
+            ['阿列克谢·伊戈洛维奇', '乌萨斯帝国', '乌萨斯皇帝 ·「少年皇」', null, null,
+                '伊戈尔长子，十六岁于军中即位，把「东征」确立为国策，该战略延续三代皇帝、近百年。'],
+            ['弗拉基米尔·伊凡诺维奇', '乌萨斯帝国', '乌萨斯皇帝', null, 1073,
+                '亲历四国战争，利用战后接收的高卢技术开启乌萨斯最强盛的时期，发动第九、第十次乌卡战争；1072 年血峰战役惨败后身患重疾，次年驾崩，为「大叛乱」埋下祸根。'],
+            ['费奥多尔', '乌萨斯帝国', '乌萨斯皇帝', 1073, null,
+                '弗拉基米尔之子，登基后锐意改革、着手削减军队权力，直接引爆「大叛乱」；叛乱平定后仍面对贵族派系、感染者危机与社会不公。'],
+            ['赫尔昏佐伦', '莱塔尼亚', '莱塔尼亚皇帝 ·「巫王」', 969, 1077,
+                '以雷霆手腕解决即位时的内忧外患（承认叙拉古独立、收权于宫廷），此后转向恐怖统治；1077 年九月起义中于高塔内被双子女皇击败陨落。'],
+            ['莉泽洛特', '莱塔尼亚', '莱塔尼亚双子女皇（之一）', 1077, null,
+                '「双子」之一，曾是有史以来最年轻的乐团首席；1077 年九月起义中与希尔德加德夜袭巫王高塔，此后共同加冕。'],
+            ['希尔德加德', '莱塔尼亚', '莱塔尼亚双子女皇（之一）', 1077, null,
+                '「双子」之一，与莉泽洛特同为巫王之后的共治者。'],
+            ['科西嘉一世', '高卢', '高卢帝国末代皇帝', null, 1031,
+                '被称作帝国历史上最年轻的军事天才；1029 年发动对莱塔尼亚的战争，1031 年四皇会战战败，旗舰被击毁、遗骸不知所终。'],
+            ['弗雷德里克三世', '维多利亚', '维多利亚皇帝', null, null,
+                '维多利亚历代皇帝中著名的军事家，开展彻底的军事改革、建立由皇帝与议会直接指挥的职业军队，并在四皇会战中亲率主力舰队。'],
+            ['亨利·阿利斯泰尔·维多利亚', '维多利亚', '维多利亚末代皇帝', null, 1072,
+                '1072 年被公开执行绞刑，无人继位；此事毫无征兆、成为当代最著名的悬案，维多利亚自此皇位空置。'],
+            ['威灵顿公爵', '维多利亚', '维多利亚公爵 ·「铁公爵」「帝国丧钟」', null, null,
+                '四皇会战中指挥舰队穿插高卢军团后方、截断补给线，扭转整场战役；战后成为毫无疑问的战争英雄，在贵族中获得崇高地位。'],
+            ['远逐者', '卡兹戴尔', '第一魔王', null, null,
+                '提卡兹文明史上有记载的第一位罪人，也是第一位魔王：他停止以同类为食、被放逐后又戴黑色冠冕而返，带领提卡兹建起第一座卡兹戴尔。'],
+            ['戈渎', '卡兹戴尔', '魔王 ·「砌城匠」「大制图师」', null, null,
+                '土石之子出身的魔王，在哀愁之地上为新卡兹戴尔砌下第一处地基；因拒绝发动战争，被挚友霸迩萨削去双臂、溺毙水中。'],
+            ['霸迩萨', '卡兹戴尔', '谴罚氏族领袖 ·「焕日者」', null, null,
+                '炎魔出身的谴罚氏族领袖，主张萨卡兹不可能与任何人侵者共享这片大地；弑杀魔王戈渎后，被奎隆追杀。'],
+            ['奎隆', '卡兹戴尔', '游侠王 ·「青色怒火」', null, null,
+                '霸迩萨的持剑士、混血萨卡兹，剑术无出其右；魔王戈渎遇害后追杀叛友，其复仇记被传唱为歌谣、改编为戏剧，并册封诸王庭之主。'],
+            ['卡门·伊·伊比利亚', '伊比利亚', '伊比利亚大主教', null, null,
+                '大静谧后多次回绝将他立为教宗的提议，主持九名大主教抛却原姓、加封圣徒之名，并将国教会改组为「伊比利亚审判庭」。'],
+            ['路德维格', '莱塔尼亚', '恩瓦德大区选帝侯 ·「学士」', null, null,
+                '第一个把自己的高塔正式确立为「大学」的贵族，近乎狂热地不分尊卑传授知识；在选皇前夜突然发疯暴死，成为帝国史上未决的悬案。'],
+            ['恩希欧迪斯·希瓦艾什', '喀兰贸易', '喀兰贸易董事长', null, null,
+                '谢拉格贵族出身，曾留学维多利亚、后投奔开斯特公爵；1082 年十四岁继承家业，1090 年创立喀兰贸易，并在 1097 年末完成公司改组。'],
+            ['克里夫', '黑钢国际', '黑钢国际创始人 ·「桥夹」', null, null,
+                '萨科塔雇佣兵出身，以 1016 年哥伦比亚独立战争为起点建立黑钢；他说自己选择的「解药」不是和平，而是一种规范、可控且具有主动选择权的战争方式。'],
+            ['大帝', '企鹅物流', '企鹅物流创始人', null, null,
+                '哥伦比亚知名说唱歌手与制作人、黑胶唱片收藏家，1093 年在龙门创办企鹅物流；公司架构近乎没有，招聘由他亲自把关。'],
+            ['老鲤', '鲤氏侦探事务所', '鲤氏侦探事务所创始人', null, null,
+                '出身炎国腹地商贾世家，早年来到龙门并逐渐成为「龙门的活百科全书」；其关系网小到街头商贩、大到龙门管理者魏彦吾。'],
+        ];
+
+        $raceIds = Race::pluck('id', 'name');
+
+        // 人物数据里写的是「龙族」，书里的立目名是「龙」—— 用别名归并到同一条
+        $raceAliases = ['龙族' => '龙'];
+
+        $order = 0;
+
+        foreach ($characters as $row) {
             [$name, $codename, $faction, $race] = $row;
 
             /*
@@ -495,10 +693,35 @@ class TimelineSeeder extends Seeder
                     'codename' => $codename,
                     'world' => $world,
                     'faction_id' => $factionSlugs[$faction] ?? null,
-                    'race' => $race,
+                    // 「未公开」这类非种族值不建字典条目，落空即为「未知」
+                    'race_id' => $race === null ? null : ($raceIds[$raceAliases[$race] ?? $race] ?? null),
+                    'kind' => 'operator',
+                    'title' => null,
+                    'reign_start_index' => null,
+                    'reign_end_index' => null,
                     'description' => $profile,
                     'wiki_slug' => $wikiSlug,
-                    'sort_order' => $order,
+                    'sort_order' => $order++,
+                ],
+            );
+        }
+
+        foreach ($historical as [$name, $faction, $title, $fromYear, $toYear, $profile]) {
+            Character::updateOrCreate(
+                ['slug' => 'chr-'.md5($name)],
+                [
+                    'name' => $name,
+                    'codename' => null,
+                    'world' => World::Terra->value,
+                    'faction_id' => $factionSlugs[$faction] ?? null,
+                    'race_id' => null,
+                    'kind' => 'historical',
+                    'title' => $title,
+                    'reign_start_index' => $fromYear === null ? null : TerraDate::toIndex($fromYear),
+                    'reign_end_index' => $toYear === null ? null : TerraDate::toIndex($toYear, 12, 31),
+                    'description' => $profile,
+                    'wiki_slug' => null,
+                    'sort_order' => $order++,
                 ],
             );
         }
@@ -647,7 +870,7 @@ class TimelineSeeder extends Seeder
             'raw_text' => $tourCorpus['text'] ?? null,
             'description' => $tourCorpus === null
                 ? '官方世界观设定集。系统收录其中的世界观机制与国家／地区背景条目；'
-                    .'章节定位为粗粒度标注（世界卷 / 国家与地区卷）。'
+                    .'章节定位为粗粒度标注（世界卷 / 国家与地区卷 / 组织卷）。'
                 : sprintf(
                     '官方世界观设定集。系统收录其中的世界观机制与国家／地区背景条目；'
                     .'原文语料为书末附录「泰拉纪年」节录（全书第 %d–%d 行），'
@@ -689,6 +912,62 @@ TXT,
 撤离途中，小队与整合运动先遣队发生交火。
 TXT,
         ]);
+    }
+
+    /**
+     * 由 location 原文匹配地名，取**最长**匹配。
+     *
+     * 为什么用「包含」而不是精确相等：`location` 是给人看的原文，写法自由
+     * （「维多利亚 · 伦蒂尼姆」「乌萨斯－卡西米尔边境」），要求精确相等
+     * 等于要求人再维护一份映射表。取最长匹配则让「维多利亚 · 伦蒂尼姆」
+     * 落到更具体的「伦蒂尼姆」，而不是笼统的「维多利亚」。
+     *
+     * 匹配不到就留空：宁可没有结构化链接，也不要挂到错误的地名上 ——
+     * 一个错的链接比没有链接更难发现。
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Place>  $places
+     */
+    private function matchPlace(?string $location, Collection $places): ?int
+    {
+        if (blank($location)) {
+            return null;
+        }
+
+        $parentOf = $places->pluck('parent_id', 'id');
+
+        // 深度用于打破平局：「炎国 · 尚蜀」里「炎国」与「尚蜀」同为两字，
+        // 而这句话说的是尚蜀 —— 命中写法一样长时，层级更深的那个更具体。
+        $depthOf = function (int $id) use ($parentOf): int {
+            $depth = 0;
+
+            while (($parent = $parentOf[$id] ?? null) !== null && $depth < 8) {
+                $depth++;
+                $id = (int) $parent;
+            }
+
+            return $depth;
+        };
+
+        // 每个地名取「命中写法里最长的那个」作为优先级。别名与下辖地名同样参与，
+        // 因此「乌萨斯」能挂到「乌萨斯帝国」（简称写进了别名），
+        // 「炎国 · 尚蜀」则按平局规则落到更具体的「尚蜀」。
+        $best = $places
+            ->map(function (Place $place) use ($location, $depthOf) {
+                $lengths = collect($place->matchTokens())
+                    ->filter(fn (string $token) => str_contains((string) $location, $token))
+                    ->map(fn (string $token) => mb_strlen($token));
+
+                return [
+                    'id' => $place->id,
+                    'rank' => [$lengths->max() ?? 0, $depthOf((int) $place->id)],
+                ];
+            })
+            ->filter(fn (array $hit) => $hit['rank'][0] > 0)
+            // 数组按元素依次比较：先比命中长度，再比深度
+            ->sortByDesc('rank')
+            ->first();
+
+        return $best === null ? null : $best['id'];
     }
 
     // ------------------------------------------------------------------ 引文定位
@@ -785,7 +1064,7 @@ TXT,
             [
                 'title' => '七城联邦建成第一座现代移动城市',
                 'date' => '泰拉历797年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '七城联邦建成泰拉历史上第一座现代移动城市，「整体迁移以躲避天灾」自此成为泰拉城市的标准形态。',
                 'location' => null,
@@ -796,7 +1075,7 @@ TXT,
             [
                 'title' => '炎国首次派出驻外信使',
                 'date' => '泰拉历845年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '炎国首次向泰拉各国派出信使进行外交活动，开启了泰拉诸国交往的新局面。',
                 'location' => null,
@@ -808,7 +1087,7 @@ TXT,
             [
                 'title' => '玻利瓦尔主导权开始脱离伊比利亚',
                 'date' => '泰拉历885年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '玻利瓦尔的主导权开始从伊比利亚向外转移，这一进程最终导向玻利瓦尔的独立建国。',
                 'location' => null,
@@ -819,7 +1098,7 @@ TXT,
             [
                 'title' => '莱塔尼亚控制下的玻利瓦尔国成立',
                 'date' => '泰拉历897年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '莱塔尼亚控制的玻利瓦尔国成立，玻利瓦尔进入被外国势力主导的时期。',
                 'details' => "莱塔尼亚卷载：泰拉历 897 年，莱塔尼亚趁玻利瓦尔深陷内战泥潭之机悍然发兵，在那里建立了傀儡政权，以期实现对玻利瓦尔的实际控制。这是帝国数度主动引发军事冲突的一例。\n\n背景据《大地巡旅》莱塔尼亚卷。",
@@ -832,7 +1111,7 @@ TXT,
             [
                 'title' => '三国联军进攻卡兹戴尔失败',
                 'date' => '泰拉历898年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '三国联军进攻卡兹戴尔失败，卡兹戴尔战争议会随后成立。',
                 'details' => '年表未载明「三国」具体所指，不臆测。',
@@ -845,7 +1124,7 @@ TXT,
             [
                 'title' => '伊比利亚人与「岛民」相遇',
                 'date' => '泰拉历913年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '伊比利亚人与来自海洋的「岛民」相遇，两大文明的接触自此开始。',
                 'details' => "伊比利亚卷载：泰拉历 913 年，伊比利亚迎来第一批来自海洋的移民——被称为「岛民」的阿戈尔人，他们希望在这片土地上定居。刚上岸的岛民不知伊比利亚的宫廷礼节，面对赤金铸成的王座，他们既不卑躬屈膝，也无花言巧语，但他们携带的艺术与技术产物令伊比利亚人惊叹不已：当看到晶莹的细流在精巧的罗盘表面规律地流动、指示出整片海域的洋流走向，伊比利亚的国王燃起了前所未有的野心。\n\n「岛民」即阿戈尔人；这次相遇为伊比利亚随后的黄金时代埋下伏笔。\n\n背景据《大地巡旅》伊比利亚卷。",
@@ -858,7 +1137,7 @@ TXT,
             [
                 'title' => '伊比利亚进入黄金时代',
                 'date' => '泰拉历930年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '伊比利亚走向黄金时代，成为「第二个将土地与城塞喻作黄金的国家」。',
                 'details' => "伊比利亚卷载：岛民上岸之后，伊比利亚成就了前所未有的繁荣，如今的伊比利亚人大多将这段岁月称作「黄金时代」。以首席船舶设计师布雷奥甘为代表，许多阿戈尔岛民对来自海洋的威胁抱有忌惮，尝试在灾难来临前做好准备，其努力极大地推动了伊比利亚的经济与技术发展；王室与贵族则总能找到方法，把岛民的科研与技术成果用于攫取财富和权力——黄金舰队竣工后并未驶入南方的开阔海域行使科考职能，而是浩浩荡荡穿过海峡，在维多利亚公爵与萨尔贡帕夏惊异的目光中沿着内海的海岸巡航。\n\n黄金时代同时也是一个认同焦虑的时代：到十一世纪初，越来越多的人抛下世代相传的财产与家业，盲目踏入全然未知的领域，寻觅配得上「黄金时代精神」的新异道路；踏实与本分反被视为失败者与落后者的特质，底层劳动者走上街头会听到斥责他们不思进取的声音。岛民的技术创造的过剩生产力，短暂地掩饰了社会上的许多裂痕。\n\n背景据《大地巡旅》伊比利亚卷。",
@@ -870,7 +1149,7 @@ TXT,
             [
                 'title' => '巫王赫尔昏佐伦即位',
                 'date' => '泰拉历969年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '莱塔尼亚巫王赫尔昏佐伦即位，莱塔尼亚进入巫王时代。',
                 'details' => "背景：莱塔尼亚卷载，赫尔昏佐伦被推举登基时正值内忧外患——叙拉古的独立运动在 967 年爆发并波及九个大区，一时间国内叛乱四起；选帝侯们纷纷以镇压独立运动为由索要更多资源与政治倾斜，实则借机壮大自身实力，古老的帝国濒临崩溃。\n\n经过：他先以雷霆手腕将长期与帝国离心离德的叙拉古切割出去、承认其独立，随后以镇压国内叛乱为由，把选帝侯们的军队与一部分权力收归帝国宫廷，莱塔尼亚皇帝由此在历史上首次获得超越选帝侯的实权。此后他大刀阔斧改革，在保证全域文化一致的前提下，教育与经济急速壮大，帝国在他带领下蓬勃发展。\n\n转折：改革招致贵族日益增长的不满，他以强硬手段对付异见者，冲突与对抗不断升级，原先镇压叛乱的亲兵被用作密探和特务，国内大肆搜捕甚至直接屠杀反对分子，许多骇人听闻的惨案即在此时发生。他把自己关进高塔，越来越少以统治者的身份出现在大众面前，诡异的做派反而让追随者愈发崇拜、让其他人愈发畏惧，「巫王」这一名号逐渐取代了本名。其统治自 969 年起延续百余年，直至 1077 年九月起义。\n\n背景与经过据《大地巡旅》莱塔尼亚卷。",
@@ -882,7 +1161,7 @@ TXT,
             [
                 'title' => '叙拉古脱离莱塔尼亚',
                 'date' => '泰拉历969年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '叙拉古正式脱离莱塔尼亚。',
                 'details' => "背景：莱塔尼亚立国时由九大部落与叙拉古地区共同缔结《金律乐章》，叙拉古以自治领身份入盟；受制于地理与政治条件，其文化与其余九区差异极大。967 年，叙拉古爆发声势浩大的独立运动，分离思潮随后波及另外九个大区，帝国一度濒临崩溃。\n\n经过：969 年巫王赫尔昏佐伦登基后，选择将这块长期与帝国离心离德之地切割、承认其独立。书中特别提到，《金律乐章》在莱塔尼亚漫长历史上几乎未曾有过变动，唯独一次便是巫王在登基时删除了有关叙拉古自治领的内容。\n\n背景与经过据《大地巡旅》莱塔尼亚卷。",
@@ -898,7 +1177,7 @@ TXT,
             [
                 'title' => '维多利亚发现并命名哥伦比亚',
                 'date' => '泰拉历990年',
-                'era' => 'prehistory',
+                'era' => 'era-797-999',
                 'confidence' => 'confirmed',
                 'summary' => '一片全新的地区由维多利亚首次发现，并被命名为「哥伦比亚」。',
                 'location' => '哥伦比亚',
@@ -1603,6 +1882,7 @@ TXT,
 
         $byTitle = [];
         $locators = $this->sourceLocators();
+        $places = Place::ofWorld(World::Terra)->get();
 
         foreach ($events as $data) {
             $eraId = Era::where('slug', $data['era'])->value('id');
@@ -1616,6 +1896,8 @@ TXT,
                 'date_precision' => $data['precision'] ?? null,
                 'date_confidence' => $data['confidence'],
                 'era_id' => $eraId,
+                // location 保留原文，place_id 是同一句话的结构化链接
+                'place_id' => $this->matchPlace($data['location'] ?? null, $places),
                 'sort_seq' => $data['sort_seq'] ?? 0,
                 'status' => $data['status'] ?? ($data['confidence'] === 'confirmed' ? EventStatus::Verified->value : EventStatus::NeedsReview->value),
                 // 显式给出 null，交给 TerraDateParser 从 date_display 推导区间
@@ -1641,6 +1923,256 @@ TXT,
 
         if ($cheng && $ruin) {
             Event::whereKey($ruin)->update(['caused_by_event_id' => $cheng]);
+        }
+    }
+
+    // ------------------------------------------------------------------ 字典
+
+    /**
+     * 种族字典（《大地巡旅》第四章）。
+     *
+     * 分两类：
+     *
+     *  1. **书里立目的种族** —— 附一句取自该章的概要；
+     *  2. **人物数据里实际用到、但书中未单独立目的写法**（卡特斯、菲林、库兰塔…）——
+     *     只登记名字，描述留空。这不是偷懒：这些写法确实是项目里已存在的值，
+     *     要么给它们建条目、要么把人物上的种族抹掉，而后者等于凭空删信息。
+     *     描述待读到相应章节再补，**不靠印象写**。
+     *
+     * 另外，`龙族` 只是人物数据里的写法，书里的立目名是「龙」，用别名归并到同一条。
+     */
+    private function seedRaces(): void
+    {
+        $documented = [
+            ['萨弗拉', 'Savra', '以沙漠为家，多居萨尔贡，一部分迁居雷姆必拓。身体与尾巴长有鳞片，身手矫健、眼光敏锐，大部分个体全身覆鳞并能改变体表鳞片颜色，配合服装可与沙漠、荒地融为一体。大众文化把「长寿」与「来自萨尔贡」夸张成了固定形象。'],
+            ['札拉克', 'Zalak', '人口庞大、分布广泛，近年有相当数量迁往哥伦比亚。头顶生有一对显眼的圆耳朵，耳簇生长自耳朵本身（一小部分菲林也有）；卡西米尔到谢拉格一带的个体耳簇更浓密、尾巴更大。体型普遍较小、动作灵活，听力与反应优异，多从事信使工作。'],
+            ['杜林', 'Durin', '身材矮小的尖耳朵种族，以名为「城邦」的地下居住地为社会单位，分布在泰拉各处地表之下。建造与维护城邦的科技远比地表人掌握的更先进；极少透露来历，也看不出干涉地表的意图。所谓「矮小源于幼年疾病」是纯粹的谣言。'],
+            ['塞拉托', 'Cerato', '原栖息于萨尔贡绿洲的族群之一，以强健体格著称。与库兰塔一样善于奔跑，但不常长途跋涉。自部落时期起以角为重要武器，爱护角的方式是面对面短途冲锋对撞磨砺，近年也有个体为角加装护甲。保留饲养羽兽的传统。'],
+            ['安努拉', 'Anura', '主要居住在萨尔贡与玻利瓦尔，喜欢潮湿、水草丰沛之地。历史上因稀少与居于雨林深处而鲜为外人所见，萨尔贡宫廷长期邀请雨林部落的安努拉前往沙尔－阿加德担任要职。多数传承潜行与隐身的源石技艺，少部分能以自身分泌的剧毒物质为武器。'],
+            ['阿达克利斯', 'Archosauria', '崇尚力量、以雨林为家，多生活在萨尔贡东部湿润之地，以部落形式居于沿河地带。有许多用尾巴进行的竞技（如拖拽原木），部分人自称「提亚卡乌」（骁勇善战之人），该认同源自古代萨尔贡皇帝的封赏。水中行动能力出众，游泳是与生俱来的天赋。'],
+            ['依特拉', 'Itra', '多居寒冷的高原山地或冰原附近，常见于炎国、谢拉格、乌萨斯与萨米的部分地区。外观与卡普里尼、埃拉菲亚、库兰塔相似，但**不长角**，身体素质略逊于库兰塔。高寒生活使其变得多疑警惕，许多族群保留排外传统。'],
+            ['匹特拉姆', 'Petram', '极其少见，许多人从未听说过。避世、居于水源丰富之地，生理构造独特，没有尾巴、角或鳞片等显著外观特征。学界认知极不充分，少数研究者甚至认为该种族并不存在。聚落多掌握高明的熔炼与生产技术，拒绝向外人分享。'],
+            ['阿纳缇', 'Anaty', '常与山脉绑定的常见种族，长期生活在远离平原的山区，对客人热情相待。善奔走，崎岖山地如履平地，因此多从事行商与信使；随着移动城市发展，业务也转到城市上。偏远族群保留「成年礼」传统：把将成年者放逐到荒山独立生存一段时间。'],
+            ['皮洛萨', 'Pilosa', '极易被误认、极少出现在人群中，连作者也未曾亲见，历史上有过记录但传闻不多。已知的反应迟缓特征见于矿场与漫画的记录：一位皮洛萨矿工因「反应迟缓」被困在铁丝网顶端，而东国漫画则描写过一位把迟缓化为剑理、名震一方的皮洛萨剑豪。'],
+            ['德拉克', 'Draco', '在泰拉历史舞台上扮演重要角色的神民种族，人数稀少、零散分布，各地区族群有鲜明的地域特征。常以英雄或统治者的形象出现在神话中，近百年已有可信数据证明其在源石技艺适应性与某些身体素质上确有优势。「德拉克」这一统称直到近千年才在核心圈形成。'],
+            ['龙', 'Lung', '炎国独有的神民种族，缔造了古老文明并统治着繁荣开明的帝国。炎国皇室祖先「真龙」以「炎」为名，皇帝继承其名号，皇室自称「真龙一族」；除皇族外炎国还生活着许多以龙自居、同为炎氏赐姓百氏后代的龙。炎国拥有庞大的文书体系，其起源历史比其他种族的传说更翔实可信。'],
+            ['麒麟', 'Kylin', '炎国大地上人数稀少但地位崇高的种族，历来是朝堂与府衙的常客。外貌与埃拉菲亚相似，但作为神民种族更为入世。早在百氏之乱前就在炎氏部族中担任侍卫与术师；传说中一位麒麟术师在大湖施展术法使雷霆自湖中生出，那片大湖被称为「雷池」。其招引雷电的技艺传承至今，称为「雷法」。'],
+            ['阿戈尔', 'AEgir', '分布从泰拉沿海到内陆水体附近，拥有许多分支，体质差异显著：大多亲近水体但并非都能水下呼吸；对水的依赖超越其他种族，大量失水的后果也更严重，因此常备保湿霜剂与蒸馏装备。迁徙图景多为由泰拉外沿向内陆散布，起源学学者推断其来自海洋。'],
+            ['萨科塔', 'Sankta', '头顶光环、身后光翼，是荣受律法的象征，千年以来在拉特兰城过着秩序井然的生活。最神秘之处是律法赋予的共感能力——对他们是像观察表情一样不自觉的行为。随身携带的「铳」被视为来自律法的赐予与信仰的象征，称为「守护」，拉特兰城内每个适龄萨科塔都拥有一把甚至多把。'],
+            ['萨卡兹', 'Sarkaz', '较为少见、长相各异的种族，在人类历史中始终遭受其他种族敌视。有以王庭为核心的十支重要氏族，也有歌利亚、阿纳萨等少量非王庭氏族，绝大多数萨卡兹是各氏族的混血。长期流动的流浪生活使许多带萨卡兹烙印的传统悄无声息地消失，现代人熟悉的萨卡兹雇佣兵亦受此影响。极易感染矿石病。'],
+        ];
+
+        /*
+         * 人物数据里已有、但书中第四章未单独立目的写法。
+         * 只登记名字，描述留空 —— 宁可缺失，也不要靠印象写。
+         */
+        $registeredOnly = ['卡特斯', '菲林', '库兰塔', '瓦伊凡', '黎博利', '鲁珀', '温迪戈', '精灵'];
+
+        $order = 0;
+
+        foreach ($documented as [$name, $english, $description]) {
+            Race::updateOrCreate(['slug' => Str::slug($english) ?: 'race-'.$order], [
+                'name' => $name,
+                'english' => $english,
+                'description' => $description,
+                'sort_order' => $order++,
+            ]);
+        }
+
+        foreach ($registeredOnly as $name) {
+            Race::updateOrCreate(['slug' => 'race-'.md5($name)], [
+                'name' => $name,
+                'english' => null,
+                'description' => null,
+                'sort_order' => $order++,
+            ]);
+        }
+    }
+
+    /**
+     * 地名树（《大地巡旅》第五章给出的政区层级）。
+     *
+     * 刻意只收录**书里明确写过**的地名与隶属关系，不做行政区划的推演：
+     * 维度的价值在于可检索，而不在于铺满。
+     */
+    private function seedPlaces(): void
+    {
+        $factions = Faction::pluck('id', 'name');
+
+        /*
+         * [名称, 层级, 上级, 所属政体, 说明, 别名]
+         *
+         * 数组顺序即插入顺序，父必须在子之前 —— 子级的 parent_id 由 `$ids[上级]` 查得，
+         * 上级尚未插入时会静默落成 null（这正是「龙门」此前挂空的原因）。
+         */
+        $terra = [
+            ['维多利亚', 'nation', null, '维多利亚', '由维多利亚王国、塔拉王国、下高卢王国三个法理王国组成的帝国。'],
+            ['维多利亚王国', 'kingdom', '维多利亚', '维多利亚', '三个法理王国之一，皇室直属领地与各级贵族领地的核心。'],
+            ['塔拉王国', 'kingdom', '维多利亚', '维多利亚', '维多利亚南方地区；书中另有一份塔拉视角的记述，与官方版本出入较大。'],
+            ['下高卢王国', 'kingdom', '维多利亚', '维多利亚', '维多利亚声称拥有其完整主权，因此在归属问题上与莱塔尼亚、乌萨斯摩擦不断。'],
+            ['伦蒂尼姆', 'city', '维多利亚王国', '维多利亚', '维多利亚帝国的首都与政治、金融、文化中心，被其宣称是「泰拉的中心」；数年前起与外界断绝联系。'],
+            ['莱塔尼亚', 'nation', null, '莱塔尼亚', '由九个选帝侯区组成的邦联帝国，没有固定的首都。'],
+            ['海登施威尔大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一。'],
+            ['恩瓦德大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一；「学士」路德维格曾任该区统治者。'],
+            ['厄登赫尔大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一。'],
+            ['鲁珀坎大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一。'],
+            ['施彤领大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一。'],
+            ['瓦瑟领大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一；此地选帝侯曾下令铸造杜卡特金币。'],
+            ['福特冈大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一。'],
+            ['奥施登海姆大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一。'],
+            ['凯普拉尼亚大区', 'region', '莱塔尼亚', '莱塔尼亚', '莱塔尼亚九大区之一。'],
+            ['乌萨斯帝国', 'nation', null, '乌萨斯帝国', '以军事力量为国家组织核心的北方帝国；除省份外另有不受省长管辖的集团军属地。', ['乌萨斯']],
+            ['圣骏堡', 'city', '乌萨斯帝国', '乌萨斯帝国', '乌萨斯首都，1033 年被迁到巨大的移动平台之上，此后成为帝国最重要的工业中心。'],
+            ['格里高利省', 'province', '乌萨斯帝国', '乌萨斯帝国', '临近圣骏堡；1074 年的酒馆冲突与省议会被按军法处决，成为「大叛乱」的直接起因。'],
+            ['切尔诺伯格', 'city', '乌萨斯帝国', '乌萨斯帝国', '乌萨斯的重要移动城市；1096 年 12 月 23 日整合运动在此发动事变，是主线的时间原点。'],
+            ['哥伦比亚', 'nation', null, '哥伦比亚', '原为维多利亚的开拓区，1016—1019 年独立战争后成为联邦；巴伦矿场等旧源石矿场位于其南部荒地。'],
+            ['汐斯塔', 'city', '哥伦比亚', '哥伦比亚', '哥伦比亚境外的自由邦 —— 具有完全自治权的独立城邦，理论上仍属哥伦比亚；附近有高强度火山活动。'],
+            ['炎国', 'nation', null, '炎国', '东方大国，三亿人口，下设十九个行政区划；以「真龙」为皇帝，地方最高一级为宣政司，其下设府、属州与县。'],
+            ['尚蜀', 'region', '炎国', '炎国', '炎国西南；本地人以四季如春为傲，城市地块分布在山峦之间。'],
+            ['龙门', 'city', '炎国', '龙门', '炎国西北边陲的商贸重镇，进入炎国的必经中转站。'],
+            ['谢拉格', 'nation', null, '谢拉格', '以耶拉冈德信仰为中心的北方山国，喀兰圣山在其境内。'],
+            ['拉特兰', 'nation', null, '拉特兰', '律法庇护之国；拉特兰城在被改建为移动城市时，重工制品进口自伊比利亚。'],
+            ['伊比利亚', 'nation', null, '伊比利亚', '大静谧前坐拥南方丰饶半岛、掌控连通内海与开阔海域的峡道；灾后国土沉没、由数个狭长三角洲组成。'],
+            ['萨尔贡', 'nation', null, '萨尔贡', '南方大国；泰拉纪年即以其「过去与未来之王」发现圣物之年为元年。'],
+            ['卡兹戴尔', 'nation', null, '卡兹戴尔', '萨卡兹的家园所在，游走在核心圈列强之间的狭缝中。'],
+            ['卡西米尔', 'nation', null, '卡西米尔', '与乌萨斯有着相似起源、但拥有更精锐骑士团的国家。'],
+
+            /*
+             * 以下为第 5 章其余各卷（5.4 高卢 / 5.7 阿戈尔 / 5.11 玻利瓦尔 / 5.12 叙拉古 /
+             * 5.14 米诺斯 / 5.15 萨米 / 5.16 雷姆必拓 / 5.17 炎国 / 5.18 东国）。
+             *
+             * 至此第 5 章十九卷的政区全部入树。此前只收了 10 卷，代价是条目的 `place_id`
+             * 挂不上去（「叙拉古」「玻利瓦尔」这些 location 是照原文抄的短名），
+             * 而挂不上不是留空，是**静默缺失**。
+             */
+            ['高卢', 'nation', null, '高卢', '1031 年四国战争的战败方：首都林贡斯被联军夷平、国土被瓜分，帝国从地缘政治版图上消失；如今只以「高卢区」与三千万说高卢语者的文化认同延续。'],
+            ['阿戈尔', 'nation', null, '阿戈尔', '海中的知识与技术文明。其先民从各路水道汇入大海，后代即伊比利亚所称的「岛民」；如今面临海嗣的威胁。'],
+            ['赫库兰尼姆', 'city', '阿戈尔', '阿戈尔', '阿戈尔的城市；以地热能为主要能源，开掘了三百余条能源井道，隔热穹顶可承受四级以下强度的火山喷发。'],
+            ['玻利瓦尔', 'nation', null, '玻利瓦尔', '泰拉西部。三百多年间从富裕的伊比利亚玻利瓦尔总督区沦为「玻利瓦尔地区」；莱塔尼亚与哥伦比亚先后试图控制它，都没能成功。'],
+            ['叙拉古', 'nation', null, '叙拉古', '家族割据城邦的地区，967 年脱离莱塔尼亚；此后长达七十年的内乱，直到西西里夫人以灰厅与城邦联合议事会重新立起秩序。'],
+            ['西西里', 'city', '叙拉古', '叙拉古', '灰厅所在地。建城之初由数个小家族共治，一场政变后为西西里家族独占，该家族随着灰厅成立而走到尽头。'],
+            ['米诺斯', 'nation', null, '米诺斯', '曾被萨尔贡占领的诸城邦；英雄崇拜与雕塑艺术的故乡，萨尔贡统治时期宏伟的英雄巨像尽数被拆毁。'],
+            ['萨米', 'nation', null, '萨米', '大地的止境，森林与冻原的领土；体制最为独特的「国家」，以雪祀大会与独特的法术闻名。'],
+            ['察帕特', 'settlement', '萨米', '萨米', '萨米南方的度假小镇，邻近楚阿维亚利湖。'],
+            ['雷姆必拓', 'nation', null, '雷姆必拓', '泰拉东南方，塔尔干主矿脉所在地；以矿业厂区为单位构成的松散联合体，没有强力中央，只有各矿区自己的联防队。'],
+            ['塔尔干主矿脉', 'landmark', '雷姆必拓', '雷姆必拓', '已探明的三大源石主矿脉之一，储量最大、环境最特殊：地表源石矿体最密集，天灾也最频繁剧烈。'],
+            ['尤立卡自治州', 'region', '雷姆必拓', '雷姆必拓', '1090 年围栏事件后成立的自治州。'],
+            ['东国', 'nation', null, '极东', '最东端的国家。以《皇敷记》为国书，经历御神神话、在与炎国的文化交流中形成律政国制，以及武家崛起的御神川幕府时代。'],
+        ];
+
+        $ids = [];
+
+        foreach ($terra as $order => $row) {
+            [$name, $kind, $parent, $faction, $description] = $row;
+            // 别名可省：多数地名只有一个写法，只有书里确实并用过两种写法时才记
+            $aliases = $row[5] ?? [];
+
+            $model = Place::updateOrCreate(['slug' => 'place-'.md5($name)], [
+                'name' => $name,
+                'aliases' => $aliases,
+                'kind' => $kind,
+                'parent_id' => $parent === null ? null : ($ids[$parent] ?? null),
+                'faction_id' => $factions[$faction] ?? null,
+                'world' => World::Terra->value,
+                'description' => $description,
+                'sort_order' => $order,
+            ]);
+
+            $ids[$name] = $model->id;
+        }
+
+        /*
+         * 塔卫二的地名与条目一一对应，同样只收出处里出现过的。
+         *
+         * 结构同为 [名称, 层级, 上级, 说明]，顺序同样是父先于子 ——
+         * 「供能高地」是**四号谷地境内**的高地（超域试验场所在），不是与它并列的一级地名，
+         * 上面泰拉那棵树踩过的坑（上级不存在时静默挂空）这里不能重踩。
+         *
+         * 「清波寨」的上级在出处里没有写明，因此留空：宁可缺失也不要猜。
+         */
+        $talos = [
+            // 文明环带的依据是它自己的描述：「塔卫二上的人类聚居带，四号谷地位于其边缘地区」。
+            // 它同时是阵营表里的一行（kind=territory）——那行是历史遗留，
+            // 归入「地域」之后它不再出现在资料集的「组织」页，这里补上它的地名节点，
+            // 否则它会在两个页面之间消失：既不算组织，又没有地方可查。
+            ['文明环带', 'region', null, '塔卫二上的人类聚居带，四号谷地位于其边缘地区。'],
+            ['四号谷地', 'region', '文明环带', '开拓区之一，终末地工业以此地为据点建立工业基地。'],
+            ['供能高地', 'landmark', '四号谷地', '四号谷地境内的高地，超域试验场所在。'],
+            ['清波寨', 'settlement', null, '塔罗斯历 70 年建立的聚落。'],
+        ];
+
+        $talosIds = [];
+
+        foreach ($talos as $order => [$name, $kind, $parent, $description]) {
+            $model = Place::updateOrCreate(['slug' => 'place-'.md5($name)], [
+                'name' => $name,
+                'kind' => $kind,
+                'parent_id' => $parent === null ? null : ($talosIds[$parent] ?? null),
+                'faction_id' => null,
+                'world' => World::Talos->value,
+                'description' => $description,
+                'sort_order' => $order,
+            ]);
+
+            $talosIds[$name] = $model->id;
+        }
+    }
+
+    /**
+     * 词条：书里给出专门解释的术语与专名。
+     *
+     * 释义一律是本仓库据书中相应章节转写的**概括**，不是原文摘录 ——
+     * 词条不附引文，也就不受「引用可定位」那条闸门约束，因此这里用 `origin`
+     * 指回章节，让读者自己回去核对。
+     */
+    private function seedTerms(): void
+    {
+        $terms = [
+            ['结晶时代', 'concept', '《大地巡旅》年表只收录这段时期的用语：作者称它始于泰拉历 797 年（七城联邦建成第一座现代移动城市），并延续至今。年表标题行的「结晶时代」即由此而来。', '附录 · 泰拉纪年'],
+            ['移动城市', 'concept', '为躲避周期性天灾而发展出的可整体迁移的城市形态；城市本身因此成为最重要的战略资产，「开走一座城」在泰拉是现实的政治手段。', '第二章 · 工业科技'],
+            ['天灾', 'concept', '周期性扫过泰拉、所过之处地表大面积源石结晶化的灾害。其规律性直接塑造了泰拉的生存方式。', '第一章 · 天灾'],
+            ['矿石病', 'term', '源石接触引发的疾病。各国对感染者的政策差异极大：乌萨斯的境遇最为悲惨，维多利亚多实行隔离或收押，莱塔尼亚相对宽容但在居住上仍做分隔。', '第一章 · 矿石病'],
+            ['源石技艺', 'term', '以源石为媒介施术的技艺体系。在莱塔尼亚被系统化为一门以「声音」为核心载体的艺术与文化传统，在乌萨斯则被纳入军用法术的编制。', '第一章 / 第二章'],
+            ['金律乐章', 'object', '莱塔尼亚的立国宪章，由九大部落与叙拉古共同缔结、分为三大乐章，同时是一部能够真实演奏的乐章；除原典外有十份抄本分交九个选帝侯区与叙拉古自治领。历史上几乎未曾变动，唯独巫王登基时删去了叙拉古自治领的内容。', '莱塔尼亚卷'],
+            ['选帝侯', 'term', '莱塔尼亚九个大区的最高长官，全国仅此九人拥有选出皇帝的选举权与被选举权。俗语「先有诸侯，再有皇帝」说的就是这套结构。', '莱塔尼亚卷'],
+            ['高塔贵族', 'term', '莱塔尼亚的贵族体制：贵族传授知识与技艺、管理领地的场所多在独立的高塔中，塔越高通常主人地位越高。', '莱塔尼亚卷'],
+            ['帝政主义', 'concept', '林贡斯重建中形成、并以高卢帝国命名的建筑风格（巨大落地窗、铜质装饰与大理石建筑群）。帝国倾覆后仍持续影响周边国家，被视为高卢文化延续的一种表现。', '高卢卷'],
+            ['复国主义者', 'term', '高卢灭亡后自称「复国者」的高卢人，以文化而非血统定义「高卢人」，认为这是一种超越地区、时间、种族和血统限制的身份。其话语对后世政治思潮的影响不亚于帝国覆灭本身。', '高卢卷'],
+            ['八大公爵', 'term', '皇位空置后暂时击败其他竞争者、各自实际控制一方领土的八名维多利亚公爵：威灵顿、开斯特、温德米尔、诺曼底、高多汀、亚伯科恩、法夫、阿什沃思。其中权势最盛者为前三名。', '维多利亚卷'],
+            ['铁公爵', 'proper', '威灵顿公爵的称号。四皇会战初期，他指挥舰队穿插到高卢军团后方、截断补给线，扭转了整场战役，因此又被称为「帝国丧钟」。', '维多利亚卷'],
+            ['集团军', 'term', '乌萨斯帝国军的最高一级编制，统帅由皇帝直接授意、在战略上有较高自主权。原有九支，因「大叛乱」中第六、第八集团军被整建制歼灭而减为七支。', '乌萨斯卷'],
+            ['功勋贵族 / 产业贵族', 'term', '乌萨斯的两类贵族：前者源于军功爵制、随历史不断膨胀，即「旧贵族」；后者由非军事出身者缴纳巨额税金晋升而来，即「新贵族」。', '乌萨斯卷'],
+            ['盖尔王', 'proper', '维多利亚皇室以帝国贵族体系规制宗室时，给曾统治塔拉一方的德拉克家族成员留下的敕封头衔。今时常有「盖尔为王本身姓名」的说法，属讹传。', '维多利亚卷 / 塔拉卷'],
+            ['提卡兹', 'proper', '萨卡兹的自称，意为「拥有家园之人」；第一座卡兹戴尔陷落后，「提卡兹」成为「萨卡兹」，即「丧家之人」。', '卡兹戴尔卷'],
+            ['谴罚氏族', 'proper', '以炎魔为主导、吸纳流亡萨卡兹的复仇之军。在戈渎、霸迩萨、奎隆三位未来魔王相遇后，它成为卡兹戴尔重建的武力后盾；「谴罚」后来演变为一种主张复仇归乡的主义。', '卡兹戴尔卷'],
+            ['圣愚', 'term', '乌萨斯文化中尊重「圣愚」的传统：那些看似疯癫却时常表达对事物深刻感受的人被认为智慧超脱世俗局限。作者称其真相更接近于「诅咒」。', '乌萨斯卷'],
+            ['莱茵生命', 'proper', '哥伦比亚的大型科研企业。1099 年 12 月 5 日其总辖构件科的奥利维亚·赫默在《特里蒙科学伦理联合宣言》发布会上公开要求为科学建立规则。', '组织卷'],
+            ['巴伦基地', 'proper', '黑钢国际的行政总部、后勤补给中心与人员培训中心，由回收的巴伦矿区采矿作业平台与一艘哥伦比亚出口的废弃移动军舰组合改建而成，1086 年交付使用。', '组织卷'],
+        ];
+
+        foreach ($terms as $order => $row) {
+            [$name, $category, $definition, $origin] = $row;
+
+            /*
+             * 第 5 位（可省）是世界归属。
+             *
+             * 这一批词条全部出自《大地巡旅》—— 一部**泰拉视角**的著作（作者是泰拉的历史学者），
+             * 因此缺省即泰拉。将来为塔卫二补词条时在那一条上写 'talos'；
+             * 若是两个世界都成立的概念（如「源石」），写 **null** —— 它会在两页都列出。
+             *
+             * 用 array_key_exists 而不是 `??`：null 是有意义的值（通用），
+             * 而 `??` 会把显式写的 null 当成「没写」而回落到泰拉。
+             */
+            $world = array_key_exists(4, $row) ? $row[4] : World::Terra->value;
+
+            Term::updateOrCreate(['slug' => 'term-'.md5($name)], [
+                'name' => $name,
+                'category' => $category,
+                'definition' => $definition,
+                'origin' => $origin,
+                'world' => $world,
+                'sort_order' => $order,
+            ]);
         }
     }
 
@@ -1881,6 +2413,85 @@ TXT,
                 'factions' => [['高卢', 'involved'], ['莱塔尼亚', 'involved'], ['维多利亚', 'involved']],
                 'tags' => ['战争'],
             ],
+
+            // ================= 组织卷：泰拉各地的组织档案 =================
+            /*
+             * 书里的第五章按「国家与地区」编排，第六章换了一个维度：**组织**。
+             * 这里沿用与国家卷完全相同的处理方式（无年份、无引文、needs_review）——
+             * 组织档案讲的是「它是什么、怎么来的」，同样不落在某个具体年份上。
+             */
+            [
+                'title' => '莱茵生命：科学伦理的临界点',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '哥伦比亚的大型科研企业。1099 年 12 月 5 日，总辖构件科的奥利维亚·赫默在《特里蒙科学伦理联合宣言》发布会上公开指出：这片土地上的人总在用「必要的代价」「梦想的牺牲」这类托辞，回避那些在探求真理过程中成为代价的人。',
+                'details' => '她点到的例子包括风口浪尖上的莱茵生命、早已有结局的洛肯水箱，以及「我们都看到的特莱顿工厂爆炸」，并呼吁建立规则去约束科学这种力量。书中该篇为第二版：作者说因「莱茵生命的新消息不断传来」而重写——同期刊出的消息是，能量科主任斐尔迪南·克鲁尼被哥伦比亚联邦执法者带走，据称涉及倒卖技术文件。\n\n背景据《大地巡旅》组织卷「莱茵生命」节。',
+                'factions' => [['莱茵生命', 'involved'], ['哥伦比亚', 'involved']],
+                'tags' => ['科研'],
+            ],
+            [
+                'title' => '黑钢国际：从巴伦矿场到私人安全承包商',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '由萨科塔雇佣兵「桥夹」克里夫创办的哥伦比亚私人安全承包商。克里夫说，1016 年的哥伦比亚独立战争是他建立黑钢的起点——他选择的「解药」不是和平，而是一种对雇佣兵而言规范、可控且具有主动选择权的战争方式。',
+                'details' => '转折点是 1083 年的巴伦矿场事件：塔山生物科技在哥伦比亚军方支持下重启这座废弃源石矿场，借开采掩人耳目，在场内设「源石变异实验室」，把活性源石植入受试物种体内；实验生物突破安保并在实验区造成严重伤亡后，塔山不得不雇用黑钢解救受困人员、清剿逃逸生物。黑钢经二十三天作战完成任务，民间顾问珍妮特·朗费罗博士参与其中；《特区电讯报》随后披露事件真相，国防部部长康博特引咎辞职，黑钢佣兵因之名声大振，并获梅兰德基金会「公民英雄奖」。\n\n1086 年「黑钢国际」正式注册，巴伦基地由回收的矿区采矿作业平台与一艘哥伦比亚出口的废弃移动军舰组合改建而成，兼作行政总部、后勤补给中心与新兵中心；新兵中心两年培训的淘汰率约百分之七十六。公司形成行政总部与三大业务部门的框架：武装人力派遣、装备与应用技术、矿石病与生化威胁处置（后者辖有朗费罗博士领导的 B.P.R.S.，是行业内少有的能处置工业源石污染与感染生物危机的机构）。\n\n背景据《大地巡旅》组织卷「黑钢国际」节。',
+                'factions' => [['黑钢国际', 'involved'], ['哥伦比亚', 'involved']],
+                'tags' => ['雇佣兵'],
+            ],
+            [
+                'title' => '喀兰贸易：雪境之国的门面',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '成立于 1090 年的谢拉格企业，经营范围从日用品进出口到军火交易与土地买卖，也涉足教育、科技与建设；对绝大多数泰拉人来说，它是认识谢拉格的唯一途径。',
+                'details' => '公司名字取自谢拉格境内的喀兰圣山——当地人尊奉那里为神明耶拉冈德的圣地。这个命名直接彰显了它与谢拉格官方非同寻常的关系，也解释了为什么常见其员工代表谢拉格出席外交场合。创始人恩希欧迪斯·希瓦艾什曾留学维多利亚，1082 年（十四岁）从去世的父母手里继承家业，随后投奔远在维多利亚的开斯特公爵；公司自称历史可追溯到 1065 年上代族长回国后建立的工厂与维多利亚式企业——那些产业当时遭到本地保守派的强烈反对。\n\n1097 年末公司大规模改组：原本一家独大的希瓦艾什家族吸纳了布朗陶与佩尔罗契两大家族的贵族进公司任职，开始允许非谢拉格出身的外聘专家担任中层以上职位，董事长也与其妹——蔓珠院的领导者、圣女——就未来发展达成共识。此后确定垂直管理的运作模式（决策者 / 管理者 / 执行者三级），组织上由董事会、生产部门、职能部门与咨询委员会组成；其中咨询委员会独立于常规架构、直属董事会，成员多为贵族与蔓珠院代表。为保证它始终为谢拉格利益服务，蔓珠院与三族议会同公司达成了一系列协议，包括定期提交工作报告、国防相关业务须先行协商。\n\n背景据《大地巡旅》组织卷「喀兰贸易」节。',
+                'factions' => [['喀兰贸易', 'involved'], ['谢拉格', 'involved']],
+                'tags' => ['贸易'],
+            ],
+            [
+                'title' => '锈锤：对「文明」本身的复仇',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '活动于荒野的松散团体。哥伦比亚及卡西米尔等地的官方发言人多次强调它的恐怖主义背景，黑钢国际、雷神工业等企业则谴责其抢劫与杀戮并实施反制。它的宗旨、成立时间、成员数量与活动范围都不明，唯一清晰的是——极其危险。',
+                'details' => '「锈锤」之名首次为公众所知是在 1040 年春：一支运送日用品的商队在哥伦比亚西部救下几名衣不蔽体、精神错乱的拓荒者。据其描述，上百名衣着褴褛的人堵住去路，在交涉时突然发难，当众焚烧车队携带的物资与哥伦比亚旗帜，并要幸存者将这起事件传扬出去、着重强调他们叫作「锈锤」。1042 年，全哥伦比亚共有五十二起与之相关的重大犯罪案件，受害者多为出行携带国旗、带官方背景的组织以及大企业相关人员，普通出行者完全没有遭遇袭击；其行动预伏多个地点、战术针对不同国家的车队，且在确认已留下恐惧之后才离开。\n\n他们高喊的口号自称「荒地的征服者」与「文明的复仇者」，主张对文明造物实施毁灭、主张泰拉荒野的「回归」；来自哥伦比亚与卡西米尔的报告称，锈锤把移动城市视为文明的终极象征。与其行动准备之充分相反，其组织架构非常松散凌乱：五十余年来各地都有目击报告，多以小团体活动，不同地区的小团体行事风格截然不同，只在名号、劫掠方式与所持主张上保持一致。1092 年，哥伦比亚、卡西米尔与维多利亚三地与「锈锤」相关的案件共有二百五十多起，其中半数以上经调查后被鉴定为冒用名号。\n\n背景据《大地巡旅》组织卷「锈锤」节。',
+                'factions' => [['锈锤', 'instigator']],
+                'tags' => ['治安'],
+            ],
+            [
+                'title' => '雷神工业：高卢匠人的余波',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '产品线几乎无所不包的哥伦比亚工业集团。书中把它视作 1031 年四国战争后格局变化的一个佐证：接受了旧体系培养的匠人前往哥伦比亚落地生根，又依靠新格局享用者的身份成为跨国企业家。',
+                'details' => '创始人之一亨利·布洛赫原是高卢第三军械研究所的重要研制员。战争后半程研发经费与周期一再缩水，他对僵硬的帝国体系彻底失望；高卢战败前，他拿走军械所里能带走的全部技术图纸，带妻儿汇入逃离的人流。另一位创始人欧文·布林雷是经历过哥伦比亚独立战争的「年轻老兵」，1035 年前后两人在一家名为「雷神」的路边酒馆相遇，随后分工合作——欧文负责推进生产与寻找销路，亨利在宅中完成研发订单。由于出自其手的装备在可靠性上远高于同类竞争者，伴随着拓荒需求增长，「经历过四国战争考验的武器设计者」的传说在荒地火旁流传开来，两人遂以「雷神」统一称谓；亨利不愿与「战争」「军火」这样的字眼绑定，公司至今定位仍是「工业集团」。\n\n如今它是一家以研发各式源石电子装备见长的综合工业集团，总部位于布林雷家曾经的宅基地上，主要股东是两位创始人各自的孩子，欧文的儿子伯尼·布林雷更热衷行政事务、成为主要负责人。其组织体系中最核心的是源石晶体单元相关研发部门——这种高度集成的电路单元是当前收益最高的产品，生产极度依赖研发与哥伦比亚学界的支撑。公司信条是「创新成就未来」。\n\n背景据《大地巡旅》组织卷「雷神工业」节。',
+                'factions' => [['雷神工业', 'involved'], ['哥伦比亚', 'involved'], ['高卢', 'involved']],
+                'tags' => ['工业'],
+            ],
+            [
+                'title' => '太阳谷机械工业：厂区即生活',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '一家组织形态与泰拉多数公司都不同的工业集团：厂区里有完整的生活社区——医疗设施、集市、食堂、子弟学校、公共浴室、击球场，甚至供人休憩的俱乐部。住在这里的全是它的员工，口号是「工作，是为了更好的生活」。',
+                'details' => '组织上它不像泰拉其他地方常见的公司形式，而由总秘书处、总办公室、总计划部、总服务部与各地分厂组成：总秘书处决定集团的重大事务，成员都是卡特斯家族内有权势的老人；总办公室负责内部行政；总计划部调度分布于泰拉各地的分厂生产；总服务部管理集团及分厂提供的配套设施福利，并对外兜售自身的基础设施服务。厂区内的公共设施使用内部凭证，且按级别区分（例如公共浴室二楼为级别较高者准备）。\n\n集团在萨尔贡与玻利瓦尔有业务，每年都有相当多的当地人竞争进入；对员工而言，为集团在各地的买卖感到骄傲并非抽象情绪，而与个人福利保障直接相关。子弟学校免费，击球队由职工子弟组成。\n\n背景据《大地巡旅》组织卷「太阳谷机械工业」节。',
+                'factions' => [['太阳谷机械工业', 'involved']],
+                'tags' => ['工业'],
+            ],
+            [
+                'title' => '企鹅物流：随心所欲的企业',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '创立于 1093 年、总部设在炎国龙门的小型私人物流企业，提供要人护卫与货物运输等常规服务，偶尔也承接一些上不得台面的灰色业务；创始人是知名说唱歌手大帝。',
+                'details' => '大帝宣布在龙门开设这家物流企业时，大部分人把它当成一种行为艺术；直到它在龙门建立员工安全屋、着手与独占龙门物流业鳌头的肇驰物流开展商业接洽、并同龙门市政府达成一系列合作，业界才大跌眼镜。人们转而研究它的运作方式，却发现它的组织架构近乎没有、业务方向随心所欲——与其说它引领了一种商业模式，不如说是大帝性格与处事方式的成功。\n\n公司成员原则上只有两种身份：彼此间不存在地位差距的雇员，以及大帝本人；每一位员工都由大帝亲自把关招聘。理念是「使命必达」，至于如何达成、中间经过什么波折，员工可以自由发挥，大帝也鲜少过问。与龙门官方合作之后，龙门的物流企业数量出现一次爆发性增长，又在几个月后纷纷倒闭。\n\n背景据《大地巡旅》组织卷「企鹅物流」节。',
+                'factions' => [['企鹅物流', 'involved'], ['龙门', 'involved']],
+                'tags' => ['物流'],
+            ],
+            [
+                'title' => '鲤氏侦探事务所：龙门的活百科全书',
+                'section' => '组织卷',
+                'era' => null,
+                'summary' => '位于炎国龙门的私人侦探事务所，业务从寻人寻址、调查外遇到搜证录音、法律咨询，并承接来自官方的各项委托。创始人老鲤人脉极广，事务所因此成了回旋于各方势力之间的「第三方中立咨询顾问」。',
+                'details' => '老鲤出身炎国腹地的商贾世家，早年来到龙门这一炎国西北边陲的商贸重镇。精于人情世故的他很快站稳脚跟，并逐渐成为「龙门的活百科全书」；虽然本人深居简出，但小到街头商贩、大到龙门的管理者魏彦吾，都曾是他那张庞大关系网的一环，在许多关键场合他也频频现身。\n\n因炎国律法要求，他注册了「鲤氏侦探事务所」这一名号，但当时事务所只有他一人承接业务、也没有正式的办公室；后来他先后收留了一些年轻人、低价租下办公室，事务所才名副其实起来。平日只接待亲自登门的客户，若客户愿意显示诚意与气度，或实在无法忍受事务所杂乱的环境，也可以把老鲤请出他的安乐窝，在龙门大大小小的社交场所谈事。关于他的过去流传着许多版本，真实性从未得到本人证实。\n\n背景据《大地巡旅》组织卷「鲤氏侦探事务所」节。',
+                'factions' => [['鲤氏侦探事务所', 'involved'], ['龙门', 'involved'], ['炎国', 'involved']],
+                'tags' => ['治安'],
+            ],
         ];
 
         foreach ($events as $row) {
@@ -2079,6 +2690,7 @@ TXT,
         foreach ($events as $data) {
             // 纪元按世界查：跨世界的 slug 即便存在，也不该被这条时间线取用
             $eraId = Era::ofWorld(World::Talos)->where('slug', $data['era'])->value('id');
+            $places = Place::ofWorld(World::Talos)->get();
 
             $payload = [
                 'world' => World::Talos->value,
@@ -2090,6 +2702,7 @@ TXT,
                 'date_precision' => $data['precision'] ?? null,
                 'date_confidence' => $data['confidence'],
                 'era_id' => $eraId,
+                'place_id' => $this->matchPlace($data['location'] ?? null, $places),
                 'sort_seq' => $data['sort_seq'] ?? 0,
                 // 非 confirmed 一律 needs_review：这批条目等的就是原文核对
                 'status' => $data['status'] ?? EventStatus::NeedsReview->value,

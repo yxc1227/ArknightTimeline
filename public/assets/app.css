@@ -166,7 +166,22 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* 导航采用官方站的**上下双语**结构：英文大写微标签在上、中文在下。
    这比「英文 // 中文」横排更省横向空间，也让顶栏一眼就有品牌识别度。 */
-.nav { display: flex; gap: 2px; margin-left: 6px; align-self: stretch; }
+/* 词典的四个大类各占一个条目后，导航已到十个。
+   窄屏下让它横向滚动，而不是把条目压扁成多行、或把右侧的用户区挤出可视范围。 */
+.nav {
+    display: flex;
+    gap: 2px;
+    margin-left: 6px;
+    align-self: stretch;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.nav::-webkit-scrollbar { display: none; }
+
+/* 条目本身不参与压缩：文案折行比横向滚动更难读 */
+.nav a { flex: none; }
 
 .nav a {
     display: flex;
@@ -520,6 +535,13 @@ select {
 .chip[data-clickable='1'] { cursor: pointer; }
 .chip[data-clickable='1']:hover { border-color: var(--accent); color: var(--text); }
 
+/* 当前生效的那一档（如资料集里的「干员 / 历史人物」）：
+   用主色描边而不是填充 —— 全站只有标志黄一种强调色，填充会把它降格成普通按钮。 */
+.chip[data-active='1'] {
+    border-color: var(--accent-line);
+    color: var(--text);
+}
+
 /* 阵营 / 标签的颜色来自数据库，用户可自由指定。
    统一降饱和 + 压暗，让任意配色都能落进这套近黑底色而不打架。 */
 .chip__dot {
@@ -533,6 +555,42 @@ select {
 
 /* ---------------------------------------------------------------- 时间线 */
 
+/*
+ * 分期标题（书里给的「时代」，如结晶时代）。
+ *
+ * 比 .era-band 高一层：顶部实线 + 字距拉开的微标签，用来把若干纪元收成一组。
+ * 纪元的色带仍是主体（逐段有各自的颜色），时代只提供「它们同属一段历史」的框架。
+ */
+.era-period {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 46px 0 2px;
+    padding: 8px 0;
+    border-top: 2px solid var(--border-strong);
+    scroll-margin-top: 78px;
+}
+
+.era-period:first-child { margin-top: 0; }
+
+.era-period__bar { width: 3px; height: 15px; flex: none; }
+
+.era-period__name {
+    font-family: var(--label);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .18em;
+    color: var(--text-dim);
+}
+
+.era-period__range {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--text-faint);
+}
+
 .era-band {
     display: flex;
     align-items: center;
@@ -542,6 +600,9 @@ select {
     border-bottom: 1px solid var(--border);
     scroll-margin-top: 78px;
 }
+
+/* 紧随分期标题的纪元色带：上间距让出去，避免两次分组之间出现两条空隙 */
+.era-period + .era-band { margin-top: 14px; }
 
 .era-band:first-child { margin-top: 0; }
 

@@ -43,6 +43,36 @@
             <span class="nav__zh">干员简介</span>
         </a>
 
+        {{--
+            四个词典大类各自成入口，而不是挤在一个「资料集」里。
+            读者在条目里碰到的是**具体一类**名词：地点、组织、种族、术语各是一个问题，
+            给它们各一个入口，才不用先猜它被归在哪一类。
+
+            这四个刻意**不配图标**：注册表里现有图标各有既定的单一含义
+            （`operators` 是干员、`account` 是账号…），借来当「组织」「种族」的图标会破坏
+            「一枚图标一个意思」这条规矩；而随手画四个新图标，又会绕开图标表的导出流程。
+            等图标表补上对应的四枚再配 —— 在那之前留空比配错好。
+        --}}
+        <a href="{{ route('places.index') }}" class="{{ request()->routeIs('places.*') ? 'is-active' : '' }}">
+            <span class="nav__en">Places</span>
+            <span class="nav__zh">地名</span>
+        </a>
+
+        <a href="{{ route('organizations.index') }}" class="{{ request()->routeIs('organizations.*') ? 'is-active' : '' }}">
+            <span class="nav__en">Org</span>
+            <span class="nav__zh">组织</span>
+        </a>
+
+        <a href="{{ route('races.index') }}" class="{{ request()->routeIs('races.*') ? 'is-active' : '' }}">
+            <span class="nav__en">Races</span>
+            <span class="nav__zh">种族</span>
+        </a>
+
+        <a href="{{ route('terms.index') }}" class="{{ request()->routeIs('terms.*') ? 'is-active' : '' }}">
+            <span class="nav__en">Terms</span>
+            <span class="nav__zh">词条</span>
+        </a>
+
         @auth
             <a href="{{ route('sources.index') }}" class="{{ request()->routeIs('sources.*') ? 'is-active' : '' }}">
                 <x-icon name="sources" class="icon--lg"/>
@@ -137,6 +167,8 @@
         avatarMaxKb: {{ (int) config('identity.avatar.max_kilobytes', 2048) }},
         urls: {
             timeline: @json(route('timeline.feed')),
+            timelinePage: @json(route('timeline.index')),
+            places: @json(route('places.index')),
             events: @json(url('/events')),
             proposals: @json(url('/proposals')),
             proposalsBulk: @json(route('proposals.bulk-approve')),
@@ -150,6 +182,37 @@
         }
     };
 </script>
+<script>
+    /*
+        锚点前缀 → 所在页面。
+
+        四个词典大类各自成页之后，站外的引用与旧书签里的 `#place-…` / `#race-…`
+        可能落在别的页面上（旧的「资料集」更是把四类挤在同一页）。
+        这里按前缀纠正一次 —— 否则读者看到的是「链接打开了，却停在页面顶端」，
+        那与坏链接没有区别。同页的锚点不动，交给浏览器原生行为。
+    */
+    (() => {
+        const prefix = location.hash.slice(1).split('-')[0];
+        const target = {
+            place: @json(route('places.index')),
+            org: @json(route('organizations.index')),
+            race: @json(route('races.index')),
+            term: @json(route('terms.index')),
+        }[prefix];
+
+        if (!target) return;
+
+        const url = new URL(location.href);
+        const path = new URL(target, location.origin).pathname;
+
+        if (url.pathname === path) return;
+
+        // 保留查询串（世界等上下文）与片段，只换路径
+        url.pathname = path;
+        location.replace(url.toString());
+    })();
+</script>
+
 @stack('boot')
 <script src="{{ asset('assets/app.js') }}"></script>
 @stack('scripts')

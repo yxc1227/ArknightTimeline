@@ -6,6 +6,7 @@ use App\Enums\World;
 use App\Models\Character;
 use App\Models\Event;
 use App\Models\Faction;
+use App\Models\Race;
 use App\Support\TerraDate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsTimeline;
@@ -32,11 +33,17 @@ class OperatorProfileTest extends TestCase
         ]);
     }
 
+    /** 种族已经是字典：先用名字取（或建）一条，再挂到人物上。 */
+    private function race(string $name): int
+    {
+        return Race::firstOrCreate(['slug' => 'race-'.md5($name)], ['name' => $name])->id;
+    }
+
     /* ------------------------------------------------------------ 列表 */
 
     public function test_the_operator_index_is_public_and_lists_characters(): void
     {
-        $this->character('阿米娅', ['codename' => 'Amiya', 'race' => '卡特斯']);
+        $this->character('阿米娅', ['codename' => 'Amiya', 'race_id' => $this->race('卡特斯')]);
         $this->character('塔露拉');
 
         // 与时间线一样是公开页面：读者顺着条目里的名字点进来
@@ -45,6 +52,8 @@ class OperatorProfileTest extends TestCase
             ->assertSee('人员简介')
             ->assertSee('阿米娅')
             ->assertSee('Amiya')
+            // 种族走字典：挂上 race_id 之后列表里必须真的显示出种族名
+            ->assertSee('卡特斯')
             ->assertSee('塔露拉');
     }
 
@@ -95,7 +104,7 @@ class OperatorProfileTest extends TestCase
     public function test_a_character_without_a_profile_falls_back_to_structured_facts(): void
     {
         $faction = Faction::create(['name' => '阿戈尔', 'slug' => 'fac-aegir']);
-        $character = $this->character('无名干员', ['faction_id' => $faction->id, 'race' => '阿戈尔']);
+        $character = $this->character('无名干员', ['faction_id' => $faction->id, 'race_id' => $this->race('阿戈尔')]);
 
         $text = $character->profileText();
 

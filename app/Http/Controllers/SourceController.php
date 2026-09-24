@@ -35,7 +35,7 @@ class SourceController extends Controller
             'sources' => $sources,
             'types' => SourceType::options(),
             'worlds' => World::options(),
-            'eras' => Era::ofWorld(World::fromRequest($request->string('world')->value()))->ordered()->get(),
+            'eras' => Era::ofWorld(World::fromRequest($request->string('world')->value()))->leaves()->ordered()->get(),
             'canEdit' => $request->user()?->canEditEvents() ?? false,
         ]);
     }
@@ -45,7 +45,7 @@ class SourceController extends Controller
         return view('sources.show', [
             'source' => $source->load(['events' => fn ($q) => $q->timelineOrder()->with('era')]),
             // 单个出处的纪元下拉按该出处自身的世界收敛
-            'eras' => Era::ofWorld($source->world)->ordered()->get(),
+            'eras' => Era::ofWorld($source->world)->leaves()->ordered()->get(),
         ]);
     }
 

@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
 #[Fillable([
     'world', 'title', 'slug', 'summary', 'details', 'location',
     'date_display', 'start_index', 'end_index', 'date_precision', 'date_confidence',
-    'era_id', 'sort_seq', 'parent_event_id', 'caused_by_event_id',
+    'era_id', 'place_id', 'sort_seq', 'parent_event_id', 'caused_by_event_id',
     'status', 'version', 'is_locked', 'created_by', 'updated_by',
     'verified_at', 'verified_by',
 ])]
@@ -75,6 +75,18 @@ class Event extends Model
     public function era(): BelongsTo
     {
         return $this->belongsTo(Era::class);
+    }
+
+    /**
+     * 发生地（地名树）。
+     *
+     * `location` 与它的关系是「展示原文 + 结构化链接」：前者永远保留用户写的原样文本，
+     * 后者用于按地区层级聚合。两者不一致不是错误 —— 恰恰相反，
+     * 无法匹配时必须留空，而不是把条目挂到一个相近的地名上。
+     */
+    public function place(): BelongsTo
+    {
+        return $this->belongsTo(Place::class);
     }
 
     public function sources(): BelongsToMany
@@ -228,6 +240,13 @@ class Event extends Model
                 $ids = $faction ? $faction->selfAndDescendantIds() : [(int) $filters['faction_id']];
                 $q->whereHas('factions', fn (Builder $f) => $f->whereIn('factions.id', $ids));
             })
+            ->when(filled($filters['place_id'] ?? null), function (Builder $q) use ($filters) {
+                // 与阵营筛选同理带上下辖地名：选「维多利亚」应当也能筛出挂在「伦蒂尼姆」下的条目，
+                // 否则地名树在筛选这一环就是断的
+                $place = Place::find($filters['place_id']);
+                $ids = $place ? $place->selfAndDescendantIds() : [(int) $filters['place_id']];
+                $q->whereIn('place_id', $ids);
+            })
             ->when(filled($filters['character_id'] ?? null), fn (Builder $q) => $q->whereHas(
                 'characters',
                 fn (Builder $c) => $c->where('characters.id', $filters['character_id'])
@@ -286,6 +305,18 @@ class Event extends Model
             'summary' => $this->summary,
             'details' => $this->details,
             'location' => $this->location,
+            // 结构化发生地。与 location 并存而不是互相替换：
+            // location 是照原文抄下来的展示文本（「维多利亚 · 伦蒂尼姆」「塔卫二 · 北极地区」），
+            // place 是能点进去的地名树节点 —— 原文优先展示，链接是附加的一层。
+            'place' => $this->relationLoaded('place') && $this->place
+                ? [
+                    'id' => $this->place->id,
+                    'slug' => $this->place->slug,
+                    'name' => $this->place->name,
+                    'kind' => $this->place->kind,
+                    'kind_label' => Place::KINDS[$this->place->kind] ?? $this->place->kind,
+                ]
+                : null,
             'date' => [
                 'display' => $this->date_display,
                 'precision' => $this->date_precision->value,

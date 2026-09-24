@@ -258,6 +258,55 @@ class TimelinePageTest extends TestCase
         $this->assertDatabaseHas('annotations', ['event_id' => $event->id, 'user_id' => null]);
     }
 
+    /**
+     * 纪元下拉按「时代」分组，且**父级本身不可选**。
+     *
+     * 父级是分期标签而非条目的桶：列成一个可选项，读者选中后只会得到一个空列表。
+     * 因此它必须以 `<optgroup>` 的形式出现（只是标题），而不是一个 `<option>`。
+     */
+    public function test_era_filter_groups_leaves_under_their_period(): void
+    {
+        $period = \App\Models\Era::create([
+            'name' => '测试时代',
+            'slug' => 'era-fixture-period',
+            'date_label' => '泰拉历 900 — 1200 年',
+            'start_index' => 900 * 372,
+            'end_index' => 1200 * 372,
+            'color' => '#808080',
+            'sort_order' => 0,
+        ]);
+
+        $child = $this->era('测试分期');
+        $child->update(['parent_id' => $period->id]);
+
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('<optgroup label="测试时代">', $html);
+        $this->assertStringContainsString('value="'.$child->id.'"', $html);
+        // 父级只作标题出现，不得成为可选项
+        $this->assertStringNotContainsString('value="'.$period->id.'"', $html);
+    }
+
+    /** 资料集里的「N 条」把 place_id 带进来，下拉必须预选中，否则读者一碰筛选就把条件清掉了。 */
+    public function test_place_filter_is_preselected_from_the_query_string(): void
+    {
+        $place = \App\Models\Place::create([
+            'name' => '测试都城',
+            'slug' => 'place-fixture-city',
+            'kind' => 'city',
+            'world' => 'terra',
+        ]);
+
+        $event = $this->rawEvent(['place_id' => $place->id]);
+        $this->assertSame($place->id, $event->place_id);
+
+        $this->get('/?place_id='.$place->id)
+            ->assertOk()
+            ->assertSee('data-filter="place_id"', false)
+            ->assertSee('value="'.$place->id.'"', false)
+            ->assertSee('selected', false);
+    }
+
     /** 通过信息源语料生成一条真实提案，供页面渲染用。 */
     private function synthesizeOneProposal(): void
     {

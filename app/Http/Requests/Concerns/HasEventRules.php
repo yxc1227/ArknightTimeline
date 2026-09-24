@@ -34,6 +34,7 @@ trait HasEventRules
             'date_confidence' => ['nullable', Rule::enum(DateConfidence::class)],
 
             'era_id' => ['nullable', 'integer', 'exists:eras,id'],
+            'place_id' => ['nullable', 'integer', 'exists:places,id'],
             'sort_seq' => ['nullable', 'integer', 'between:-9999,9999'],
             'parent_event_id' => ['nullable', 'integer', 'exists:events,id'],
             'caused_by_event_id' => ['nullable', 'integer', 'exists:events,id'],

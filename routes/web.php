@@ -8,6 +8,10 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\OperatorController;
+use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\PlaceController;
+use App\Http\Controllers\RaceController;
+use App\Http\Controllers\TermController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\SourceController;
 use App\Http\Controllers\TimelineController;
@@ -36,6 +40,34 @@ Route::get('/api/filter-options', [TimelineController::class, 'filterOptions'])-
 
 Route::get('/operators', [OperatorController::class, 'index'])->name('operators.index');
 Route::get('/operators/{character}', [OperatorController::class, 'show'])->name('operators.show');
+
+/*
+|--------------------------------------------------------------------------
+| 词典：四个大类（公开）
+|--------------------------------------------------------------------------
+| 地名（书第五章政区）/ 组织（第六章）/ 种族（第四章）/ 词条（全书术语）。
+|
+| 它们回答的是四个不同的问题，因此各自成页而不是挤在一页的标签里：
+|   地名 —— 在哪里（有疆域、有上下层级）
+|   组织 —— 谁在做（有成员、有归属，没有边界）
+|   种族 —— 哪些人（人物挂在它上面）
+|   词条 —— 这词什么意思（一批释义）
+| 挤在一起时，读者从条目里的「菲林」「伦蒂尼姆」「金律乐章」点进来，
+| 要找的只是其中一类，另外三类都是干扰。
+|
+| 与时间线、干员简介同属公开内容：读者碰到一个名词时应当有地方可以查，
+| 而不是只能回原书里翻。
+*/
+
+Route::get('/places', [PlaceController::class, 'index'])->name('places.index');
+Route::get('/organizations', [OrganizationController::class, 'index'])->name('organizations.index');
+Route::get('/races', [RaceController::class, 'index'])->name('races.index');
+Route::get('/terms', [TermController::class, 'index'])->name('terms.index');
+
+// 旧的合并页：站外引用与旧书签不该 404。
+// 跳到词条页而不是地名页 —— 后者只是当初的默认标签，而「资料集」这个名字更像术语表；
+// 带 `#place-…` 这类锚点的旧链接由布局里的前缀纠正脚本兜住（浏览器的重定向会保留片段）。
+Route::redirect('/lexicon', '/terms', 301);
 
 Route::get('/events/{event}', [EventController::class, 'show'])->name('events.show');
 Route::get('/events/{event}/revisions', [EventController::class, 'revisions'])->name('events.revisions');

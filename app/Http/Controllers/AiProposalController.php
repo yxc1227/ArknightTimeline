@@ -51,7 +51,7 @@ class AiProposalController extends Controller
             ],
             'sources' => Source::orderBy('name')->get(),
             // 纪元选项按当前世界收敛：跨世界的纪元区间不可比较，列出来只是干扰
-            'eras' => Era::ofWorld(World::fromRequest($request->string('world')->value()))->ordered()->get(),
+            'eras' => Era::ofWorld(World::fromRequest($request->string('world')->value()))->leaves()->ordered()->get(),
             'canReview' => $request->user()->canReview(),
         ]);
     }

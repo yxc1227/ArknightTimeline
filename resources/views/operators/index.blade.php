@@ -52,11 +52,29 @@
                 因为一份落后于对方更新的人物档案，恰恰是本项目最无法追溯的东西。
             </div>
 
-            <form method="GET" action="{{ route('operators.index') }}" class="filter-head" style="gap:10px;flex-wrap:wrap">
-                {{-- 世界必须随表单一起回传，否则筛选一下就被送回另一个世界 --}}
-                <input type="hidden" name="world" value="{{ $world->value }}">
+            {{--
+                人物分两类，页面上分开列：
+                干员有代号、在役于某支队伍；历史人物有头衔与在位期。
+                混在一个网格里，读者会分不清谁还在名单上 —— 这也正是当初把 kind 分出来的原因。
+                两边各自显示总数，否则默认视图会让历史人物显得「不存在」。
+            --}}
+            <div class="chips" style="margin-bottom:10px">
+                <a class="chip" data-clickable="1" data-active="{{ $filters['kind'] === 'operator' ? '1' : '0' }}"
+                   href="{{ route('operators.index', ['world' => $world->value]) }}">
+                    干员 {{ str_pad((string) $counters['operators'], 2, '0', STR_PAD_LEFT) }}
+                </a>
+                <a class="chip" data-clickable="1" data-active="{{ $filters['kind'] === 'historical' ? '1' : '0' }}"
+                   href="{{ route('operators.index', ['world' => $world->value, 'kind' => 'historical']) }}">
+                    历史人物 {{ str_pad((string) $counters['historical'], 2, '0', STR_PAD_LEFT) }}
+                </a>
+            </div>
 
-                <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="搜索名称 / 代号 / 种族"
+            <form method="GET" action="{{ route('operators.index') }}" class="filter-head" style="gap:10px;flex-wrap:wrap">
+                {{-- 世界与人物类型都必须随表单一起回传，否则筛选一下就被送回另一个世界 / 另一类名单 --}}
+                <input type="hidden" name="world" value="{{ $world->value }}">
+                <input type="hidden" name="kind" value="{{ $filters['kind'] }}">
+
+                <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="搜索名称 / 代号 / 头衔 / 种族"
                        style="flex:1 1 220px;min-width:180px">
 
                 <select name="faction" style="flex:0 1 190px" onchange="this.form.submit()">
@@ -71,7 +89,10 @@
                 <button class="btn btn--sm" type="submit">筛选</button>
 
                 @if ($filters['q'] || $filters['faction'])
-                    <a class="btn btn--ghost btn--sm" href="{{ route('operators.index', ['world' => $world->value]) }}">重置</a>
+                    <a class="btn btn--ghost btn--sm"
+                       href="{{ route('operators.index', ['world' => $world->value, 'kind' => $filters['kind']]) }}">
+                        <x-icon name="reset"/>重置
+                    </a>
                 @endif
             </form>
         </div>
@@ -101,6 +122,10 @@
                                 </a>
                                 @if (filled($character->codename))
                                     <div class="operator-card__code mono">{{ $character->codename }}</div>
+                                @elseif (filled($character->reignLabel()))
+                                    {{-- 历史人物没有代号，第二行给头衔与在位期 ——
+                                         这正是它们与干员最关键的区别，也是能在时间线上对齐的事实 --}}
+                                    <div class="operator-card__code mono">{{ $character->reignLabel() }}</div>
                                 @endif
                             </div>
 
@@ -114,8 +139,12 @@
                             @if (filled($character->faction?->name))
                                 <span class="chip">{{ $character->faction->name }}</span>
                             @endif
-                            @if (filled($character->race))
-                                <span class="chip">{{ $character->race }}</span>
+                            @if (filled($character->raceName()))
+                                {{-- 种族链到资料集：读者看到「菲林」想知道那是什么，这里就该能点过去 --}}
+                                <a class="chip" data-clickable="1"
+                                   href="{{ route('races.index') }}#race-{{ $character->race?->slug }}">
+                                    {{ $character->raceName() }}
+                                </a>
                             @endif
                             <span class="chip">{{ $character->events_count }} 条条目</span>
                         </div>
@@ -124,10 +153,12 @@
 
                         <footer class="operator-card__foot">
                             <a class="btn btn--ghost btn--sm" href="{{ route('operators.show', $character) }}">简介</a>
-                            <a class="btn btn--sm" href="{{ $character->wikiUrl() }}"
-                               target="_blank" rel="noopener noreferrer">
-                                {{ $character->wikiLabel() }} ↗
-                            </a>
+                            @if ($character->showsWikiLink())
+                                <a class="btn btn--sm" href="{{ $character->wikiUrl() }}"
+                                   target="_blank" rel="noopener noreferrer">
+                                    {{ $character->wikiLabel() }} ↗
+                                </a>
+                            @endif
                         </footer>
                     </article>
                 @endforeach

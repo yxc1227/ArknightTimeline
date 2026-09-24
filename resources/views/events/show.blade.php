@@ -68,7 +68,26 @@
                     @endif
                 </dd>
 
-                <dt>发生地</dt><dd>{{ $ev['location'] ?: '—' }}</dd>
+                {{--
+                    发生地。
+                    location 是照原文抄下来的展示文本，place 是能点进去的地名树节点。
+                    原文只在它比字典名多出信息时才显示（「维多利亚 · 伦蒂尼姆」），
+                    否则会出现「维多利亚 [国家 · 维多利亚]」这种自己重复自己的读法。
+                --}}
+                <dt>发生地</dt>
+                <dd>
+                    @if ($ev['place'])
+                        @if (filled($ev['location']) && $ev['location'] !== $ev['place']['name'])
+                            {{ $ev['location'] }}
+                        @endif
+                        <a href="{{ route('places.index', ['world' => $ev['world']]) }}#place-{{ $ev['place']['slug'] }}">
+                            {{ $ev['place']['name'] }}
+                        </a>
+                        <span class="faint small">（{{ $ev['place']['kind_label'] }}）</span>
+                    @else
+                        {{ $ev['location'] ?: '—' }}
+                    @endif
+                </dd>
 
                 <dt>状态</dt>
                 <dd>

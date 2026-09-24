@@ -5,15 +5,20 @@ namespace Tests\Feature;
 use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
 use App\Enums\EventStatus;
+use App\Enums\FactionKind;
 use App\Enums\World;
 use App\Models\Character;
 use App\Models\Era;
 use App\Models\Event;
 use App\Models\Faction;
 use App\Models\Source;
+use App\Models\Place;
+use App\Models\Race;
+use App\Models\Term;
 use App\Models\User;
 use App\Models\UserIdentity;
 use App\Support\CorpusLocator;
+use App\Support\TerraDate;
 use App\Support\TerraDateParser;
 use App\Support\TerraTourCorpus;
 use Database\Seeders\TimelineSeeder;
@@ -141,12 +146,12 @@ class SeederIntegrityTest extends TestCase
         $proseEventIds = DB::table('event_source')
             ->join('sources', 'sources.id', '=', 'event_source.source_id')
             ->where('sources.slug', 'terra-tour')
-            ->whereIn('event_source.chapter', ['世界卷', '国家与地区卷'])
+            ->whereIn('event_source.chapter', ['世界卷', '国家与地区卷', '组织卷'])
             ->pluck('event_source.event_id');
 
         $events = Event::whereIn('id', $proseEventIds)->get();
 
-        $this->assertGreaterThanOrEqual(17, $events->count());
+        $this->assertGreaterThanOrEqual(25, $events->count());
 
         foreach ($events as $event) {
             $this->assertSame(
@@ -327,7 +332,7 @@ class SeederIntegrityTest extends TestCase
                 $this->assertNotNull($row->quote, '年表条目必须附年表原文引文');
             } else {
                 $this->assertNull($row->quote, '不得为尚未录入原文的散文卷出处编造引文');
-                $this->assertContains($row->chapter, ['世界卷', '国家与地区卷']);
+                $this->assertContains($row->chapter, ['世界卷', '国家与地区卷', '组织卷']);
             }
         }
     }
@@ -359,6 +364,8 @@ class SeederIntegrityTest extends TestCase
 
         $this->assertContains('世界卷', $sections);
         $this->assertContains('国家与地区卷', $sections);
+        // 书里第五章按国家与地区编排，第六章换了维度：组织
+        $this->assertContains('组织卷', $sections);
         // 书末附录「泰拉纪年」的条目在 seedEvents() 里，同样挂 terra-tour 出处
         $this->assertContains('泰拉纪年', $sections);
     }
@@ -419,18 +426,77 @@ class SeederIntegrityTest extends TestCase
         foreach (World::cases() as $world) {
             $eras = Era::ofWorld($world)->ordered()->get();
 
-            for ($i = 1; $i < $eras->count(); $i++) {
-                $this->assertLessThan(
-                    $eras[$i]->start_index,
-                    $eras[$i - 1]->end_index,
-                    "{$world->label()}：纪元「{$eras[$i - 1]->name}」与「{$eras[$i]->name}」的区间重叠",
-                );
+            // **同级**判定，而不是全体判定：父级「时代」的区间就是其子纪元的并集，
+            // 父子重叠是定义使然。真正必须成立的是「同一父亲下的兄弟不重叠」——
+            // 一旦重叠，一个条目就会同时落进两个桶，「所属纪元」随即失去唯一性。
+            foreach ($eras->groupBy(fn (Era $era) => $era->parent_id ?? 0) as $siblings) {
+                $sorted = $siblings->sortBy('start_index')->values();
+
+                for ($i = 1; $i < $sorted->count(); $i++) {
+                    $this->assertLessThan(
+                        $sorted[$i]->start_index,
+                        $sorted[$i - 1]->end_index,
+                        "{$world->label()}：纪元「{$sorted[$i - 1]->name}」与「{$sorted[$i]->name}」的区间重叠",
+                    );
+                }
             }
         }
 
         // 反空过：两个世界都必须真的有纪元，否则上面那个循环会「什么也没检查」地通过
         $this->assertGreaterThan(0, Era::ofWorld(World::Terra)->count());
         $this->assertGreaterThan(0, Era::ofWorld(World::Talos)->count());
+    }
+
+    /**
+     * 子纪元必须落在父「时代」之内 —— 否则「结晶时代涵盖 797 年至今」就成了一句空话。
+     */
+    public function test_child_eras_stay_inside_their_period(): void
+    {
+        $children = Era::whereNotNull('parent_id')->with('parent')->get();
+
+        foreach ($children as $child) {
+            $this->assertGreaterThanOrEqual(
+                $child->parent->start_index,
+                $child->start_index,
+                "子纪元「{$child->name}」的起点早于父「{$child->parent->name}」",
+            );
+
+            $this->assertLessThanOrEqual(
+                $child->parent->end_index,
+                $child->end_index,
+                "子纪元「{$child->name}」的终点晚于父「{$child->parent->name}」",
+            );
+        }
+
+        // 反空过：没有子纪元时上面的循环等于没跑
+        $this->assertGreaterThan(0, $children->count(), '没有任何子纪元，parent_id 等于没被用起来');
+    }
+
+    /**
+     * 「结晶时代」必须真的建模出来，而且起点就是书里写的 797 年。
+     *
+     * 这条同时守住 797–999 那段不再混在「远古 · 前纪元」里 ——
+     * 此前项目自行把它切进了前纪元，等于丢掉了书里现成的分期。
+     */
+    public function test_crystalline_era_is_modelled_from_the_book(): void
+    {
+        $period = Era::ofWorld(World::Terra)->where('slug', 'crystalline-era')->firstOrFail();
+
+        $this->assertSame(TerraDate::toIndex(797), $period->start_index);
+        $this->assertGreaterThan(0, $period->children()->count(), '结晶时代应当下辖纪元');
+        $this->assertSame(
+            TerraDate::toIndex(796, 12, 31),
+            Era::where('slug', 'prehistory')->value('end_index'),
+            '前纪元应当在 796 年收尾，把 797 年让给结晶时代',
+        );
+
+        // 797–999 那批年表条目已经改挂到新的子纪元上（此前混在「远古 · 前纪元」里）
+        $event = Event::where('title', '七城联邦建成第一座现代移动城市')->firstOrFail();
+        $this->assertSame('era-797-999', $event->era->slug);
+
+        // 父级不参与「挑一个桶」：它不该出现在叶子集合里，
+        // 否则条目自动归属、时间轴色带与筛选下拉都会去用它。
+        $this->assertNotContains($period->slug, Era::leaves()->pluck('slug')->all());
     }
 
     /**
@@ -480,6 +546,256 @@ class SeederIntegrityTest extends TestCase
                 $this->assertNull($source->pivot->quote, "塔卫二条目「{$event->title}」不应附引文（来源是社区整理）");
             }
         }
+    }
+
+    // ---------------------------------------------------------------- 字典维度
+
+    /**
+     * 三处字典：种族（书第四章）、地名（第五章政区）、词条（全书术语）。
+     *
+     * 重点不是「有没有数据」，而是**关系是否成立** —— 字典最容易烂掉的方式不是为空，
+     * 而是指向一个已经不存在的条目，而界面只会安静地少显示一个字段。
+     */
+    public function test_dictionary_dimensions_are_consistent(): void
+    {
+        // 种族：《大地巡旅》第四章立目的那些必须带概要
+        $this->assertGreaterThanOrEqual(16, Race::count(), '种族字典未覆盖书里立目的种族');
+        $this->assertGreaterThan(0, Race::whereNotNull('description')->count());
+        $this->assertSame(0, Character::whereNotNull('race_id')->whereDoesntHave('race')->count());
+        $this->assertGreaterThan(0, Character::has('race')->count(), '没有任何人物挂上种族字典，链接等于没用');
+
+        // 地名：必须成树、不跨世界，且只能挂到存在的政体上
+        $this->assertGreaterThan(0, Place::whereNotNull('parent_id')->count());
+        $this->assertSame(0, Place::whereNotNull('parent_id')->whereDoesntHave('parent')->count());
+        $this->assertSame(0, Place::whereNotNull('faction_id')->whereDoesntHave('faction')->count());
+        $this->assertSame(0, Event::whereNotNull('place_id')->whereDoesntHave('place')->count());
+        $this->assertGreaterThan(0, Event::whereNotNull('place_id')->count(), '没有任何条目挂上地名，维度等于没用');
+
+        // 条目的发生地必须与它属于同一个世界
+        $crossWorld = Event::with('place')
+            ->whereNotNull('place_id')
+            ->get()
+            ->filter(fn (Event $e) => $e->place->world !== $e->world())
+            ->count();
+        $this->assertSame(0, $crossWorld, '有条目的发生地挂在另一个世界的地名上');
+
+        // 词条：释义是必填的，空释义的词条没有存在意义
+        $this->assertGreaterThan(0, Term::count());
+        $this->assertSame(0, Term::whereRaw("coalesce(definition, '') = ''")->count());
+        $this->assertSame(0, Term::whereNotIn('category', array_keys(Term::CATEGORIES))->count());
+    }
+
+    /**
+     * 条目挂地名取**最长匹配**：location 原文里同时出现「维多利亚」与「伦蒂尼姆」时，
+     * 必须落到更具体的那个 —— 否则「按地区聚合」会把首都的条目挂到整片疆域上。
+     */
+    /**
+     * 种子必须对条目**幂等**。
+     *
+     * `EventWriter::create()` 每次都会新建一条，因此一个没有守卫的种子跑两遍就会
+     * 让时间线整体翻倍 —— 而对本项目来说，一份翻倍的年表比没有年表更糟：
+     * 它恰好是「可被信赖」这件事的反面，而且页面不会报错，只会安静地显示错的东西。
+     */
+    public function test_seeder_does_not_duplicate_events_on_a_second_run(): void
+    {
+        $before = Event::count();
+        $this->assertGreaterThan(0, $before);
+
+        // 再灌一次：应当整批跳过条目，而不是再建一份
+        $this->seed(TimelineSeeder::class);
+
+        $this->assertSame($before, Event::count(), '重复执行种子把条目翻倍了');
+    }
+
+    /**
+     * 地名树要覆盖第 5 章全部十九卷的政区，且**层级必须真的成立**。
+     *
+     * 子级的 parent_id 由「上级是否已插入」决定，而上级不存在时是**静默**落成 null ——
+     * 「龙门」此前就是这样丢掉了它的上级。因此这里逐个点名，而不是只数个数。
+     */
+    public function test_place_tree_covers_every_country_volume(): void
+    {
+        $volumes = [
+            '维多利亚', '莱塔尼亚', '乌萨斯帝国', '高卢', '拉特兰', '伊比利亚', '阿戈尔', '谢拉格',
+            '卡西米尔', '哥伦比亚', '玻利瓦尔', '叙拉古', '萨尔贡', '米诺斯', '萨米', '雷姆必拓',
+            '炎国', '东国', '卡兹戴尔',
+        ];
+
+        $names = Place::ofWorld(World::Terra)->pluck('name')->all();
+
+        foreach ($volumes as $name) {
+            $this->assertContains($name, $names, "第 5 章的政区「{$name}」没有进地名树");
+        }
+
+        // 子级不得挂空
+        $children = [
+            '维多利亚王国', '塔拉王国', '下高卢王国', '伦蒂尼姆', '海登施威尔大区',
+            '圣骏堡', '格里高利省', '切尔诺伯格', '汐斯塔', '尚蜀', '龙门',
+            '赫库兰尼姆', '西西里', '察帕特', '塔尔干主矿脉', '尤立卡自治州',
+        ];
+
+        $orphans = Place::ofWorld(World::Terra)
+            ->whereIn('name', $children)
+            ->whereNull('parent_id')
+            ->pluck('name');
+
+        $this->assertSame([], $orphans->all(), '这些地名的上级没有挂上（上级必须先于子级插入）');
+
+        // 别名是数据：书里用过的简称要记在字典里，否则 location 里的简称永远挂不上链接
+        $this->assertContains('乌萨斯', Place::where('name', '乌萨斯帝国')->firstOrFail()->aliases);
+
+        // 塔卫二同样要分层：供能高地是四号谷地**境内**的高地，不是与它并列的一级地名
+        $this->assertSame(
+            '四号谷地',
+            Place::ofWorld(World::Talos)->where('name', '供能高地')->firstOrFail()->parent?->name,
+        );
+
+        // 链子要一路连到顶：文明环带 → 四号谷地 → 供能高地
+        $this->assertSame(
+            '文明环带',
+            Place::ofWorld(World::Talos)->where('name', '四号谷地')->firstOrFail()->parent?->name,
+        );
+
+        // 文明环带是**地域**：它被排除出组织页，因此地名树里的这个节点是它唯一的落点。
+        // 少了它，这东西会在两个页面之间消失 —— 既不算组织，又没地方可查。
+        $this->assertSame(
+            'territory',
+            \App\Models\Faction::where('name', '文明环带')->firstOrFail()->kind->value,
+        );
+    }
+
+    /**
+     * 每个阵营都必须有**明确**的类型。
+     *
+     * 「未归类」是留给新出现阵营的显眼位置，不是一个可以长期停放的常量：
+     * 它一旦非空，就说明有人往阵营树里加了东西却没分类 ——
+     * 而那时资料集的「组织」页会悄悄多出一个不该在那儿的东西。
+     */
+    public function test_every_faction_has_a_declared_kind(): void
+    {
+        $unclassified = Faction::where('kind', FactionKind::Other->value)->pluck('name');
+
+        $this->assertSame([], $unclassified->all(), '这些阵营还没有归类');
+    }
+
+    /**
+     * 政体与地域**不得**出现在组织里。
+     *
+     * 「哪些算组织」只有一处判据（`FactionKind::isOrganization()`），
+     * 但那条判据很容易在某个查询里被悄悄绕过 —— 这里从数据侧把结果钉住：
+     * 维多利亚（政体）与文明环带（地域）都不该是组织。
+     */
+    public function test_polities_and_territories_are_not_organizations(): void
+    {
+        $this->assertSame('polity', Faction::where('name', '维多利亚')->firstOrFail()->kind->value);
+        $this->assertSame('territory', Faction::where('name', '文明环带')->firstOrFail()->kind->value);
+
+        $organizationNames = Faction::organizations()->pluck('name');
+
+        $this->assertNotContains('维多利亚', $organizationNames->all());
+        $this->assertNotContains('文明环带', $organizationNames->all());
+
+        // 而组织确实在里面 —— 否则上两条会因为「组织页是空的」而假通过
+        $this->assertContains('莱茵生命', $organizationNames->all());
+    }
+
+    public function test_event_places_prefer_the_most_specific_match(): void
+    {
+        $places = Place::ofWorld(World::Terra)->get();
+        $linked = Event::with('place')->whereNotNull('place_id')->get();
+
+        $this->assertGreaterThan(0, $linked->count());
+
+        foreach ($linked as $event) {
+            $place = $event->place;
+            $location = (string) $event->location;
+
+            // 命中的必须是这个地名自己的某个写法。**别名同样算数**：
+            // location 里写「乌萨斯」而挂到「乌萨斯帝国」是对的，因为简称记在该地名的别名里。
+            $tokens = collect($place->matchTokens())
+                ->filter(fn (string $token) => str_contains($location, $token));
+
+            $this->assertNotEmpty(
+                $tokens->values()->all(),
+                "条目「{$event->title}」的发生地「{$place->name}」没有任何写法出现在 location 原文里",
+            );
+
+            $best = $tokens->map(fn (string $token) => mb_strlen($token))->max();
+
+            // 不得存在写法更长的候选。等长的情况交给深度平局规则（见 seedPlaces 的 matchPlace），
+            // 这里只守「没有更长的」——那是最容易出错的半边。
+            $longer = $places->filter(fn (Place $other) => collect($other->matchTokens())
+                ->contains(fn (string $token) => str_contains($location, $token) && mb_strlen($token) > $best));
+
+            $this->assertSame(
+                [],
+                $longer->pluck('name')->values()->all(),
+                "条目「{$event->title}」的 location 里还有写法更长的地名，应当挂到那个上",
+            );
+        }
+
+        // 锚点 1：切尔诺伯格事变发生在切尔诺伯格
+        $this->assertSame(
+            '切尔诺伯格',
+            Event::where('title', '切尔诺伯格事变爆发')->firstOrFail()->place->name,
+        );
+
+        // 锚点 2：别名 —— location 写的是简称「乌萨斯」，应落到「乌萨斯帝国」
+        $this->assertSame(
+            '乌萨斯帝国',
+            Event::where('location', '乌萨斯')->firstOrFail()->place->name,
+        );
+
+        // 锚点 3：等长时取更具体的 ——「炎国 · 尚蜀」里两个写法都是两字，应落到层级更深的尚蜀
+        $this->assertSame(
+            '尚蜀',
+            Event::where('location', '炎国 · 尚蜀')->firstOrFail()->place->name,
+        );
+    }
+
+    /**
+     * 历史人物与干员是两类实体：干员有代号与干员页，历史人物有头衔与在位期。
+     * 混在一起的话，干员名单里会混进一堆几百年前的皇帝。
+     */
+    public function test_historical_figures_are_typed_and_carry_titles(): void
+    {
+        $historical = Character::where('kind', 'historical')->get();
+
+        $this->assertGreaterThan(0, $historical->count());
+
+        foreach ($historical as $figure) {
+            $this->assertNotNull($figure->title, "历史人物「{$figure->name}」应当有头衔");
+            $this->assertNotNull($figure->description, "历史人物「{$figure->name}」应当有简介");
+            $this->assertNull($figure->codename, "历史人物「{$figure->name}」不应有干员代号");
+
+            if ($figure->reign_start_index !== null && $figure->reign_end_index !== null) {
+                $this->assertLessThan(
+                    $figure->reign_end_index,
+                    $figure->reign_start_index,
+                    "历史人物「{$figure->name}」的在位区间方向反了",
+                );
+            }
+        }
+
+        // 锚点：巫王的在位区间是年表明写的 969–1077
+        $hel = Character::where('name', '赫尔昏佐伦')->firstOrFail();
+        $this->assertSame('historical', $hel->kind);
+        $this->assertSame(TerraDate::toIndex(969), $hel->reign_start_index);
+        $this->assertSame(TerraDate::toIndex(1077, 12, 31), $hel->reign_end_index);
+        $this->assertStringContainsString('巫王', (string) $hel->title);
+    }
+
+    /**
+     * 干员名单（`/operators`）只列干员：历史人物不进去。
+     * 这条守住的是「分类一旦落地就必须真的生效」，否则 kind 只是一个没人读的字段。
+     */
+    public function test_operator_index_excludes_historical_figures(): void
+    {
+        $historical = Character::where('kind', 'historical')->firstOrFail();
+
+        $this->get(route('operators.index', ['world' => World::Terra->value]))
+            ->assertOk()
+            ->assertDontSee($historical->name);
     }
 
     public function test_characters_reference_existing_factions(): void
