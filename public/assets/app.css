@@ -46,6 +46,11 @@
     --radius: 0px;
     --chamfer: 8px;
 
+    /* 深链落点要让开的高度：.topbar 是 62px 的 sticky 头，余下的是呼吸位。
+       高度只在这里定义一次（见下方「深链落点」）——
+       散在几处的话，改了导航栏就得满文件找。 */
+    --anchor-offset: 78px;
+
     --mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
     --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 
@@ -66,6 +71,39 @@ html, body {
     -webkit-font-smoothing: antialiased;
     font-variant-numeric: tabular-nums;
 }
+
+/*
+ * 深链落点
+ * ---------------------------------------------------------------------------
+ * 这些元素是**被别人链进来的落点**：词典四页的行（/races `#race-…`、/places
+ * `#place-…`、/terms `#term-…`、/organizations `#org-…`），以及时间线的时代与纪元色带。
+ *
+ * 它们必须让开顶部导航。`.topbar` 是 62px 的 sticky 头，盖在内容之上 ——
+ * 不让开的话，跳过去之后目标那一条正好被压在导航栏底下：落点其实已经到位，
+ * 读者却看不到，只会以为跳错了地方，然后自己往下翻。
+ */
+.card[id],
+table.tbl td[id],
+.era-band,
+.era-period {
+    scroll-margin-top: var(--anchor-offset);
+}
+
+/*
+ * 跳进来的那一条要认得出来。
+ *
+ * 把落点对齐到正确位置只是做对了一半：列表一屏十几条、彼此长得一样，
+ * 读者仍然不知道自己点的是哪一条。给一条标志黄的左边线，一眼可认。
+ */
+.card:target {
+    border-color: var(--accent-line);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* 表格里的落点：整行铺淡底，首列再压一条标志黄 —— 只给一个单元格上色会显得像错位。
+   选择器比 `table.tbl tbody tr:hover td` 更具体一档，悬停时不会把标记擦掉。 */
+table.tbl tbody tr:has(td:target) td { background: var(--accent-soft); }
+table.tbl tbody tr:has(td:target) td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* 技术网格底纹 + 顶部暖光。网格是 HUD 风格最廉价也最有效的空间暗示。 */
 body::before {
@@ -568,7 +606,7 @@ select {
     margin: 46px 0 2px;
     padding: 8px 0;
     border-top: 2px solid var(--border-strong);
-    scroll-margin-top: 78px;
+    /* 让位高度见顶部「深链落点」一节 */
 }
 
 .era-period:first-child { margin-top: 0; }
@@ -598,7 +636,7 @@ select {
     margin: 30px 0 13px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--border);
-    scroll-margin-top: 78px;
+    /* 让位高度见顶部「深链落点」一节 */
 }
 
 /* 紧随分期标题的纪元色带：上间距让出去，避免两次分组之间出现两条空隙 */

@@ -24,9 +24,17 @@ class Faction extends Model
         return $this->hasMany(self::class, 'parent_id');
     }
 
-    public function characters(): HasMany
+    /**
+     * 归属该阵营的人物。
+     *
+     * 多对多：一个人可以同时属「深海猎人」与「阿戈尔」，两条都是事实
+     * （原先的单列 `characters.faction_id` 只装得下前一条）。
+     */
+    public function characters(): BelongsToMany
     {
-        return $this->hasMany(Character::class);
+        return $this->belongsToMany(Character::class, 'character_faction')
+            ->withPivot('sort_order')
+            ->withTimestamps();
     }
 
     public function events(): BelongsToMany

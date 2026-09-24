@@ -199,6 +199,36 @@ class DictionaryPagesTest extends TestCase
         $this->get(route('organizations.index'))->assertOk()->assertSee('id="org-'.$org->slug.'"', false);
     }
 
+    /**
+     * 深链落点必须**让开顶部导航**（`.topbar` 是 62px 的 sticky 头）。
+     *
+     * 上一条测试守着「锚点在页面上」，这一条守着「跳过去能看见」——
+     * 少了它，落点会被导航栏盖住：位置其实到了，读者却看不到，只会以为跳错了地方。
+     *
+     * 只能静态校验 CSS：这里没有浏览器，跑不出真实的滚动位置。
+     * 但它挡得住「又多了一类会被链过去的行，却忘了让它让开导航」——
+     * 时间线的时代色带与词典页的行都各自踩过一次，说明这不是一次性的疏忽。
+     */
+    public function test_anchor_targets_clear_the_sticky_header(): void
+    {
+        $css = (string) file_get_contents(public_path('assets/app.css'));
+
+        // 让位高度只定义一次，各落点统一引用它 —— 否则改了导航栏高度就要满文件找
+        $this->assertMatchesRegularExpression(
+            '/--anchor-offset:\s*\d+px/',
+            $css,
+            '顶部导航的让位高度没有定义成 --anchor-offset',
+        );
+
+        foreach (['.card[id]', 'table.tbl td[id]', '.era-band', '.era-period'] as $selector) {
+            $this->assertMatchesRegularExpression(
+                '/'.preg_quote($selector, '/').'\s*,?[^{]*\{[^}]*scroll-margin-top:\s*var\(--anchor-offset\)/s',
+                $css,
+                "深链落点 {$selector} 没有让开顶部导航，条目标题会被导航栏盖住",
+            );
+        }
+    }
+
     public function test_places_are_scoped_to_the_selected_world(): void
     {
         $this->place('泰拉测试城');
@@ -379,6 +409,108 @@ class DictionaryPagesTest extends TestCase
             ->assertSee($figure->name)
             ->assertSee('测试帝国皇帝')
             ->assertSee('在位');
+    }
+
+    /**
+     * 人物分三档，各档都有入口。
+     *
+     * 「剧情人物」是导入 PRTS 名单时才补出来的一档：非干员的现代人（组织创办者一类）。
+     * 少了它，他们只能挤在「历史人物」里 —— 名不副实，却无处可去。
+     */
+    public function test_every_character_kind_is_reachable(): void
+    {
+        Character::create(['name' => '测试干员', 'slug' => 'chr-fixture-op', 'kind' => 'operator', 'codename' => 'Test', 'sort_order' => 0]);
+        Character::create(['name' => '测试先帝', 'slug' => 'chr-fixture-his', 'kind' => 'historical', 'title' => '测试皇帝', 'description' => '测试。', 'sort_order' => 1]);
+        Character::create(['name' => '测试店主', 'slug' => 'chr-fixture-npc', 'kind' => 'npc', 'title' => '测试店主', 'description' => '测试。', 'sort_order' => 2]);
+
+        foreach (['operator' => '测试干员', 'historical' => '测试先帝', 'npc' => '测试店主'] as $kind => $name) {
+            // 切换器三档都在，读者才知道还有别的可看
+            $this->get(route('operators.index', ['kind' => $kind]))
+                ->assertOk()
+                ->assertSee('干员')
+                ->assertSee('历史人物')
+                ->assertSee('剧情人物')
+                ->assertSee($name);
+        }
+
+        // 各档互不串台
+        $this->get(route('operators.index'))
+            ->assertOk()
+            ->assertDontSee('测试先帝')
+            ->assertDontSee('测试店主');
+
+        $this->get(route('operators.index', ['kind' => 'historical']))
+            ->assertOk()
+            ->assertDontSee('测试干员');
+    }
+
+    /**
+     * 人物详情页的出身地：原文 + 可点的地名节点，与条目的发生地同一条规矩。
+     *
+     * 对不上时**不猜**：来源写「未公开」「瓦伊凡」这类值，页面上如实显示原文，
+     * 并说明它没对上字典 —— 硬塞一个地名比空着更糟。
+     */
+    public function test_birth_place_is_shown_with_a_link_when_it_matches(): void
+    {
+        $place = $this->place('测试城');
+
+        $linked = Character::create([
+            'name' => '测试人物甲', 'slug' => 'chr-fixture-bp-1', 'sort_order' => 0,
+            'birth_place' => '测试城', 'birth_place_id' => $place->id,
+        ]);
+
+        $this->get(route('operators.show', $linked))
+            ->assertOk()
+            ->assertSee('出身地')
+            ->assertSee(route('places.index').'#place-'.$place->slug);
+
+        $unlinked = Character::create([
+            'name' => '测试人物乙', 'slug' => 'chr-fixture-bp-2', 'sort_order' => 1,
+            'birth_place' => '未公开',
+        ]);
+
+        $this->get(route('operators.show', $unlinked))
+            ->assertOk()
+            ->assertSee('未公开')
+            ->assertDontSee(route('places.index').'#place-');
+    }
+
+    /**
+     * 多归属要**都**列出来，且每个都能点着筛。
+     *
+     * 只显示第一条等于把改造前的行为原样搬了过来 —— 多记的那一条若看不见也点不动，
+     * 读者读不出它的用处。
+     */
+    public function test_every_faction_of_a_character_is_listed(): void
+    {
+        $hunters = $this->faction('深海猎人', 'society');
+        $aegir = $this->faction('阿戈尔', 'polity');
+
+        $character = Character::create([
+            'name' => '测试猎手', 'slug' => 'chr-fixture-multi', 'sort_order' => 0,
+        ]);
+
+        $character->factions()->sync([
+            $hunters->id => ['sort_order' => 0],
+            $aegir->id => ['sort_order' => 2],
+        ]);
+
+        $html = $this->get(route('operators.show', $character))
+            ->assertOk()
+            ->assertSee('深海猎人')
+            ->assertSee('阿戈尔')
+            ->getContent();
+
+        // 两个阵营各自都能点着筛
+        $this->assertStringContainsString('faction='.$hunters->id, $html);
+        $this->assertStringContainsString('faction='.$aegir->id, $html);
+
+        // 顺序：更具体的那条在前
+        $this->assertLessThan(
+            mb_strpos($html, '阿戈尔'),
+            mb_strpos($html, '深海猎人'),
+            '更具体的归属应当排在前面',
+        );
     }
 
     /** 干员卡上的种族要能点进种族页，否则读者看到「菲林」仍然无处可查。 */

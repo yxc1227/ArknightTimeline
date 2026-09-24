@@ -23,14 +23,26 @@ class OperatorProfileTest extends TestCase
 {
     use BuildsTimeline, RefreshDatabase;
 
-    private function character(string $name, array $overrides = []): Character
+    /**
+     * 造一个人物。
+     *
+     * 归属走枢轴（一个人可以同时属多个阵营），因此阵营不放在 `$overrides` 里，
+     * 而是单独一个参数 —— 免得读的人以为那是「一列属性」。
+     */
+    private function character(string $name, array $overrides = [], ?Faction $faction = null): Character
     {
-        return Character::create([
+        $character = Character::create([
             'name' => $name,
             'slug' => 'chr-'.md5($name),
             'sort_order' => 0,
             ...$overrides,
         ]);
+
+        if ($faction !== null) {
+            $character->factions()->attach($faction->id, ['sort_order' => 0]);
+        }
+
+        return $character;
     }
 
     /** 种族已经是字典：先用名字取（或建）一条，再挂到人物上。 */
@@ -62,8 +74,8 @@ class OperatorProfileTest extends TestCase
         $rhodes = Faction::create(['name' => '罗德岛', 'slug' => 'fac-rhodes']);
         $reunion = Faction::create(['name' => '整合运动', 'slug' => 'fac-reunion']);
 
-        $this->character('阿米娅', ['faction_id' => $rhodes->id, 'codename' => 'Amiya']);
-        $this->character('塔露拉', ['faction_id' => $reunion->id]);
+        $this->character('阿米娅', ['codename' => 'Amiya'], $rhodes);
+        $this->character('塔露拉', [], $reunion);
 
         $this->get(route('operators.index', ['q' => 'Amiya']))
             ->assertOk()->assertSee('阿米娅')->assertDontSee('塔露拉');
@@ -104,7 +116,7 @@ class OperatorProfileTest extends TestCase
     public function test_a_character_without_a_profile_falls_back_to_structured_facts(): void
     {
         $faction = Faction::create(['name' => '阿戈尔', 'slug' => 'fac-aegir']);
-        $character = $this->character('无名干员', ['faction_id' => $faction->id, 'race_id' => $this->race('阿戈尔')]);
+        $character = $this->character('无名干员', ['race_id' => $this->race('阿戈尔')], $faction)->load('factions');
 
         $text = $character->profileText();
 

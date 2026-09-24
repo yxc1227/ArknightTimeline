@@ -29,7 +29,7 @@ class MigrationCommentTest extends TestCase
         'users', 'password_reset_tokens', 'sessions',
         'cache', 'cache_locks',
         'jobs', 'job_batches', 'failed_jobs',
-        'factions', 'eras', 'characters', 'sources', 'tags', 'races', 'places', 'terms',
+        'factions', 'eras', 'characters', 'character_faction', 'sources', 'tags', 'races', 'places', 'terms',
         'events', 'event_source', 'event_character', 'event_faction', 'event_tag',
         'event_revisions', 'annotations', 'event_locks', 'ai_proposals', 'timeline_anomalies',
         'source_user', 'user_activity_logs', 'user_identities',

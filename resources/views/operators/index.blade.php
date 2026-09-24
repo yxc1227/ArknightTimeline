@@ -53,20 +53,23 @@
             </div>
 
             {{--
-                人物分两类，页面上分开列：
-                干员有代号、在役于某支队伍；历史人物有头衔与在位期。
-                混在一个网格里，读者会分不清谁还在名单上 —— 这也正是当初把 kind 分出来的原因。
-                两边各自显示总数，否则默认视图会让历史人物显得「不存在」。
+                人物分三档，页面上分开列：
+                干员有代号、在役于某支队伍；历史人物有头衔与在位期；
+                剧情人物是当代但非干员的人（组织创办者一类）。
+                混在一个网格里，读者会分不清谁还在名单上 —— 这正是当初把 kind 分出来的原因。
+
+                三档由枚举生成，不在视图里再抄一遍标签与取值：
+                档数变了（比如再加一档）时，这里不该是第二个要改的地方。
             --}}
             <div class="chips" style="margin-bottom:10px">
-                <a class="chip" data-clickable="1" data-active="{{ $filters['kind'] === 'operator' ? '1' : '0' }}"
-                   href="{{ route('operators.index', ['world' => $world->value]) }}">
-                    干员 {{ str_pad((string) $counters['operators'], 2, '0', STR_PAD_LEFT) }}
-                </a>
-                <a class="chip" data-clickable="1" data-active="{{ $filters['kind'] === 'historical' ? '1' : '0' }}"
-                   href="{{ route('operators.index', ['world' => $world->value, 'kind' => 'historical']) }}">
-                    历史人物 {{ str_pad((string) $counters['historical'], 2, '0', STR_PAD_LEFT) }}
-                </a>
+                @foreach (\App\Enums\CharacterKind::cases() as $option)
+                    <a class="chip" data-clickable="1"
+                       data-active="{{ $filters['kind'] === $option->value ? '1' : '0' }}"
+                       href="{{ route('operators.index', ['world' => $world->value, 'kind' => $option->value]) }}">
+                        {{ $option->label() }}
+                        {{ str_pad((string) $counters['kinds'][$option->value], 2, '0', STR_PAD_LEFT) }}
+                    </a>
+                @endforeach
             </div>
 
             <form method="GET" action="{{ route('operators.index') }}" class="filter-head" style="gap:10px;flex-wrap:wrap">
@@ -136,9 +139,14 @@
                         </header>
 
                         <div class="operator-card__meta">
-                            @if (filled($character->faction?->name))
-                                <span class="chip">{{ $character->faction->name }}</span>
-                            @endif
+                            {{-- 归属可以有多个：她是深海猎人，深海猎人又属阿戈尔，两条都列出来。
+                                 每个都能点着筛 —— 多记的那一条若点不动，读者读不出它的用处。 --}}
+                            @foreach ($character->factions as $faction)
+                                <a class="chip" data-clickable="1"
+                                   href="{{ route('operators.index', ['world' => $world->value, 'kind' => $filters['kind'], 'faction' => $faction->id]) }}">
+                                    {{ $faction->name }}
+                                </a>
+                            @endforeach
                             @if (filled($character->raceName()))
                                 {{-- 种族链到资料集：读者看到「菲林」想知道那是什么，这里就该能点过去 --}}
                                 <a class="chip" data-clickable="1"

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\DateConfidence;
 use App\Enums\DatePrecision;
+use App\Enums\CharacterKind;
 use App\Enums\EventStatus;
 use App\Enums\FactionKind;
 use App\Enums\World;
@@ -665,6 +666,110 @@ class SeederIntegrityTest extends TestCase
     }
 
     /**
+     * 干员名单（PRTS 导出）的导入纪律。
+     *
+     * 这份名单是批量导入的，最容易出的事故不是「少了几个人」，而是**把人工维护的东西冲掉**、
+     * 或者把「未公开」当成一个种族写进去。三条一起守。
+     */
+    public function test_operator_roster_is_imported_without_overwriting_curated_people(): void
+    {
+        $roster = json_decode((string) file_get_contents(base_path('docs/prts-干员一览.json')), true);
+
+        $this->assertIsArray($roster);
+        $this->assertGreaterThan(300, count($roster), 'PRTS 导出看起来不完整');
+
+        $operators = Character::ofWorld(World::Terra)->where('kind', 'operator')->pluck('name')->all();
+
+        // 名单里的人都在库里 —— 这是导入存在的意义
+        $missing = collect($roster)
+            ->map(fn (array $row) => trim((string) ($row['zh'] ?? '')))
+            ->filter(fn (string $name) => $name !== '' && ! in_array($name, $operators, true));
+
+        $this->assertSame([], $missing->take(10)->values()->all(), '名单里有干员没有入库');
+
+        // 人工核过的人不被覆盖：斯卡蒂的简介是本仓库写的
+        $this->assertNotNull(Character::where('name', '斯卡蒂')->firstOrFail()->description);
+
+        // 「未公开」这类写法一律留空，且不得作为种族入字典
+        foreach (['斯卡蒂', '夕', '年', '结城理'] as $name) {
+            $this->assertNull(
+                Character::where('name', $name)->firstOrFail()->race_id,
+                $name.' 的种族在来源里不是规范种族名，应当留空',
+            );
+        }
+
+        $this->assertFalse(
+            Race::whereIn('name', ['未公开', '未知', '不明', '未录入', '因经纪公司要求不公开'])->exists(),
+            '非种族值被写进了种族字典',
+        );
+
+        // 势力取值要能落到阵营上（含别名归并），否则这些人会没有归属
+        $this->assertSame(
+            0,
+            Character::ofWorld(World::Terra)->where('kind', 'operator')->doesntHave('factions')->count(),
+            '有干员的势力没有落到任何阵营上',
+        );
+    }
+
+    /**
+     * 多归属：一个人可以**同时**属于「深海猎人」与「阿戈尔」，两条都要在。
+     *
+     * 改造前只有一列 `faction_id`，装不下第二条 —— 于是导入名单时只能取最具体的那个，
+     * 另一半被静默丢掉。丢掉的那半个事实在页面上看不出缺了什么，这正是它值得一条测试的原因。
+     */
+    public function test_characters_can_belong_to_several_factions(): void
+    {
+        $shark = Character::where('name', '幽灵鲨')->firstOrFail();
+        $names = $shark->factions->pluck('name')->all();
+
+        $this->assertContains('深海猎人', $names);
+        $this->assertContains('阿戈尔', $names);
+
+        // 顺序由来源的层序决定（小队 → 团体 → 国别）：越具体越靠前
+        $this->assertSame('深海猎人', $names[0], '更具体的归属应当排在前面');
+
+        // 归并来的那一条要真的能被筛到，否则等于没记
+        $this->get(route('operators.index', ['faction' => Faction::where('name', '阿戈尔')->value('id')]))
+            ->assertOk()
+            ->assertSee('幽灵鲨');
+    }
+
+    /**
+     * 出身地：**能对上的必须对上**。
+     *
+     * 「对不上」本身是允许的 —— 来源写的是「未公开」「瓦伊凡」这类非地名值。
+     * 但能对上却空着就是静默缺失：页面上只会少一个链接，不会有任何报错。
+     */
+    public function test_birth_places_are_resolved_into_place_nodes(): void
+    {
+        $placeNames = Place::pluck('name')->all();
+        $withBirthPlace = Character::with('birthPlace')->whereNotNull('birth_place')->get();
+
+        $this->assertGreaterThan(0, $withBirthPlace->count());
+        // 大多数应当能对上：对不上的只是少数非地名写法
+        $this->assertGreaterThan(
+            $withBirthPlace->count() / 2,
+            $withBirthPlace->whereNotNull('birth_place_id')->count(),
+        );
+
+        foreach ($withBirthPlace as $character) {
+            if ($character->birth_place_id !== null) {
+                continue;
+            }
+
+            $this->assertNotContains(
+                $character->birth_place,
+                $placeNames,
+                "「{$character->name}」的出身地「{$character->birth_place}」对得上地名树却空着",
+            );
+        }
+
+        // 锚点：写法对照（来源写「炎」，本仓库叫「炎国」）与限定语剥离（「汐斯塔（独立城邦）」）
+        $this->assertSame('炎国', Character::where('name', '令')->firstOrFail()->birthPlace->name);
+        $this->assertSame('汐斯塔', Character::where('name', '锡兰')->firstOrFail()->birthPlace->name);
+    }
+
+    /**
      * 每个阵营都必须有**明确**的类型。
      *
      * 「未归类」是留给新出现阵营的显眼位置，不是一个可以长期停放的常量：
@@ -754,35 +859,49 @@ class SeederIntegrityTest extends TestCase
     }
 
     /**
-     * 历史人物与干员是两类实体：干员有代号与干员页，历史人物有头衔与在位期。
-     * 混在一起的话，干员名单里会混进一堆几百年前的皇帝。
+     * 非干员的两档（历史人物、剧情人物）共用同一套不变量：
+     * **有头衔、有简介、没有干员代号**。
+     *
+     * 干员与他们是两类实体 —— 前者有代号与干员页，后者有头衔与身份说明。
+     * 混在一起的话，干员名单里会混进一堆几百年前的皇帝，以及当代的组织创办者。
      */
-    public function test_historical_figures_are_typed_and_carry_titles(): void
+    public function test_non_operator_figures_are_typed_and_carry_titles(): void
     {
-        $historical = Character::where('kind', 'historical')->get();
+        $figures = Character::whereIn('kind', [
+            CharacterKind::Historical->value,
+            CharacterKind::Npc->value,
+        ])->get();
 
-        $this->assertGreaterThan(0, $historical->count());
+        $this->assertGreaterThan(0, $figures->count());
 
-        foreach ($historical as $figure) {
-            $this->assertNotNull($figure->title, "历史人物「{$figure->name}」应当有头衔");
-            $this->assertNotNull($figure->description, "历史人物「{$figure->name}」应当有简介");
-            $this->assertNull($figure->codename, "历史人物「{$figure->name}」不应有干员代号");
+        foreach ($figures as $figure) {
+            $this->assertNotNull($figure->title, "非干员「{$figure->name}」应当有头衔或身份");
+            $this->assertNotNull($figure->description, "非干员「{$figure->name}」应当有简介");
+            $this->assertNull($figure->codename, "非干员「{$figure->name}」不应有干员代号");
 
             if ($figure->reign_start_index !== null && $figure->reign_end_index !== null) {
                 $this->assertLessThan(
                     $figure->reign_end_index,
                     $figure->reign_start_index,
-                    "历史人物「{$figure->name}」的在位区间方向反了",
+                    "非干员「{$figure->name}」的在位区间方向反了",
                 );
             }
         }
 
-        // 锚点：巫王的在位区间是年表明写的 969–1077
+        // 锚点 1：巫王的在位区间是年表明写的 969–1077
         $hel = Character::where('name', '赫尔昏佐伦')->firstOrFail();
-        $this->assertSame('historical', $hel->kind);
+        $this->assertSame(CharacterKind::Historical, $hel->kind);
         $this->assertSame(TerraDate::toIndex(969), $hel->reign_start_index);
         $this->assertSame(TerraDate::toIndex(1077, 12, 31), $hel->reign_end_index);
         $this->assertStringContainsString('巫王', (string) $hel->title);
+
+        // 锚点 2：当代的组织创办者归「剧情人物」—— 他们不是干员，也不是几百年前的人
+        $cliff = Character::where('name', '克里夫')->firstOrFail();
+        $this->assertSame(CharacterKind::Npc, $cliff->kind);
+        $this->assertNull($cliff->reign_start_index, '剧情人物不该有在位区间');
+
+        // 锚点 3：「岁」是炎国的远古实体，不是干员 —— 它此前被记在干员名单里
+        $this->assertSame(CharacterKind::Historical, Character::where('name', '岁')->firstOrFail()->kind);
     }
 
     /**
@@ -798,15 +917,16 @@ class SeederIntegrityTest extends TestCase
             ->assertDontSee($historical->name);
     }
 
-    public function test_characters_reference_existing_factions(): void
+    /**
+     * 归属改走枢轴之后（一人可属多个阵营），这里查的是另一半：
+     * **没有人一个归属都没有**。「指向不存在的阵营」由外键拦住，
+     * 而「导入漏了归属」数据库不会报错，只会在页面上少一行。
+     */
+    public function test_every_character_has_at_least_one_faction(): void
     {
-        foreach (Character::with('faction')->get() as $character) {
-            if ($character->faction_id === null) {
-                continue;
-            }
+        $orphans = Character::doesntHave('factions')->pluck('name');
 
-            $this->assertNotNull($character->faction, "人物「{$character->name}」指向了不存在的阵营");
-        }
+        $this->assertSame([], $orphans->all(), '这些人员没有任何阵营归属');
     }
 
     public function test_source_pivot_rows_reference_existing_events_and_sources(): void

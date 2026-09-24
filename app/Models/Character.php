@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CharacterKind;
 use App\Enums\World;
 use App\Support\TerraDate;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  *   终末地工业的组建方之一 —— 而一个人物的档案不会横跨两个世界。）
  */
 #[Fillable([
-    'name', 'slug', 'world', 'codename', 'faction_id', 'race_id',
+    'name', 'slug', 'world', 'codename', 'birth_place', 'birth_place_id', 'race_id',
     'kind', 'title', 'reign_start_index', 'reign_end_index',
     'description', 'wiki_slug', 'sort_order',
 ])]
@@ -29,6 +30,7 @@ class Character extends Model
     {
         return [
             'world' => World::class,
+            'kind' => CharacterKind::class,
         ];
     }
 
@@ -49,9 +51,38 @@ class Character extends Model
         return $query->where('world', $world instanceof World ? $world->value : $world);
     }
 
-    public function faction(): BelongsTo
+    /**
+     * 所属阵营，**可以有多个**。
+     *
+     * 原先只有一列 `faction_id`，装不下「深海猎人（属阿戈尔）」这种两层归属，
+     * 于是导入名单时只能取最具体的那个、把另一半丢掉 —— 而那另一半不是冗余，是事实。
+     *
+     * `sort_order` 由来源的层序决定（小队 → 团体 → 国别），因此越具体越靠前：
+     * 界面上第一个就是这个人最常被认作的身份。
+     */
+    public function factions(): BelongsToMany
     {
-        return $this->belongsTo(Faction::class);
+        return $this->belongsToMany(Faction::class, 'character_faction')
+            ->withPivot('sort_order')
+            ->withTimestamps()
+            ->orderByPivot('sort_order')
+            ->orderBy('factions.id');
+    }
+
+    /** 主归属：最具体的那一个。没有归属时为空。 */
+    public function primaryFaction(): ?Faction
+    {
+        return $this->factions->first();
+    }
+
+    /**
+     * 出身地（地名节点）。
+     *
+     * 与 `birth_place` 那列并存：这里是能点进去的节点，那里是来源的原文写法。
+     */
+    public function birthPlace(): BelongsTo
+    {
+        return $this->belongsTo(Place::class, 'birth_place_id');
     }
 
     /**
@@ -80,7 +111,7 @@ class Character extends Model
      */
     public function isHistorical(): bool
     {
-        return $this->kind === 'historical';
+        return $this->kind === CharacterKind::Historical;
     }
 
     /**
@@ -137,10 +168,16 @@ class Character extends Model
             return (string) $this->description;
         }
 
+        // 归属可能有多条，按由具体到笼统列出；只给第一个会丢掉「同时属于阿戈尔」这一半
+        $factions = $this->relationLoaded('factions')
+            ? $this->factions->pluck('name')->all()
+            : [];
+
         $facts = array_values(array_filter([
             '所属世界：'.$this->world()->label(),
-            filled($this->faction?->name) ? '所属阵营：'.$this->faction->name : null,
+            $factions === [] ? null : '所属阵营：'.implode(' · ', $factions),
             filled($this->raceName()) ? '种族：'.$this->raceName() : null,
+            filled($this->birth_place) ? '出身地：'.$this->birth_place : null,
             $this->reignLabel(),
         ]));
 
@@ -214,18 +251,17 @@ class Character extends Model
     /* ------------------------------------------------------------------ 查询 */
 
     /**
-     * 只要干员（排除历史人物）。
+     * 只要干员（排除历史人物与剧情人物）。
      *
-     * 「干员简介」这个模块服务的是**能出勤的干员**；历史人物（几百年前的君主、
-     * 贵族与学者）混进同一份名单，读者会分不清谁还在名单上。历史人物仍然
-     * 可以参与时间线筛选 —— 那正是他们最该出现的地方。
+     * 「干员简介」这个模块服务的是**能出勤的干员**；其余两档混进同一份名单，
+     * 读者会分不清谁还在名单上。他们仍然可以参与时间线筛选 —— 那正是他们最该出现的地方。
      */
     public function scopeOperators(Builder $query): Builder
     {
-        return $query->where('kind', 'operator');
+        return $query->where('kind', CharacterKind::Operator->value);
     }
 
-    /** 关键词：名称 / 代号 / 头衔 / 种族。 */
+    /** 关键词：名称 / 代号 / 头衔 / 种族 / 出身地。 */
     public function scopeSearch(Builder $query, ?string $term): Builder
     {
         $term = trim((string) $term);
@@ -242,6 +278,8 @@ class Character extends Model
             $inner->whereRaw('lower(name) like ?', [$needle])
                 ->orWhereRaw('lower(coalesce(codename, \'\')) like ?', [$needle])
                 ->orWhereRaw('lower(coalesce(title, \'\')) like ?', [$needle])
+                // 出身地搜的是来源的原文写法（「乌萨斯」「维多利亚」都在这一列里）
+                ->orWhereRaw('lower(coalesce(birth_place, \'\')) like ?', [$needle])
                 // 种族改走字典：用子查询而不是 join，避免与 withCount 之类的聚合互相干扰
                 ->orWhereIn('race_id', Race::query()
                     ->whereRaw('lower(name) like ?', [$needle])
@@ -258,12 +296,33 @@ class Character extends Model
             'slug' => $this->slug,
             'world' => $this->world()->value,
             'world_label' => $this->world()->label(),
-            'faction_id' => $this->faction_id,
-            'faction' => $this->relationLoaded('faction') ? $this->faction?->name : null,
+            /*
+             * 归属：`factions` 是完整的清单（由具体到笼统），
+             * `faction` / `faction_id` 保留主归属那一条 —— 键名沿用改造前的那两个，
+             * 已有消费方（以及卡片上「按阵营筛选」的链接）不必跟着改。
+             */
+            'factions' => $this->relationLoaded('factions')
+                ? $this->factions->map(fn (Faction $faction) => [
+                    'id' => $faction->id,
+                    'slug' => $faction->slug,
+                    'name' => $faction->name,
+                ])->values()->all()
+                : [],
+            'faction_id' => $this->primaryFaction()?->id,
+            'faction' => $this->relationLoaded('factions') ? $this->primaryFaction()?->name : null,
+            'birth_place' => $this->birth_place,
+            'birth_place_place' => $this->relationLoaded('birthPlace') && $this->birthPlace
+                ? [
+                    'id' => $this->birthPlace->id,
+                    'slug' => $this->birthPlace->slug,
+                    'name' => $this->birthPlace->name,
+                ]
+                : null,
             'race_id' => $this->race_id,
             // 前端一直用 race 这个键拿种族名，保留键名以免接口消费方被无谓地打断
             'race' => $this->raceName(),
-            'kind' => $this->kind,
+            'kind' => $this->kind->value,
+            'kind_label' => $this->kind->label(),
             'title' => $this->title,
             'reign_label' => $this->reignLabel(),
             'has_profile' => $this->hasProfile(),

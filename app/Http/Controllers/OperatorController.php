@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CharacterKind;
 use App\Enums\World;
 use App\Models\Character;
 use App\Models\Faction;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -29,15 +31,13 @@ class OperatorController extends Controller
         $world = World::fromRequest($request->string('world')->value());
 
         /*
-         * 人物分两类，页面上分开列：
+         * 人物分三档，页面上分开列（见 `CharacterKind`）：干员、历史人物、剧情人物。
+         * 混在一个网格里，读者会分不清谁还在名单上 —— 这正是把它们分开的原因。
          *
-         *  - `operator` 干员（默认）：有代号、在役，名单服务的是「这支队伍里有谁」；
-         *  - `historical` 历史人物：几百年前的君主与贵族，卡片给的是头衔与在位期。
-         *
-         * 两者混在一个网格里，读者会分不清谁还在名单上 —— 而这也正是把它们区分开的原因。
-         * 缺省仍是干员，因此老链接与既有书签的行为不变。
+         * 缺省仍是干员，因此老链接与既有书签的行为不变；
+         * 未知取值也回落到缺省，而不是 404（读者多半是拿着旧链接或手改的 URL）。
          */
-        $kind = $request->string('kind')->value() === 'historical' ? 'historical' : 'operator';
+        $kind = CharacterKind::tryFrom($request->string('kind')->value()) ?? CharacterKind::Operator;
 
         $filters = [
             'q' => trim((string) $request->string('q')->value()) ?: null,
@@ -50,15 +50,18 @@ class OperatorController extends Controller
         $query = Character::query()
             ->ofWorld($world)
             ->where('kind', $kind)
-            // race 也要预载：卡片上的种族要链到资料集，需要 slug；不预载就是每张卡一次查询
-            ->with(['faction', 'race'])
+            // factions / race / birthPlace 都要预载：卡片上的阵营与种族要链出去、出身地要显示，
+            // 不预载就是每张卡各查几次
+            ->with(['factions', 'race', 'birthPlace'])
             ->withCount('events')
             ->search($filters['q']);
 
         if ($filters['faction'] !== null) {
-            // 按阵营筛选时带上子阵营：选「罗德岛」应当也能筛出「医疗部」的人
+            // 按阵营筛选时带上子阵营（选「罗德岛」应当也能筛出「医疗部」的人），
+            // 且**命中任一归属即可**：一个人同时属「深海猎人」与「阿戈尔」时，
+            // 按两个中任何一个筛都该找得到他 —— 否则多出来的那半归属等于没记
             $ids = Faction::find($filters['faction'])?->selfAndDescendantIds() ?? [$filters['faction']];
-            $query->whereIn('faction_id', $ids);
+            $query->whereHas('factions', fn (Builder $q) => $q->whereIn('factions.id', $ids));
         }
 
         return view('operators.index', [
@@ -73,9 +76,9 @@ class OperatorController extends Controller
             // （罗德岛同时出现在两边）会在各自的名单里各自出现
             // 阵营选项跟着当前的类型走：历史人物几乎没有阵营归属，
             // 给干员列表挂一份「历史人物用不到的阵营下拉」只是噪音
-            'factions' => Faction::whereIn(
-                'id',
-                Character::ofWorld($world)->where('kind', $kind)->whereNotNull('faction_id')->distinct()->pluck('faction_id'),
+            'factions' => Faction::whereHas(
+                'characters',
+                fn (Builder $q) => $q->ofWorld($world)->where('kind', $kind),
             )->orderBy('sort_order')->get(),
             'counters' => [
                 'total' => Character::ofWorld($world)->where('kind', $kind)->count(),
@@ -83,18 +86,20 @@ class OperatorController extends Controller
                     ->whereNotNull('description')->where('description', '!=', '')->count(),
                 'other_world' => Character::ofWorld($world === World::Terra ? World::Talos : World::Terra)
                     ->where('kind', $kind)->count(),
-                // 两类各自的总数：切换器要显示「另一边还有多少」，
-                // 否则读者会以为历史人物不存在（它们本来就不在默认列表里）
-                'operators' => Character::ofWorld($world)->where('kind', 'operator')->count(),
-                'historical' => Character::ofWorld($world)->where('kind', 'historical')->count(),
+                // 三档各自的总数：切换器要显示「每档有多少人」，
+                // 否则读者会以为另外两档不存在（它们本来就不在默认列表里）
+                'kinds' => collect(CharacterKind::cases())
+                    ->mapWithKeys(fn (CharacterKind $case) => [
+                        $case->value => Character::ofWorld($world)->where('kind', $case)->count(),
+                    ]),
             ],
         ]);
     }
 
     public function show(Character $character): View
     {
-        // race 一并预载：页面上的种族要链到资料集，需要 slug
-        $character->load(['faction', 'race']);
+        // 归属、种族、出身地一并预载：它们都要在页面上链到字典
+        $character->load(['factions', 'race', 'birthPlace']);
 
         /*
          * 关联条目按世界分组。

@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\ChangeOrigin;
+use App\Enums\CharacterKind;
 use App\Enums\EventStatus;
 use App\Enums\FactionKind;
 use App\Enums\IdentityProvider;
@@ -67,6 +68,12 @@ class TimelineSeeder extends Seeder
         $this->seedTags();
         // 地名树要先于条目：条目的 place_id 由 location 原文匹配而来
         $this->seedPlaces();
+        /*
+         * 名单接在人工维护的那批之后（同名的一律不碰），也接在**地名树之后**：
+         * 出身地要拿地名树去认（「谢拉格」→ 谢拉格节点），
+         * 顺序错了不会报错，只会一条都对不上。
+         */
+        $this->seedOperatorRoster();
         $this->seedTerms();
         $this->seedSources();
         /*
@@ -187,22 +194,36 @@ class TimelineSeeder extends Seeder
     private function seedFactions(): void
     {
         $tree = [
+            /*
+             * 罗德岛的内部编制。
+             *
+             * 「精英干员」「S.W.E.E.P.」「行动组A4」「行动预备组A1/A4/A6」都是
+             * PRTS 势力表里的取值 —— 它们不是并列的组织，而是**罗德岛的下属编制**，
+             * 因此挂成子级：「按罗德岛筛选」会连它们一起带出来，反之不然。
+             */
             ['name' => '罗德岛', 'kind' => 'enterprise', 'full_name' => '罗德岛制药公司', 'color' => '#38bdf8', 'children' => [
                 ['name' => '精英干员', 'kind' => 'agency', 'color' => '#0ea5e9'],
                 ['name' => '医疗部', 'kind' => 'agency', 'color' => '#22d3ee'],
+                ['name' => 'S.W.E.E.P.', 'kind' => 'agency', 'color' => '#0891b2'],
+                ['name' => '行动组A4', 'kind' => 'agency', 'color' => '#38bdf8'],
+                ['name' => '行动预备组A1', 'kind' => 'agency', 'color' => '#60a5fa'],
+                ['name' => '行动预备组A4', 'kind' => 'agency', 'color' => '#7dd3fc'],
+                ['name' => '行动预备组A6', 'kind' => 'agency', 'color' => '#a5b4fc'],
             ]],
             ['name' => '巴别塔', 'kind' => 'society', 'full_name' => '巴别塔（罗德岛前身）', 'color' => '#6366f1', 'description' => '罗德岛的前身组织，卡兹戴尔内战期间活跃，后改组为罗德岛。'],
             ['name' => '整合运动', 'kind' => 'society', 'full_name' => '感染者反抗组织 · 整合运动', 'color' => '#f87171'],
             ['name' => '乌萨斯帝国', 'kind' => 'polity', 'color' => '#94a3b8', 'children' => [
                 ['name' => '乌萨斯军事委员会', 'kind' => 'agency', 'color' => '#64748b'],
+                // 名字里自带归属：乌萨斯的学生自治团体
+                ['name' => '乌萨斯学生自治团', 'kind' => 'society', 'color' => '#7e8ea3'],
             ]],
-            ['name' => '龙门', 'kind' => 'polity', 'full_name' => '龙门独立市', 'color' => '#fbbf24', 'children' => [
-                ['name' => '企鹅物流', 'kind' => 'enterprise', 'full_name' => '企鹅物流 · Penguin Logistics', 'color' => '#fcd34d',
-                    'description' => '大帝在龙门创办的物流企业，要人护卫与货物运输之外也承接灰色业务。'],
-                ['name' => '鲤氏侦探事务所', 'kind' => 'enterprise', 'full_name' => '鲤氏侦探事务所 · Lee\'s Detective Agency', 'color' => '#fde68a',
-                    'description' => '老鲤在龙门经营的私人侦探事务所，兼作各方势力之间的中立咨询渠道。'],
+            // 龙门从顶层挪进炎国名下：PRTS 的势力取值是「炎-龙门」，
+            // 而我们自己的地名树里「龙门」本来就在「炎国」之下 —— 两处不该各说各话。
+            // 它自己还有下属（企鹅物流、鲤氏侦探事务所），因此阵营树必须能落三层
+            ['name' => '维多利亚', 'kind' => 'polity', 'full_name' => '维多利亚王国', 'color' => '#a78bfa', 'children' => [
+                // 塔拉是维多利亚南方的法理王国（地名树里已如此），PRTS 也为它单列了一个势力取值
+                ['name' => '塔拉', 'kind' => 'polity', 'color' => '#c4b5fd'],
             ]],
-            ['name' => '维多利亚', 'kind' => 'polity', 'full_name' => '维多利亚王国', 'color' => '#a78bfa'],
             ['name' => '卡西米尔', 'kind' => 'polity', 'full_name' => '卡西米尔骑士之国', 'color' => '#f472b6'],
             ['name' => '哥伦比亚', 'kind' => 'polity', 'color' => '#10b981', 'description' => '原为维多利亚殖民地，独立后迅速工业化，莱茵生命等大型研究机构以此为基地。', 'children' => [
                 // 这些机构挂到母政体下之后，「按哥伦比亚筛选」会自动把它们的条目也带出来
@@ -219,6 +240,13 @@ class TimelineSeeder extends Seeder
             ['name' => '炎国', 'kind' => 'polity', 'color' => '#fb923c', 'children' => [
                 ['name' => '炎-岁', 'kind' => 'society', 'color' => '#fdba74',
                     'description' => '炎国境内围绕远古实体「岁」的一组存在；年、夕、令、重岳在势力表里归于其下。'],
+                ['name' => '龙门', 'kind' => 'polity', 'full_name' => '龙门独立市', 'color' => '#fbbf24', 'children' => [
+                    ['name' => '龙门近卫局', 'kind' => 'agency', 'color' => '#fcd34d'],
+                    ['name' => '企鹅物流', 'kind' => 'enterprise', 'full_name' => '企鹅物流 · Penguin Logistics', 'color' => '#fcd34d',
+                        'description' => '大帝在龙门创办的物流企业，要人护卫与货物运输之外也承接灰色业务。'],
+                    ['name' => '鲤氏侦探事务所', 'kind' => 'enterprise', 'full_name' => '鲤氏侦探事务所 · Lee\'s Detective Agency', 'color' => '#fde68a',
+                        'description' => '老鲤在龙门经营的私人侦探事务所，兼作各方势力之间的中立咨询渠道。'],
+                ]],
             ]],
             ['name' => '叙拉古', 'kind' => 'polity', 'color' => '#c084fc'],
             ['name' => '喀兰贸易', 'kind' => 'enterprise', 'color' => '#60a5fa'],
@@ -246,6 +274,32 @@ class TimelineSeeder extends Seeder
             // 点名登记之后，它们才会作为政体出现在地名树与资料集里，而不是停在「未归类」。
             ['name' => '高卢', 'kind' => 'polity', 'color' => '#fde047', 'description' => '1031 年四国战争后从地缘政治版图上消失的帝国。'],
             ['name' => '极东', 'kind' => 'polity', 'color' => '#fda4af', 'description' => '东国在阵营表里的写法：夹在乌萨斯与炎国两大地缘实体之间。'],
+
+            /*
+             * ---- 只出现在 PRTS 势力表里的实体 ----
+             *
+             * 导入干员名单时才第一次有据可依（此前本仓库没有任何条目引用它们）。
+             * **一律不写 description**：出处里没有给出这些组织的说明，
+             * 而页面已经会如实显示「出处里没有给出这一组织的说明」——
+             * 给一个组织编一句简介，比留白更糟。
+             */
+            ['name' => '汐斯塔', 'kind' => 'polity', 'color' => '#5eead4'],
+            ['name' => '格拉斯哥帮', 'kind' => 'society', 'color' => '#94a3b8'],
+            ['name' => '红松骑士团', 'kind' => 'society', 'color' => '#fb7185'],
+            ['name' => '使徒', 'kind' => 'society', 'color' => '#e2e8f0'],
+            ['name' => '贾维团伙', 'kind' => 'society', 'color' => '#f59e0b'],
+
+            /*
+             * 联动单位。
+             *
+             * 它们的成员是**别的作品里的人物**（《彩虹六号》《BanG Dream!》《女神异闻录 3》
+             * 《迷宫饭》），本仓库照名单收录它们在《明日方舟》里的身份，
+             * 但不对其原作设定做任何展开 —— 那不是这份年表该管的事。
+             */
+            ['name' => '彩虹小队', 'kind' => 'society', 'color' => '#60a5fa'],
+            ['name' => 'Ave Mujica', 'kind' => 'society', 'color' => '#a78bfa'],
+            ['name' => 'S.E.E.S.', 'kind' => 'society', 'color' => '#38bdf8'],
+            ['name' => '莱欧斯小队', 'kind' => 'society', 'color' => '#fbbf24'],
 
             /*
              * ---- 《大地巡旅》「组织」卷登记、但无归属政体的组织 ----
@@ -296,12 +350,26 @@ class TimelineSeeder extends Seeder
         ];
 
         foreach ($tree as $order => $faction) {
-            $parent = $this->upsertFaction($faction, $order);
-
-            foreach ($faction['children'] ?? [] as $childOrder => $child) {
-                $this->upsertFaction($child, $childOrder, $parent->id);
-            }
+            $this->upsertFactionTree($faction, $order, null);
         }
+    }
+
+    /**
+     * 递归落库一棵阵营树。
+     *
+     * 层级可以任意深：PRTS 的势力取值里，龙门既是炎国的城市、自己又下辖近卫局与几家公司
+     * （炎国 → 龙门 → 企鹅物流）。原先只下降一层，把「龙门」挂到炎国名下就会**静默丢掉**
+     * 它的三个子级 —— 而丢掉的东西在页面上看不出来。
+     */
+    private function upsertFactionTree(array $data, int $order, ?int $parentId): Faction
+    {
+        $faction = $this->upsertFaction($data, $order, $parentId);
+
+        foreach ($data['children'] ?? [] as $childOrder => $child) {
+            $this->upsertFactionTree($child, $childOrder, $faction->id);
+        }
+
+        return $faction;
     }
 
     private function upsertFaction(array $data, int $order, ?int $parentId = null): Faction
@@ -581,6 +649,9 @@ class TimelineSeeder extends Seeder
             ['浮士德', 'Faust', '整合运动', '萨卡兹'],
             ['陈', 'Ch\'en', '龙门', '龙族'],
             ['魏彦吾', 'Wei Yenwu', '龙门', '龙族'],
+            // 老鲤此前被记在历史人物栏 —— 他是可操作干员（代号 Lee，见 PRTS 名单），导入时更正归档
+            ['老鲤', 'Lee', '鲤氏侦探事务所', '龙',
+                '出身炎国腹地商贾世家，早年来到龙门并逐渐成为「龙门的活百科全书」；其关系网小到街头商贩、大到龙门管理者魏彦吾。'],
             ['玛莉娅·临光', 'Maria Nearl', '卡西米尔', '库兰塔'],
             ['玛恩纳', 'Młynar', '卡西米尔', '库兰塔'],
             ['耀骑士临光', 'Nearl', '卡西米尔', '库兰塔'],
@@ -589,17 +660,16 @@ class TimelineSeeder extends Seeder
             ['伊芙利特', 'Ifrit', '莱茵生命', '萨弗拉'],
             ['赫默', 'Silence', '莱茵生命', '黎博利'],
             ['棘刺', 'Thorns', '伊比利亚', '阿戈尔'],
-            ['银灰', 'SilverAsh', '谢拉格', '菲林'],
+            // 银灰的本名是「恩希欧迪斯·希瓦艾什」—— 原先他在历史人物栏里另占一行，
+            // 同一个人被拆成两处。导入 PRTS 名单时并回这一行（他的经历属于这个人，不属于哪个「身份」）
+            ['银灰', 'SilverAsh', '谢拉格', '菲林',
+                '谢拉格贵族出身，曾留学维多利亚、后投奔开斯特公爵；1082 年十四岁继承家业，1090 年创立喀兰贸易，并在 1097 年末完成公司改组。本名为恩希欧迪斯·希瓦艾什。'],
             ['初雪', 'Pramanix', '谢拉格', '菲林'],
             // 阵营此前写成「谢拉格」，PRTS 干员页作「罗德岛」—— 按 PRTS 更正（2026-09-24）
             ['尤里卡', 'U-Official', '罗德岛', '札拉克'],
             ['拉普兰德', 'Lappland', '叙拉古', '鲁珀'],
             ['德克萨斯', 'Texas', '叙拉古', '鲁珀'],
             ['能天使', 'Exusiai', '拉特兰', '萨科塔'],
-            // 「岁」**不是干员**，而是炎国传说里的远古实体（其条目为「「岁」的诞生」）。
-            // PRTS 的干员是「年」（Nian），本文件此前把它记成了实体本身 —— 保留记录，
-            // 但它出现在人员名单里这件事本身是待处理的（见 README 的「已知缺口」）。
-            ['岁', null, '炎国', null],
             // 年、夕、令、重岳在 PRTS 的势力栏是「炎-岁」（炎国境内围绕「岁」的一组存在），
             // 因此从笼统的「炎国」细化为「炎-岁」
             ['夕', 'Dusk', '炎-岁', null],
@@ -683,14 +753,24 @@ class TimelineSeeder extends Seeder
                 '大静谧后多次回绝将他立为教宗的提议，主持九名大主教抛却原姓、加封圣徒之名，并将国教会改组为「伊比利亚审判庭」。'],
             ['路德维格', '莱塔尼亚', '恩瓦德大区选帝侯 ·「学士」', null, null,
                 '第一个把自己的高塔正式确立为「大学」的贵族，近乎狂热地不分尊卑传授知识；在选皇前夜突然发疯暴死，成为帝国史上未决的悬案。'],
-            ['恩希欧迪斯·希瓦艾什', '喀兰贸易', '喀兰贸易董事长', null, null,
-                '谢拉格贵族出身，曾留学维多利亚、后投奔开斯特公爵；1082 年十四岁继承家业，1090 年创立喀兰贸易，并在 1097 年末完成公司改组。'],
+            // 「岁」不是干员，而是炎国传说里的远古实体（它自己的条目就叫「「岁」的诞生」）。
+            // 原先它被记在干员名单里，导入 PRTS 名单时归到这里：它是**古代**的存在，
+            // 而 PRTS 的干员「年」（Nian）另有其人 —— 两者此前被混成了一个
+            ['岁', '炎国', '炎国传说中的远古实体', null, null,
+                '炎国传说里的远古实体；其「诞生」与泰拉各地的远古实体叙事存在结构相似性，但缺乏可定位的纪年记录。'],
+        ];
+
+        /*
+         * 剧情人物：**现代但不是干员**的人。
+         *
+         * 他们既没有干员页，也不是「几百年前的人」—— 在这一档补出来之前，
+         * 只能挤在「历史人物」里，名不副实却无处可去。
+         */
+        $npc = [
             ['克里夫', '黑钢国际', '黑钢国际创始人 ·「桥夹」', null, null,
                 '萨科塔雇佣兵出身，以 1016 年哥伦比亚独立战争为起点建立黑钢；他说自己选择的「解药」不是和平，而是一种规范、可控且具有主动选择权的战争方式。'],
             ['大帝', '企鹅物流', '企鹅物流创始人', null, null,
                 '哥伦比亚知名说唱歌手与制作人、黑胶唱片收藏家，1093 年在龙门创办企鹅物流；公司架构近乎没有，招聘由他亲自把关。'],
-            ['老鲤', '鲤氏侦探事务所', '鲤氏侦探事务所创始人', null, null,
-                '出身炎国腹地商贾世家，早年来到龙门并逐渐成为「龙门的活百科全书」；其关系网小到街头商贩、大到龙门管理者魏彦吾。'],
         ];
 
         $raceIds = Race::pluck('id', 'name');
@@ -714,16 +794,15 @@ class TimelineSeeder extends Seeder
             $wikiSlug = $row[5] ?? null;
             $world = $row[6] ?? 'terra';
 
-            Character::updateOrCreate(
+            $character = Character::updateOrCreate(
                 ['slug' => 'chr-'.md5($name)],
                 [
                     'name' => $name,
                     'codename' => $codename,
                     'world' => $world,
-                    'faction_id' => $factionSlugs[$faction] ?? null,
                     // 「未公开」这类非种族值不建字典条目，落空即为「未知」
                     'race_id' => $race === null ? null : ($raceIds[$raceAliases[$race] ?? $race] ?? null),
-                    'kind' => 'operator',
+                    'kind' => CharacterKind::Operator->value,
                     'title' => null,
                     'reign_start_index' => null,
                     'reign_end_index' => null,
@@ -732,26 +811,38 @@ class TimelineSeeder extends Seeder
                     'sort_order' => $order++,
                 ],
             );
+
+            // 归属走枢轴。这里只写人工核过的那一条，层序 0；
+            // 名单导入会把它缺的那些**补上**而不是替换（见 seedOperatorRoster）
+            $character->factions()->sync(
+                isset($factionSlugs[$faction]) ? [$factionSlugs[$faction] => ['sort_order' => 0]] : [],
+            );
         }
 
-        foreach ($historical as [$name, $faction, $title, $fromYear, $toYear, $profile]) {
-            Character::updateOrCreate(
-                ['slug' => 'chr-'.md5($name)],
-                [
-                    'name' => $name,
-                    'codename' => null,
-                    'world' => World::Terra->value,
-                    'faction_id' => $factionSlugs[$faction] ?? null,
-                    'race_id' => null,
-                    'kind' => 'historical',
-                    'title' => $title,
-                    'reign_start_index' => $fromYear === null ? null : TerraDate::toIndex($fromYear),
-                    'reign_end_index' => $toYear === null ? null : TerraDate::toIndex($toYear, 12, 31),
-                    'description' => $profile,
-                    'wiki_slug' => null,
-                    'sort_order' => $order++,
-                ],
-            );
+        // 历史人物与剧情人物共用同一套字段（头衔 / 在位期 / 简介），只有归档不同
+        foreach ([[CharacterKind::Historical, $historical], [CharacterKind::Npc, $npc]] as [$kind, $rows]) {
+            foreach ($rows as [$name, $faction, $title, $fromYear, $toYear, $profile]) {
+                $character = Character::updateOrCreate(
+                    ['slug' => 'chr-'.md5($name)],
+                    [
+                        'name' => $name,
+                        'codename' => null,
+                        'world' => World::Terra->value,
+                        'race_id' => null,
+                        'kind' => $kind->value,
+                        'title' => $title,
+                        'reign_start_index' => $fromYear === null ? null : TerraDate::toIndex($fromYear),
+                        'reign_end_index' => $toYear === null ? null : TerraDate::toIndex($toYear, 12, 31),
+                        'description' => $profile,
+                        'wiki_slug' => null,
+                        'sort_order' => $order++,
+                    ],
+                );
+
+                $character->factions()->sync(
+                    isset($factionSlugs[$faction]) ? [$factionSlugs[$faction] => ['sort_order' => 0]] : [],
+                );
+            }
         }
     }
 
@@ -1957,6 +2048,203 @@ TXT,
     // ------------------------------------------------------------------ 字典
 
     /**
+     * 外部势力取值 → 本仓库阵营名。
+     *
+     * 只收「同一个实体的另一种写法」：多造一个阵营会让同一个人在筛选里被拆成两处。
+     * 判据是**本仓库自己的命名**（地名树与阵营树用哪个名字，这里就跟哪个）。
+     */
+    private const FACTION_ALIASES = [
+        '东' => '极东',
+        '乌萨斯' => '乌萨斯帝国',
+        '炎' => '炎国',
+        '炎-龙门' => '龙门',
+        '罗德岛-精英干员' => '精英干员',
+    ];
+
+    /**
+     * 出身地的写法 → 本仓库地名。
+     *
+     * 与 `places.aliases` **分开**：别名记的是**本书里**并用的写法（乌萨斯帝国 / 乌萨斯），
+     * 这里记的是**外部资料**对同一处的另一种叫法（它写「炎」，本书写「炎国」）。
+     * 两者混在一起，地名匹配规则就会被外部的取名方式带着走 ——
+     * 而那条规则服务的是照原文抄下来的 `location`。
+     */
+    private const BIRTH_PLACE_ALIASES = [
+        '炎' => '炎国',
+        '阿戈尔地区' => '阿戈尔',
+    ];
+
+    /**
+     * 泰拉干员名单：`docs/prts-干员一览.json`（PRTS「干员一览」的导出）。
+     *
+     * 这是**核对与补全**，不是搬运：只取四项结构化事实 —— 中文名 / 英文代号 / 种族 / 势力。
+     * 简介正文、星级、职业、数值一律不入库：完整档案在对方站点，
+     * 而人物的 `description` 永远由本仓库撰写，这里一律留空（页面显示为「待补」）。
+     *
+     * 数据源是**签入仓库的一份导出**而不是运行时抓取：运行环境没有外网，
+     * 而且种子必须可复现 —— 一次网络抖动不该让今天灌出来的库与昨天的不一样。
+     * 代价是它是快照：要更新，重新导出那份文件即可（导出的日期见文件本身）。
+     *
+     * **只新增、不覆盖**：已有人员的字段是人工核过的（其中一批正是对着 PRTS 逐条核的），
+     * 让一份批量导出把它们冲掉是本末倒置。
+     */
+    private function seedOperatorRoster(): void
+    {
+        $path = base_path('docs/prts-干员一览.json');
+
+        if (! is_file($path)) {
+            $this->command?->warn('未找到 docs/prts-干员一览.json，跳过干员名单。');
+
+            return;
+        }
+
+        $rows = json_decode((string) file_get_contents($path), true);
+
+        if (! is_array($rows)) {
+            $this->command?->warn('docs/prts-干员一览.json 不是合法 JSON，跳过干员名单。');
+
+            return;
+        }
+
+        $factions = Faction::pluck('id', 'name');
+        $races = Race::pluck('id', 'name');
+        $places = Place::get();
+        $known = Character::get()->keyBy('name');
+
+        // 接在人工维护的那批之后：读者仍然先看到写过简介的人
+        $order = (int) Character::max('sort_order') + 1;
+        $added = 0;
+        $enriched = 0;
+
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['zh'] ?? ''));
+
+            if ($name === '') {
+                continue;
+            }
+
+            $codename = trim((string) ($row['en'] ?? ''));
+            $birthPlace = trim((string) ($row['birth_place'] ?? ''));
+            $affiliations = $this->rosterAffiliations($row, $factions);
+
+            /** @var Character|null $character */
+            $character = $known->get($name);
+
+            if ($character !== null) {
+                $enriched++;
+
+                /*
+                 * 已有条目：**只补不覆盖**。
+                 *
+                 * 人工核过的东西（简介、代号、种族）一律不碰；这里补的是名单里有、
+                 * 而此前结构上根本记不下的两样 —— 多出来的那些归属，与出身地。
+                 * 覆盖会让一份批量导出把逐条核对过的字段冲掉，那是本末倒置。
+                 */
+                $character->factions()->syncWithoutDetaching($affiliations);
+
+                if (blank($character->birth_place) && $birthPlace !== '') {
+                    $character->forceFill([
+                        'birth_place' => $birthPlace,
+                        'birth_place_id' => $this->resolveBirthPlace($birthPlace, $places),
+                    ])->save();
+                }
+
+                continue;
+            }
+
+            $character = Character::create([
+                'slug' => 'chr-'.md5($name),
+                'name' => $name,
+                'codename' => $codename === '' ? null : $codename,
+                'world' => World::Terra->value,
+                'birth_place' => $birthPlace === '' ? null : $birthPlace,
+                'birth_place_id' => $birthPlace === '' ? null : $this->resolveBirthPlace($birthPlace, $places),
+                /*
+                 * 种族只在它是**规范种族名**时落库 —— 名单里混着「未公开」「未知」「不明」
+                 * 「未录入」「矮人（自称）」「未知（疑似黎博利）」「因经纪公司要求不公开」
+                 * 这类**不是种族**的写法。它们一个都不进字典，正确表达是留空
+                 * （字典里查不到即为 null）。「卡特斯/奇美拉」同理：那是一个复合写法，
+                 * 由人工判定后写进具体的那一个。
+                 */
+                'race_id' => $races[trim((string) ($row['race'] ?? ''))] ?? null,
+                'kind' => CharacterKind::Operator->value,
+                'title' => null,
+                'reign_start_index' => null,
+                'reign_end_index' => null,
+                'description' => null,
+                'wiki_slug' => null,
+                'sort_order' => $order++,
+            ]);
+
+            $character->factions()->syncWithoutDetaching($affiliations);
+            $known->put($name, $character);
+            $added++;
+        }
+
+        $this->command?->info(
+            '干员名单：共 '.count($rows).' 条，新增 '.$added.' 位，'
+            .'其余 '.$enriched.' 位只补归属与出身地。'
+        );
+    }
+
+    /**
+     * 名单里的势力取值 → `[阵营 ID => ['sort_order' => 层序]]`。
+     *
+     * 三层（`group` / `team` / `nation`）**全部保留**：PRTS 允许一个干员同时属于
+     * 「深海猎人」与「阿戈尔」，而这两条都是事实 —— 改造前只装得下一条，
+     * 于是另一半被静默丢掉。层序照抄来源（小队 → 团体 → 国别），
+     * 因此越具体越靠前，界面上第一条就是这个人最常被认作的身份。
+     *
+     * @return array<int, array{sort_order: int}>
+     */
+    private function rosterAffiliations(array $row, Collection $factions): array
+    {
+        $affiliations = [];
+
+        foreach (['group', 'team', 'nation'] as $layer => $key) {
+            $value = trim((string) ($row[$key] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $id = $factions[self::FACTION_ALIASES[$value] ?? $value] ?? null;
+
+            // 同一个阵营出现在两层时取更具体的那一层（层序越小越具体）
+            if ($id !== null && ! array_key_exists($id, $affiliations)) {
+                $affiliations[$id] = ['sort_order' => $layer];
+            }
+        }
+
+        return $affiliations;
+    }
+
+    /**
+     * 出身地写法 → 地名 ID。
+     *
+     * 与 `location` 的匹配规则**不同**：出身地是一个短值（「乌萨斯」「炎」「未公开」），
+     * 不是句子，因此只认「整值等于地名、别名或写法对照」，不做子串匹配 ——
+     * 拿子串去认，「瓦伊凡」这类同名的种族与地区就会张冠李戴。
+     */
+    private function resolveBirthPlace(string $value, Collection $places): ?int
+    {
+        // 去掉「（独立城邦）」「（自称）」这类限定语后再试一次
+        $bare = (string) preg_replace('/（[^）]*）\s*$/u', '', $value);
+
+        foreach (array_unique(array_filter([$value, $bare])) as $candidate) {
+            $name = self::BIRTH_PLACE_ALIASES[$candidate] ?? $candidate;
+
+            foreach ($places as $place) {
+                if ($place->name === $name || in_array($name, (array) $place->aliases, true)) {
+                    return $place->id;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 种族字典（《大地巡旅》第四章）。
      *
      * 分两类：
@@ -1994,8 +2282,21 @@ TXT,
          * 人物数据里已有、但书中第四章未单独立目的写法。
          * 只登记名字，描述留空 —— 宁可缺失，也不要靠印象写。
          */
-        // 丰蹄按 PRTS 干员页补入：帕拉斯的种族在那边是明确写出的「丰蹄」，而书里没有立目
-        $registeredOnly = ['卡特斯', '菲林', '库兰塔', '瓦伊凡', '黎博利', '鲁珀', '温迪戈', '精灵', '丰蹄'];
+        /*
+         * 人物数据里已有、但书中第四章未单独立目的写法。
+         *
+         * 这份名单在导入 PRTS 干员名单时扩了一批（2026-09-24）：那份导出里出现的
+         * 规范种族名（佩洛、沃尔珀、卡普里尼、埃拉菲亚、乌萨斯、鬼、斐迪亚、瑞柏巴、
+         * 阿纳萨、阿斯兰、曼提柯）此前无人挂过，因此没有理由进字典 —— 现在有人挂了。
+         *
+         * 而「未公开」「未知」「不明」「未录入」「矮人（自称）」「未知（疑似黎博利）」
+         * 这类**不是种族**的写法一律不入字典：它们的正确表达是**留空**。
+         */
+        $registeredOnly = [
+            '卡特斯', '菲林', '库兰塔', '瓦伊凡', '黎博利', '鲁珀', '温迪戈', '精灵', '丰蹄',
+            '埃拉菲亚', '沃尔珀', '佩洛', '乌萨斯', '卡普里尼', '鬼', '斐迪亚', '瑞柏巴',
+            '阿纳萨', '阿斯兰', '曼提柯',
+        ];
 
         $order = 0;
 

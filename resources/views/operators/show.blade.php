@@ -26,11 +26,11 @@
                         <span class="chip chip--accent" style="--world-accent:{{ $character->world()->accent() }}">
                             {{ $character->world()->label() }} · {{ $character->world()->englishLabel() }}
                         </span>
-                        @if (filled($character->faction?->name))
-                            <a class="chip" href="{{ route('operators.index', ['world' => $character->world()->value, 'faction' => $character->faction_id]) }}">
-                                {{ $character->faction->name }}
+                        @foreach ($character->factions as $faction)
+                            <a class="chip" href="{{ route('operators.index', ['world' => $character->world()->value, 'faction' => $faction->id]) }}">
+                                {{ $faction->name }}
                             </a>
-                        @endif
+                        @endforeach
                         @if (filled($character->raceName()))
                             <a class="chip" data-clickable="1"
                                href="{{ route('races.index') }}#race-{{ $character->race?->slug }}">
@@ -54,7 +54,7 @@
                         </a>
                     @endif
                     <a class="btn btn--ghost btn--sm"
-                       href="{{ route('operators.index', ['world' => $character->world()->value, 'kind' => $character->kind]) }}">
+                       href="{{ route('operators.index', ['world' => $character->world()->value, 'kind' => $character->kind->value]) }}">
                         <x-icon name="back"/>返回列表
                     </a>
                 </div>
@@ -84,7 +84,41 @@
                 <dt>名称</dt><dd>{{ $character->name }}</dd>
                 <dt>代号</dt><dd class="mono">{{ $character->codename ?: '—' }}</dd>
                 <dt>所属世界</dt><dd>{{ $character->world()->label() }}（{{ $character->world()->englishLabel() }}）</dd>
-                <dt>阵营</dt><dd>{{ $character->faction?->name ?? '—' }}</dd>
+                <dt>阵营</dt>
+                <dd>
+                    @forelse ($character->factions as $faction)
+                        <a href="{{ route('operators.index', ['world' => $character->world()->value, 'faction' => $faction->id]) }}">{{ $faction->name }}</a>
+                        @if (! $loop->last)<span class="faint"> · </span>@endif
+                    @empty
+                        —
+                    @endforelse
+                    @if ($character->factions->count() > 1)
+                        {{-- 多归属不是冗余：她是深海猎人，深海猎人又属阿戈尔。
+                             顺序由来源的层序决定（小队 → 团体 → 国别），此处由具体到笼统 --}}
+                        <span class="faint small">（可同时属于多个，由具体到笼统）</span>
+                    @endif
+                </dd>
+
+                <dt>出身地</dt>
+                <dd>
+                    @if (filled($character->birth_place))
+                        @if ($character->birthPlace)
+                            {{-- 与条目的发生地同一条规矩：原文与可点的字典节点并存，
+                                 但原文只在它比字典名多出信息时才显示，免得读成「炎国 炎国」 --}}
+                            @if ($character->birth_place !== $character->birthPlace->name)
+                                {{ $character->birth_place }}
+                            @endif
+                            <a href="{{ route('places.index') }}#place-{{ $character->birthPlace->slug }}">
+                                {{ $character->birthPlace->name }}
+                            </a>
+                        @else
+                            {{ $character->birth_place }}
+                            <span class="faint small">（来源的写法，对不上已收录的地名 —— 不猜它对应哪一处）</span>
+                        @endif
+                    @else
+                        —
+                    @endif
+                </dd>
                 <dt>种族</dt>
                 <dd>
                     @if (filled($character->raceName()))
