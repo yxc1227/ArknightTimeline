@@ -267,16 +267,31 @@ class DictionaryPagesTest extends TestCase
     {
         $css = (string) file_get_contents(public_path('assets/app.css'));
 
-        // 让位高度只定义一次，各落点统一引用它 —— 否则改了导航栏高度就要满文件找
+        // 让位高度只定义一次：顶栏高度是唯一来源，落点偏移由它推导 ——
+        // 否则改了导航栏高度就得满文件找（有快速导航条的页面还要再叠一条，
+        // 那一条的高度由 JS 量进 --quick-nav-h，同样不该在这里写死）
         $this->assertMatchesRegularExpression(
-            '/--anchor-offset:\s*\d+px/',
+            '/--topbar-h:\s*\d+px/',
             $css,
-            '顶部导航的让位高度没有定义成 --anchor-offset',
+            '顶栏高度没有定义成 --topbar-h',
         );
 
-        foreach (['.card[id]', 'table.tbl td[id]', '.era-band', '.era-period'] as $selector) {
+        $this->assertMatchesRegularExpression(
+            '/--anchor-offset:\s*calc\(\s*var\(--topbar-h\)/',
+            $css,
+            '落点偏移没有从 --topbar-h 推导 —— 顶栏一变高，落点就又被压住了',
+        );
+
+        foreach ([
+            '.card[id]',
+            '.operator-card[id]',
+            'table.tbl td[id]',
+            '.era-band',
+            '.era-period',
+            '.place-tree tbody tr[data-place-row]',
+        ] as $selector) {
             $this->assertMatchesRegularExpression(
-                '/'.preg_quote($selector, '/').'\s*,?[^{]*\{[^}]*scroll-margin-top:\s*var\(--anchor-offset\)/s',
+                '/'.preg_quote($selector, '/').'\s*,?[^{]*\{[^}]*scroll-margin-top:\s*(?:calc\()?var\(--anchor-offset\)/s',
                 $css,
                 "深链落点 {$selector} 没有让开顶部导航，条目标题会被导航栏盖住",
             );

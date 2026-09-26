@@ -30,10 +30,15 @@ class PlaceController extends Controller
         $kind = array_key_exists($kindRaw, Place::KINDS) ? $kindRaw : null;
         $keyword = trim((string) $request->string('q')->value());
 
+        $tree = $this->tree($world, $keyword, $kind);
+
         return view('places.index', [
             'world' => $world,
             'worlds' => World::switcherOptions(),
-            'places' => $this->tree($world, $keyword, $kind),
+            'places' => $tree['nodes'],
+            // 命中集合只给视图做标注用：命中项高亮、仅为提供上下文的祖先压暗 ——
+            // 不分开的话，读者会以为祖先也是搜索结果
+            'matched' => $tree['matched'],
             'kinds' => Place::KINDS,
             'filters' => ['q' => $keyword, 'kind' => $kind],
             // 树被过滤过之后，可见行数不再等于真实的下辖数；
@@ -52,7 +57,7 @@ class PlaceController extends Controller
      * 过滤同样在 PHP 层做：SQL 能查到「子孙」却查不到「祖先」——
      * 直接 where 会把命中节点的父链掐断，缩进树就断了上下文。
      *
-     * @return list<array{place: Place, depth: int}>
+     * @return array{nodes: list<array{place: Place, depth: int}>, matched: array<int, bool>}
      */
     private function tree(World $world, string $keyword = '', ?string $kind = null): array
     {
@@ -68,9 +73,12 @@ class PlaceController extends Controller
         $byParent = $places->groupBy(fn (Place $place) => $place->parent_id ?? 0);
 
         // 没有筛选时整棵树可见；有筛选时只留「命中项 + 它们的祖先」
-        $visible = ($keyword !== '' || $kind !== null)
-            ? $this->visibleIds($places, $keyword, $kind)
-            : null;
+        $visible = null;
+        $matched = [];
+
+        if ($keyword !== '' || $kind !== null) {
+            [$visible, $matched] = $this->visibleIds($places, $keyword, $kind);
+        }
 
         $ordered = [];
 
@@ -92,7 +100,7 @@ class PlaceController extends Controller
 
         $walk(0, 0);
 
-        return $ordered;
+        return ['nodes' => $ordered, 'matched' => $matched];
     }
 
     /**
@@ -102,12 +110,13 @@ class PlaceController extends Controller
      * 只给一行孤零零的匹配项，层级信息反而丢了。
      *
      * @param  Collection<int, Place>  $places
-     * @return array<int, bool>
+     * @return array{0: array<int, bool>, 1: array<int, bool>}  [可见（命中 + 祖先）, 命中]
      */
     private function visibleIds(Collection $places, string $keyword, ?string $kind): array
     {
         $byId = $places->keyBy('id');
         $visible = [];
+        $matched = [];
 
         foreach ($places as $place) {
             if ($kind !== null && $place->kind !== $kind) {
@@ -124,6 +133,8 @@ class PlaceController extends Controller
                 }
             }
 
+            $matched[$place->id] = true;
+
             $node = $place;
 
             while ($node !== null) {
@@ -132,6 +143,6 @@ class PlaceController extends Controller
             }
         }
 
-        return $visible;
+        return [$visible, $matched];
     }
 }

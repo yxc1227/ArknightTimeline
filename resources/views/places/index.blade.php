@@ -57,11 +57,42 @@
     </aside>
 
     {{-- ============================ 地名主栏 ============================ --}}
+    @php
+        /*
+         * 命中关键词的片段包成 <mark class="hit">（与全站既有高亮同一支笔）。
+         * 这里是**自己拼 HTML**，所以每一段文本都必须自己过 e() —— 高亮不能成为转义的缺口。
+         */
+        $hit = function (?string $text) use ($filters): string {
+            $needle = (string) $filters['q'];
+
+            if ($text === null || $text === '' || $needle === '') {
+                return e((string) $text);
+            }
+
+            $length = mb_strlen($needle);
+            $out = '';
+            $cursor = 0;
+
+            while (($position = mb_stripos($text, $needle, $cursor)) !== false) {
+                $out .= e(mb_substr($text, $cursor, $position - $cursor));
+                $out .= '<mark class="hit">'.e(mb_substr($text, $position, $length)).'</mark>';
+                $cursor = $position + $length;
+            }
+
+            return $out.e(mb_substr($text, $cursor));
+        };
+    @endphp
+
     <main class="main">
         <div class="panel">
             <div class="panel__title">
                 <span data-en="Places">{{ $world->label() }}地名</span>
-                <span class="faint small mono">CNT {{ str_pad((string) count($places), 2, '0', STR_PAD_LEFT) }}</span>
+                <span class="row" style="gap:7px;align-items:center">
+                    <span class="faint small mono">CNT {{ str_pad((string) count($places), 2, '0', STR_PAD_LEFT) }}</span>
+                    {{-- 层级是这一页的信息主体：给整棵树两个一键位，逐个点开着看太慢 --}}
+                    <button type="button" class="btn btn--ghost btn--sm" data-place-expand>全部展开</button>
+                    <button type="button" class="btn btn--ghost btn--sm" data-place-collapse>全部折叠</button>
+                </span>
             </div>
 
             <div class="alert alert--info small">
@@ -71,7 +102,17 @@
                 <br>
                 层级与隶属只收录<strong>出处里明确写过</strong>的，不做行政区划的推演；
                 没有上级的地名不是没有上级，只是出处里还没读到。
+                <br>
+                左侧色块是<strong>级别标记</strong>（越宏观越亮，虚线框是地理实体这类非行政层级），
+                类型名以 Kind 列的文字为准；点行可选中，地址栏会记下 <code>#place-…</code> 便于分享。
             </div>
+
+            {{--
+                快速导航（与时间线同款）：粘在顶栏之下的一条顶层节点目录。
+                容器留在这里，条目由 JS 按当前行集生成 —— 筛选是服务端做的，
+                行集变了目录跟着变，不会留下跳不到的入口；顶层节点不足三条时整条收起。
+            --}}
+            <nav class="quick-nav" id="place-nav" aria-label="地名快速导航" hidden></nav>
 
             @if ($places === [])
                 <div class="empty">
@@ -84,70 +125,95 @@
                     @endif
                 </div>
             @else
-                <table class="tbl">
-                    <thead>
-                    <tr>
-                        <th>Place</th>
-                        <th style="width:96px">Kind</th>
-                        <th style="width:140px">Polity</th>
-                        <th style="width:84px">Entries</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach ($places as $node)
-                        @php $place = $node['place']; @endphp
+                {{-- 表格包一层横向滚动容器：窄屏上列换行会把缩进层级彻底揉碎，滚动反而可读 --}}
+                <div class="table-wrap">
+                    <table class="tbl place-tree" data-place-tree>
+                        <thead>
                         <tr>
-                            {{-- 按深度缩进：层级是这一栏存在的理由，压平成一样的缩进就白做了 --}}
-                            <td id="place-{{ $place->slug }}">
-                                <div class="place-row" style="padding-left:{{ $node['depth'] * 14 }}px">
-                                    @if ($place->logoUrl())
-                                        {{-- 徽记：来源维基的国徽 / 地区标志。名字就在旁边，alt 留空免得读屏重复 --}}
-                                        <img class="emblem" src="{{ $place->logoUrl() }}"
-                                             alt="" loading="lazy" width="26" height="26">
-                                    @endif
+                            <th>Place</th>
+                            <th style="width:96px">Kind</th>
+                            <th style="width:140px" class="col-polity">Polity</th>
+                            <th style="width:84px">Entries</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach ($places as $node)
+                            @php
+                                $place = $node['place'];
+                                // 行序是深度优先的（父必在子前）：下一个更深 = 有下辖，过滤后同样成立
+                                $hasChildren = ($places[$loop->index + 1]['depth'] ?? -1) > $node['depth'];
+                                $isHit = isset($matched[$place->id]);
+                            @endphp
+                            <tr data-place-row data-slug="{{ $place->slug }}"
+                                data-depth="{{ $node['depth'] }}"
+                                data-parent="{{ $place->parent_id ?? '' }}"
+                                @if ($filtered) data-hit="{{ $isHit ? '1' : '0' }}" @endif>
+                                {{-- 按深度缩进（--depth × CSS 里的步长）：层级是这一栏存在的理由 --}}
+                                <td id="place-{{ $place->slug }}" style="--depth: {{ $node['depth'] }}">
+                                    <div class="place-row">
+                                        {{-- 折叠钮只给有下辖的行；叶子留同宽占位，名称左沿才对得齐。
+                                             字形沿用全站 details 的 `+ / −`（等宽），不是新造一套箭头 --}}
+                                        @if ($hasChildren)
+                                            <button type="button" class="place-toggle" data-place-toggle
+                                                    aria-expanded="true" aria-label="折叠或展开下辖"></button>
+                                        @else
+                                            {{-- 占位是独立的布局盒子，**不复用** .place-toggle：共用类名会让
+                                                 按钮的边框、字形、悬停、手型光标逐条渗过来（踩过一次） --}}
+                                            <span class="place-gutter" aria-hidden="true"></span>
+                                        @endif
 
-                                    <div class="place-row__main">
-                                        @if ($node['depth'] > 0)
-                                            <span class="faint mono">└</span>
+                                        <span class="place-kind" data-kind="{{ $place->kind }}"
+                                              title="{{ \App\Models\Place::KINDS[$place->kind] ?? $place->kind }}"></span>
+
+                                        @if ($place->logoUrl())
+                                            {{-- 徽记：来源维基的国徽 / 地区标志。名字就在旁边，alt 留空免得读屏重复 --}}
+                                            <img class="emblem" src="{{ $place->logoUrl() }}"
+                                                 alt="" loading="lazy" width="52" height="52">
                                         @endif
-                                        <strong>{{ $place->name }}</strong>
-                                        {{-- 别名是数据而不是匹配规则，因此要摆在读者看得见的地方：
-                                             条目里写「乌萨斯」时，读者得能认出它就是这里说的「乌萨斯帝国」 --}}
-                                        @if (filled($place->aliases))
-                                            <span class="faint small">又称 {{ implode('、', $place->aliases) }}</span>
-                                        @endif
-                                        @if ($node['depth'] === 0 && $place->children->isNotEmpty())
-                                            @unless ($filtered)
+
+                                        <div class="place-row__main">
+                                            @if ($node['depth'] > 0)
+                                                <span class="faint mono">└</span>
+                                            @endif
+                                            <strong>{!! $hit($place->name) !!}</strong>
+                                            {{-- 别名是数据而不是匹配规则，因此要摆在读者看得见的地方：
+                                                 条目里写「乌萨斯」时，读者得能认出它就是这里说的「乌萨斯帝国」 --}}
+                                            @if (filled($place->aliases))
+                                                {{-- 高亮直接作用在拼接后的整串上：命中落在哪个别名里都会亮，
+                                                     也避免把 @if / @foreach 连着写（Blade 的指令正则要求 @ 前不是单词字符） --}}
+                                                <span class="faint small">又称 {!! $hit(implode('、', $place->aliases)) !!}</span>
+                                            @endif
+                                            @if ($node['depth'] === 0 && $place->children->isNotEmpty() && ! $filtered)
                                                 {{-- 这个数字说的是「全部下辖」；树被筛过之后行数对不上它，
                                                      与其让读者对着行数数不齐，不如在筛选中把它收起来 --}}
                                                 <span class="faint small">（{{ $place->children->count() }} 个下辖）</span>
-                                            @endunless
-                                        @endif
+                                            @endif
 
-                                        @if (filled($place->description))
-                                            {{-- 说明跟着名称走，不再单独补缩进：它已经在被缩进的那一列里了 --}}
-                                            <div class="faint small">{{ $place->description }}</div>
-                                        @endif
+                                            @if (filled($place->description))
+                                                {{-- 说明跟着名称走，不再单独补缩进：它已经在被缩进的那一列里了 --}}
+                                                <div class="faint small">{!! $hit($place->description) !!}</div>
+                                            @endif
+                                        </div>
                                     </div>
-                                </div>
-                            </td>
-                            <td><span class="badge">{{ \App\Models\Place::KINDS[$place->kind] ?? $place->kind }}</span></td>
-                            <td class="small">{{ $place->faction?->name ?? '—' }}</td>
-                            <td>
-                                @if ($place->events_count > 0)
-                                    {{-- 入口挂到时间线的地点筛选上，而不是只给一个数字 --
-                                         数字本身不可点，读者就只能自己去搜地名，那等于没做结构化 --}}
-                                    <a class="mono" href="{{ route('timeline.index', ['world' => $world->value, 'place_id' => $place->id]) }}">
-                                        {{ $place->events_count }} 条
-                                    </a>
-                                @else
-                                    <span class="faint mono">0</span>
-                                @endif
-                            </td>
-                        </tr>
-                    @endforeach
-                    </tbody>
-                </table>
+                                </td>
+                                <td><span class="badge">{{ \App\Models\Place::KINDS[$place->kind] ?? $place->kind }}</span></td>
+                                <td class="small col-polity">{{ $place->faction?->name ?? '—' }}</td>
+                                <td>
+                                    @if ($place->events_count > 0)
+                                        {{-- 入口挂到时间线的地点筛选上，而不是只给一个数字 --
+                                             数字本身不可点，读者就只能自己去搜地名，那等于没做结构化 --}}
+                                        <a class="mono" href="{{ route('timeline.index', ['world' => $world->value, 'place_id' => $place->id]) }}">
+                                            {{ $place->events_count }} 条
+                                        </a>
+                                    @else
+                                        <span class="faint mono">0</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                    </table>
+                </div>
             @endif
         </div>
     </main>

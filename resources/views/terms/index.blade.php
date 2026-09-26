@@ -72,26 +72,7 @@
                 {{ $shared > 0 ? '（现有 '.$shared.' 条）' : '' }}。
             </div>
 
-            @forelse ($terms as $category => $group)
-                <div class="section-label">{{ \App\Models\Term::CATEGORIES[$category] ?? $category }}</div>
-
-                @foreach ($group as $term)
-                    <div class="card" id="term-{{ $term->slug }}">
-                        <div class="row" style="align-items:baseline">
-                            <strong>{{ $term->name }}</strong>
-                            @if (filled($term->origin))
-                                <span class="faint small mono">{{ $term->origin }}</span>
-                            @endif
-                            @if ($term->isShared())
-                                {{-- 通用词条必须在**两页**都标出来：否则读者在另一页看到它，
-                                     会以为这一页漏了它 --}}
-                                <span class="badge badge--info" title="两个世界都成立的概念">通用</span>
-                            @endif
-                        </div>
-                        <p class="muted small" style="margin:6px 0 0">{{ $term->definition }}</p>
-                    </div>
-                @endforeach
-            @empty
+            @if ($terms->isEmpty())
                 {{-- 空页要说清**为什么空**：没搜到该调筛选，没收录是语料的缺口，混在一起读者会以为页面坏了 --}}
                 <div class="empty">
                     @if ($filters['q'] || $filters['category'])
@@ -105,7 +86,41 @@
                         </span>
                     @endif
                 </div>
-            @endforelse
+            @endif
         </div>
+
+        {{--
+            与干员简介同一套块式：卡片网格（磨砂玻璃与入场错峰随 .operator-card 自动生效）。
+            网格在 .panel 之外 —— 面板是不透明底，卡片浮在上面时玻璃透不出背后的光。
+            分类分组仍用 section-label：分类是这一页的信息结构，不是列表装饰。
+        --}}
+        @foreach ($terms as $category => $group)
+            <div class="section-label">{{ \App\Models\Term::CATEGORIES[$category] ?? $category }}</div>
+
+            <div class="operator-grid">
+                @foreach ($group as $term)
+                    <article class="operator-card" id="term-{{ $term->slug }}">
+                        <header class="operator-card__head">
+                            <div class="operator-card__id">
+                                <div style="min-width:0">
+                                    <strong class="operator-card__name">{{ $term->name }}</strong>
+                                    @if (filled($term->origin))
+                                        <div class="operator-card__code mono">{{ $term->origin }}</div>
+                                    @endif
+                                </div>
+                            </div>
+
+                            @if ($term->isShared())
+                                {{-- 通用词条必须在**两页**都标出来：否则读者在另一页看到它，
+                                     会以为这一页漏了它 --}}
+                                <span class="badge badge--info" title="两个世界都成立的概念">通用</span>
+                            @endif
+                        </header>
+
+                        <p class="operator-card__profile operator-card__profile--full">{{ $term->definition }}</p>
+                    </article>
+                @endforeach
+            </div>
+        @endforeach
     </main>
 @endsection

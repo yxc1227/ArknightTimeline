@@ -18,17 +18,19 @@
    ========================================================================== */
 
 :root {
-    /* ---- 中性色阶：纯中性（不带蓝味），这是官方站最明显的底色特征 ---- */
+    /* ---- 中性色阶：纯中性（不带蓝味），这是官方站最明显的底色特征 ----
+       底色保持近黑（身份），但**面板、次级文字与描边整体提亮一档**：
+       块与块的边界、正文与元信息的层次，靠明度差就能读出来，而不是靠读者凑近看。 */
     --bg: #0d0d0d;
-    --bg-raised: #141414;
-    --bg-panel: #1b1b1b;
-    --bg-input: #101010;
-    --border: #2a2a2a;
-    --border-strong: #3d3d3d;
+    --bg-raised: #161616;
+    --bg-panel: #1f1f1f;
+    --bg-input: #111111;
+    --border: #323232;
+    --border-strong: #4a4a4a;
 
     --text: #ededed;
-    --text-dim: #9c9c9c;
-    --text-faint: #666666;
+    --text-dim: #adadad;
+    --text-faint: #7d7d7d;
 
     /* ---- 标志黄：唯一的强调色 ---- */
     --accent: #ffd400;
@@ -46,10 +48,12 @@
     --radius: 0px;
     --chamfer: 8px;
 
-    /* 深链落点要让开的高度：.topbar 是 62px 的 sticky 头，余下的是呼吸位。
-       高度只在这里定义一次（见下方「深链落点」）——
-       散在几处的话，改了导航栏就得满文件找。 */
-    --anchor-offset: 78px;
+    /* 顶栏高度：唯一来源。sticky 的 .topbar 与时间线的快速导航条都要按它定位，
+       散在几处的话，改一次导航栏就得满文件找。 */
+    --topbar-h: 62px;
+
+    /* 深链落点要让开的高度：顶栏 + 一点呼吸位（见下方「深链落点」）。 */
+    --anchor-offset: calc(var(--topbar-h) + 16px);
 
     --mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
     --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
@@ -101,8 +105,8 @@ html, body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 15px;
+    line-height: 1.7;
     -webkit-font-smoothing: antialiased;
     font-variant-numeric: tabular-nums;
 }
@@ -118,10 +122,17 @@ html, body {
  * 读者却看不到，只会以为跳错了地方，然后自己往下翻。
  */
 .card[id],
-table.tbl td[id],
-.era-band,
-.era-period {
+.operator-card[id],
+table.tbl td[id] {
     scroll-margin-top: var(--anchor-offset);
+}
+
+/* 有快速导航条的页面，落点还要再让开它：高度由 JS 量出来写进 --quick-nav-h
+   （时间线见 renderEraNav，地名树见 renderNav）。写死一个数的话，导航条一改高度，落点就又被压住。 */
+.era-band,
+.era-period,
+.place-tree tbody tr[data-place-row] {
+    scroll-margin-top: calc(var(--anchor-offset) + var(--quick-nav-h, 0px));
 }
 
 /*
@@ -131,6 +142,12 @@ table.tbl td[id],
  * 读者仍然不知道自己点的是哪一条。给一条标志黄的左边线，一眼可认。
  */
 .card:target {
+    border-color: var(--accent-line);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* 词典三页的卡片（与人员卡同一份样式）：组织 / 种族 / 词条各自被 `#org-…` 一类深链指过来 */
+.operator-card:target {
     border-color: var(--accent-line);
     box-shadow: inset 3px 0 0 var(--accent);
 }
@@ -272,7 +289,7 @@ body.is-navigating::after {
     align-items: center;
     gap: 22px;
     padding: 0 20px;
-    height: 62px;
+    height: var(--topbar-h);
     background: rgba(13, 13, 13, 0.92);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
@@ -319,7 +336,7 @@ body.is-navigating::after {
 
 .brand__sub {
     font-family: var(--label);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: 0.14em;
     color: var(--text-faint);
     text-transform: uppercase;
@@ -358,14 +375,14 @@ body.is-navigating::after {
 
 .nav__en {
     font-family: var(--mono);
-    font-size: 9.5px;
+    font-size: 10.5px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     opacity: .7;
     line-height: 1.25;
 }
 
-.nav__zh { font-size: 12.5px; line-height: 1.25; }
+.nav__zh { font-size: 13.5px; line-height: 1.25; }
 
 .nav a:hover {
     background: var(--bg-panel);
@@ -387,7 +404,7 @@ body.is-navigating::after {
     background: var(--accent);
     color: var(--accent-ink);
     padding: 0 4px;
-    font-size: 9.5px;
+    font-size: 10.5px;
     font-weight: 700;
     font-family: var(--mono);
     line-height: 14px;
@@ -403,13 +420,13 @@ body.is-navigating::after {
     display: flex;
     align-items: center;
     gap: 11px;
-    font-size: 12.5px;
+    font-size: 13.5px;
     color: var(--text-dim);
 }
 
 .role-chip {
     font-family: var(--mono);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: 0.1em;
     padding: 2px 7px;
     border: 1px solid var(--border-strong);
@@ -427,8 +444,8 @@ body.is-navigating::after {
     position: relative;
     z-index: 1;
     display: flex;
-    gap: 18px;
-    padding: 18px;
+    gap: 22px;
+    padding: 22px;
     align-items: flex-start;
 }
 
@@ -440,8 +457,8 @@ body.is-navigating::after {
 .sidebar {
     position: sticky;
     top: 76px;
-    width: 280px;
-    flex: 0 0 280px;
+    width: 300px;
+    flex: 0 0 300px;
     max-height: calc(100vh - 96px);
     display: flex;
     flex-direction: column;
@@ -451,7 +468,7 @@ body.is-navigating::after {
 }
 
 .sidebar__head {
-    padding: 14px 14px 10px;
+    padding: 16px 16px 11px;
     border-bottom: 1px solid var(--border);
     flex: 0 0 auto;
 }
@@ -461,7 +478,7 @@ body.is-navigating::after {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: 12px 12px 12px 14px;
+    padding: 13px 13px 13px 16px;
     scrollbar-gutter: stable;
     /* 阻止滚动到边界后把滚动传递给页面 */
     overscroll-behavior: contain;
@@ -469,7 +486,7 @@ body.is-navigating::after {
 
 .sidebar__foot {
     flex: 0 0 auto;
-    padding: 11px 14px 14px;
+    padding: 12px 16px 16px;
     border-top: 1px solid var(--border);
 }
 
@@ -513,16 +530,17 @@ body.is-navigating::after {
 .panel {
     background: var(--bg-raised);
     border: 1px solid var(--border);
-    padding: 16px;
-    margin-bottom: 16px;
+    padding: 20px;
+    margin-bottom: 18px;
 }
 
 .panel__title {
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: 600;
     letter-spacing: 0.05em;
     color: var(--text);
-    margin: 0 0 14px;
-    padding-bottom: 9px;
+    margin: 0 0 16px;
+    padding-bottom: 11px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -538,7 +556,7 @@ body.is-navigating::after {
 .field > label {
     display: block;
     font-family: var(--label);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-faint);
@@ -548,13 +566,13 @@ body.is-navigating::after {
 input[type='text'], input[type='search'], input[type='number'], input[type='email'],
 input[type='password'], input[type='date'], select, textarea {
     width: 100%;
-    padding: 7px 9px;
+    padding: 8px 10px;
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: 0;
     color: var(--text);
     font-family: inherit;
-    font-size: 13px;
+    font-size: 14px;
     outline: none;
     transition: border-color .12s, box-shadow .12s;
 }
@@ -568,7 +586,7 @@ textarea {
     resize: vertical;
     min-height: 70px;
     font-family: var(--mono);
-    font-size: 12.5px;
+    font-size: 13.5px;
     line-height: 1.75;
 }
 
@@ -593,7 +611,7 @@ select {
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: 12.5px;
+    font-size: 13.5px;
     color: var(--text-dim);
     cursor: pointer;
 }
@@ -607,13 +625,13 @@ select {
     align-items: center;
     justify-content: center;
     gap: 7px;
-    padding: 6px 14px;
+    padding: 7px 15px;
     border: 1px solid var(--border-strong);
     border-radius: 0;
     background: transparent;
     color: var(--text);
     font-family: inherit;
-    font-size: 12.5px;
+    font-size: 13.5px;
     letter-spacing: 0.06em;
     cursor: pointer;
     white-space: nowrap;
@@ -655,8 +673,8 @@ select {
 .btn--ghost { border-color: transparent; color: var(--text-dim); }
 .btn--ghost:hover:not(:disabled) { border-color: transparent; background: var(--bg-panel); color: var(--text); }
 
-.btn--sm { padding: 3px 10px; font-size: 11.5px; }
-.btn--icon { padding: 4px 8px; font-size: 13px; }
+.btn--sm { padding: 3px 10px; font-size: 12.5px; }
+.btn--icon { padding: 4px 8px; font-size: 14px; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
 /* ---------------------------------------------------------------- 徽章 / 标签 */
@@ -667,7 +685,7 @@ select {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 10.5px;
+    font-size: 11.5px;
     font-family: var(--mono);
     letter-spacing: 0.06em;
     color: var(--text-dim);
@@ -688,7 +706,7 @@ select {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: 11px;
+    font-size: 12px;
     padding: 2px 7px;
     background: transparent;
     border: 1px solid var(--border);
@@ -716,7 +734,7 @@ select {
     filter: saturate(.6) brightness(.95);
 }
 
-.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ---------------------------------------------------------------- 时间线 */
 
@@ -727,22 +745,35 @@ select {
  * 纪元的色带仍是主体（逐段有各自的颜色），时代只提供「它们同属一段历史」的框架。
  */
 .era-period {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 46px 0 2px;
-    padding: 8px 0;
+    /* 边界线整条压到轴上：左边的负外边距把线拉到主轴，右内边距把文字让回原位 ——
+       否则线从 30px 处才开始，与轴上的节点之间空出一截，看着像两个东西 */
+    margin: 46px 0 2px -30px;
+    padding: 8px 0 8px 30px;
     border-top: 2px solid var(--border-strong);
     /* 让位高度见顶部「深链落点」一节 */
 }
 
-.era-period:first-child { margin-top: 0; }
+/* 时代是轴上高一层级的节点：比纪元的节点大一档，压在这条边界线上 */
+.era-period::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 2px;
+    width: 15px;
+    height: 15px;
+    background: var(--era-color, var(--accent));
+    border: 1px solid var(--bg);
+}
 
-.era-period__bar { width: 3px; height: 15px; flex: none; }
+.era-period:first-child { margin-top: 0; }
 
 .era-period__name {
     font-family: var(--label);
-    font-size: 11.5px;
+    font-size: 12.5px;
     font-weight: 600;
     letter-spacing: .18em;
     color: var(--text-dim);
@@ -751,19 +782,48 @@ select {
 .era-period__range {
     margin-left: auto;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: .04em;
     color: var(--text-faint);
 }
 
+/*
+ * 纪元色带 = 主轴上的**分段标记**，同时是「收起这一段」的开关。
+ *
+ * 从前它只是标题，条目被包在「时代 → 纪元」两层表头里、每个纪元还各起一条虚线轴 ——
+ * 主轴在一处分叉成许多段，读者看到的是树而不是年表。现在轴只有一条（画在 .tl-stack 上），
+ * 纪元是轴上的一个节点：色块落在虚线上，点它就把这一段收起来（默认展开）。
+ */
 .era-band {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 11px;
+    width: 100%;
     margin: 30px 0 13px;
-    padding-bottom: 8px;
+    padding: 0 0 8px;
+    background: none;
+    border: 0;
     border-bottom: 1px solid var(--border);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
     /* 让位高度见顶部「深链落点」一节 */
+}
+
+/* 轴上的节点：与虚线、与条目的小方点同一支笔（直角、硬边），颜色用纪元自己的色 */
+.era-band::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 8px;
+    left: -27px;
+    margin: auto 0;
+    width: 13px;
+    height: 13px;
+    background: var(--era-color, var(--accent));
+    border: 1px solid var(--bg);
 }
 
 /* 紧随分期标题的纪元色带：上间距让出去，避免两次分组之间出现两条空隙 */
@@ -771,19 +831,41 @@ select {
 
 .era-band:first-child { margin-top: 0; }
 
-.era-band__bar { width: 3px; height: 22px; background: var(--accent); }
+/* 折叠钮：与地名树同一套「+ / −」记号（等宽、直角），尺寸按这一行给 */
+.era-band__fold {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 16px;
+    line-height: 1;
+    transition: color .12s, border-color .12s;
+}
 
+.era-band__fold::before { content: '−'; }
+.era-band[aria-expanded='false'] .era-band__fold::before { content: '+'; }
+.era-band:hover .era-band__fold { color: var(--accent); border-color: var(--accent); }
+
+/* 收起的那一段：名字压暗一档，CNT 照旧报数 —— 折叠不是隐藏，是换个粒度看 */
+.era-band[aria-expanded='false'] .era-band__name { color: var(--text-dim); }
+
+/* 纪元名是这一段的主标题，历史时间只是它的注脚：字号差 1.67 倍、字体一比例一等宽、
+   颜色一实一虚 —— 三处一起给层级，读者不必细看就知道哪个是名字、哪个是年份 */
 .era-band__name {
-    font-size: 15px;
+    font-size: 20px;
     font-weight: 600;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
 }
 
 /* 「//」母题落到纪元标题上 */
 .era-band__name::before {
     content: '//';
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: 14px;
     color: var(--accent);
     margin-right: 8px;
     opacity: .8;
@@ -791,7 +873,7 @@ select {
 
 .era-band__range {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: .04em;
     color: var(--text-faint);
 }
@@ -799,17 +881,91 @@ select {
 .era-band__count {
     margin-left: auto;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: .08em;
     color: var(--text-faint);
     border-left: 1px solid var(--border);
     padding-left: 10px;
 }
 
-.tl { position: relative; padding-left: 30px; }
+/*
+ * 快速导航条：粘在顶栏之下的目录。
+ *
+ * 时间线与地名树共用这一套（两处都是「很长的一页 + 若干可跳过去的分段」）：
+ * 时间线按纪元分段，地名按顶层节点分段。共用的是容器与条目，跳转逻辑各页自己的模块负责——
+ * 差别只在数据来源，因此不为两页各写一套皮。
+ * 内容由 JS 按当前结果重建：筛选后一条不剩的分段不该在目录里留一个跳不到的入口。
+ */
+.quick-nav {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 20;
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 0;
+    overflow-x: auto;
+    /* 不透明：否则条目会从它底下透出来，粘着的一条看起来像半透明的补丁 */
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: none;
+}
 
-/* 主轴改为虚线刻度，比实线更「仪表」 */
-.tl::before {
+.quick-nav::-webkit-scrollbar { display: none; }
+.quick-nav[hidden] { display: none; }
+
+.quick-nav__item {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .04em;
+    cursor: pointer;
+    transition: color .12s, border-color .12s, background .12s;
+}
+
+.quick-nav__item:hover { color: var(--text); border-color: var(--border-strong); }
+
+.quick-nav__item.is-active {
+    color: var(--accent);
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+}
+
+/* 与轴上节点 / 级别标记同款的小色块：目录里一眼认出是哪一段（色值由 JS 给到 --nav-color） */
+.quick-nav__dot {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    background: var(--nav-color, var(--accent));
+}
+
+.quick-nav__count { color: var(--text-faint); }
+
+/* 地名页的色块直接用级别标记（配色只定义一次），只把尺寸收到与目录条相称。
+   写成后代选择器而不是 `.quick-nav__kind` 单类：`.place-kind` 定义在文件更后面，
+   同权重时会反过来盖住这里的尺寸 */
+.quick-nav .place-kind {
+    width: 11px;
+    height: 11px;
+}
+
+/*
+ * 一条主轴贯穿全页。
+ *
+ * 轴只画一次（在这个容器上），分组体 `.tl` 只是折叠用的容器 ——
+ * 从前每个纪元各自起一条虚线轴，主轴于是分叉成树；现在纪元与条目都挂在这一条线上。
+ * 几何照旧（容器左内边距 30px、轴在 9px 处、条目的小方点在 -25px），只是画轴的地方少了一个。
+ */
+.tl-stack { position: relative; padding-left: 30px; }
+
+.tl-stack::before {
     content: '';
     position: absolute;
     left: 9px;
@@ -821,7 +977,7 @@ select {
         transparent 5px 10px);
 }
 
-.tl-item { position: relative; margin-bottom: 9px; }
+.tl-item { position: relative; margin-bottom: 10px; }
 
 /* 节点由圆改方：直角是这套语言的基础 */
 .tl-item::before {
@@ -846,7 +1002,7 @@ select {
     background: var(--bg-raised);
     border: 1px solid var(--border);
     border-left: 2px solid var(--border-strong);
-    padding: 11px 14px;
+    padding: 13px 16px;
     cursor: pointer;
     transition: border-color .12s, background .12s;
 }
@@ -865,7 +1021,7 @@ select {
    刻意不做任何「格式化」—— 泰拉历的粒度必须原样呈现。 */
 .tl-card__date {
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
     color: var(--accent);
     background: var(--accent-soft);
     border-left: 2px solid var(--accent);
@@ -873,12 +1029,13 @@ select {
     white-space: nowrap;
 }
 
-.tl-card__title { font-size: 14.5px; font-weight: 600; letter-spacing: 0.01em; }
+.tl-card__title { font-size: 15.5px; font-weight: 600; letter-spacing: 0.01em; }
 
 .tl-card__summary {
-    margin: 6px 0 0;
+    margin: 7px 0 0;
     color: var(--text-dim);
-    font-size: 12.5px;
+    font-size: 13.5px;
+    line-height: 1.65;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -892,7 +1049,7 @@ select {
     align-items: center;
     margin-top: 8px;
     font-family: var(--mono);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: .05em;
     color: var(--text-faint);
 }
@@ -923,7 +1080,7 @@ select {
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(740px, 95vw);
+    width: min(780px, 95vw);
     background: var(--bg);
     border-left: 1px solid var(--border-strong);
     transform: translateX(100%);
@@ -944,11 +1101,11 @@ select {
     background: var(--bg-raised);
 }
 
-.drawer__title { font-size: 16.5px; font-weight: 650; margin: 0; letter-spacing: 0.01em; }
+.drawer__title { font-size: 17.5px; font-weight: 650; margin: 0; letter-spacing: 0.01em; }
 
 .drawer__date {
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
     color: var(--accent);
     margin-top: 4px;
 }
@@ -981,7 +1138,7 @@ select {
     color: var(--text-faint);
     padding: 7px 14px 6px;
     font-family: inherit;
-    font-size: 12.5px;
+    font-size: 13.5px;
     letter-spacing: .04em;
     cursor: pointer;
     margin-bottom: -1px;
@@ -996,11 +1153,11 @@ select {
 
 /* ---------------------------------------------------------------- 通用块 */
 
-.kv { display: grid; grid-template-columns: 96px 1fr; gap: 8px 12px; font-size: 12.5px; }
+.kv { display: grid; grid-template-columns: 104px 1fr; gap: 9px 14px; font-size: 13.5px; line-height: 1.7; }
 
 .kv dt {
     font-family: var(--label);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: .1em;
     text-transform: uppercase;
     color: var(--text-faint);
@@ -1010,11 +1167,11 @@ select {
 .kv dd { margin: 0; }
 
 .section-label {
-    font-size: 11.5px;
+    font-size: 12.5px;
     letter-spacing: .04em;
     color: var(--text);
-    margin: 20px 0 9px;
-    padding-left: 9px;
+    margin: 22px 0 11px;
+    padding-left: 10px;
     border-left: 2px solid var(--accent);
 }
 
@@ -1023,19 +1180,19 @@ select {
 .card {
     background: var(--bg-raised);
     border: 1px solid var(--border);
-    padding: 12px 14px;
-    margin-bottom: 9px;
+    padding: 14px 16px;
+    margin-bottom: 11px;
 }
 
 .muted { color: var(--text-dim); }
 .faint { color: var(--text-faint); }
 .mono { font-family: var(--mono); }
-.small { font-size: 11.5px; }
+.small { font-size: 12.5px; }
 .nowrap { white-space: nowrap; }
 
 .empty {
     text-align: center;
-    padding: 46px 20px;
+    padding: 52px 24px;
     color: var(--text-faint);
     border: 1px dashed var(--border-strong);
 }
@@ -1046,7 +1203,7 @@ select {
     border-left: 2px solid var(--border-strong);
     padding: 9px 12px;
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
     line-height: 1.8;
     color: var(--text-dim);
     white-space: pre-wrap;
@@ -1057,9 +1214,10 @@ select {
 .quote[data-matched='0'] { border-left-color: var(--danger); }
 
 .alert {
-    padding: 10px 13px;
-    font-size: 12.5px;
-    margin-bottom: 12px;
+    padding: 12px 15px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    margin-bottom: 14px;
     border: 1px solid;
     border-left-width: 3px;
 }
@@ -1092,7 +1250,7 @@ select {
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .diff > div { background: var(--bg-raised); padding: 8px 10px; }
@@ -1101,7 +1259,7 @@ select {
     background: var(--bg-panel);
     color: var(--text-faint);
     font-family: var(--label);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: .1em;
     text-transform: uppercase;
     display: flex;
@@ -1109,21 +1267,21 @@ select {
 }
 
 .diff .pick { display: flex; gap: 4px; }
-.diff .pick button { font-size: 11px; padding: 1px 7px; }
+.diff .pick button { font-size: 12px; padding: 1px 7px; }
 .diff .pick button.is-active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 /* ---------------------------------------------------------------- 表格 */
 
-table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.6; }
 
 table.tbl th {
     text-align: left;
     font-family: var(--label);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: .11em;
     text-transform: uppercase;
     color: var(--text-faint);
-    padding: 8px 10px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border-strong);
     font-weight: 400;
     background: repeating-linear-gradient(45deg,
@@ -1132,7 +1290,7 @@ table.tbl th {
 }
 
 table.tbl td {
-    padding: 9px 10px;
+    padding: 11px 12px;
     border-bottom: 1px solid var(--border);
     vertical-align: top;
 }
@@ -1153,7 +1311,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
     padding: 4px 10px;
     border: 1px solid var(--border);
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
     color: var(--text-dim);
 }
 
@@ -1182,7 +1340,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
     border: 1px solid var(--border-strong);
     border-left: 3px solid var(--accent);
     padding: 10px 13px;
-    font-size: 12.5px;
+    font-size: 13.5px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, .6);
     animation: slide-in .18s ease-out;
 }
@@ -1193,7 +1351,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
 
 .toast__title {
     font-family: var(--label);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--text-faint);
@@ -1229,7 +1387,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
     padding: 14px 18px;
     border-bottom: 1px solid var(--border);
     font-family: var(--label);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: .13em;
     text-transform: uppercase;
     color: var(--accent);
@@ -1262,7 +1420,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
     text-align: center;
     padding: 16px;
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
     letter-spacing: .08em;
     color: var(--text-faint);
 }
@@ -1279,7 +1437,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
 
 .filter-head strong {
     font-family: var(--label);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: .13em;
     text-transform: uppercase;
     color: var(--text);
@@ -1290,7 +1448,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
 
 .filter-group > summary {
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
     list-style: none;
     display: flex;
@@ -1306,7 +1464,7 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
     content: '+';
     color: var(--text-faint);
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .filter-group[open] > summary::after { content: '−'; }
@@ -1322,14 +1480,14 @@ table.tbl tbody tr:hover td { background: var(--bg-raised); }
     gap: 5px 10px;
 }
 
-.tag-picker label { font-size: 11.5px; }
+.tag-picker label { font-size: 12.5px; }
 .tag-picker input { margin-right: 4px; accent-color: var(--accent); }
 
 .stats-line {
     display: flex;
     gap: 14px;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: .06em;
     color: var(--text-faint);
     flex-wrap: wrap;
@@ -1436,7 +1594,7 @@ canvas#scrubber { width: 100%; height: 48px; display: block; cursor: crosshair; 
 details.raw > summary {
     cursor: pointer;
     font-family: var(--label);
-    font-size: 10.5px;
+    font-size: 11.5px;
     letter-spacing: .11em;
     text-transform: uppercase;
     color: var(--text-faint);
@@ -1451,7 +1609,7 @@ details.raw > pre {
     border: 1px solid var(--border);
     border-left: 2px solid var(--accent);
     padding: 11px;
-    font-size: 11.5px;
+    font-size: 12.5px;
     line-height: 1.8;
     white-space: pre-wrap;
 }
@@ -1498,22 +1656,22 @@ input[type='checkbox'] { accent-color: var(--accent); cursor: pointer; }
 
 /* 用首字代替图片：零资源依赖，且与「等宽 + 直角」的语言一致 */
 .avatar {
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
     display: grid;
     place-items: center;
     background: var(--accent-soft);
     border: 1px solid var(--accent-line);
     color: var(--accent);
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 20px;
     font-weight: 600;
     line-height: 1;
     user-select: none;
 }
 
-.avatar--lg { width: 48px; height: 48px; flex-basis: 48px; font-size: 19px; }
+.avatar--lg { width: 76px; height: 76px; flex-basis: 76px; font-size: 30px; }
 
 .avatar[data-status='disabled'] { background: transparent; border-color: var(--border-strong); color: var(--text-faint); }
 .avatar[data-status='trashed'] { background: transparent; border-color: rgba(255, 82, 82, .4); color: var(--danger); }
@@ -1538,7 +1696,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
 .th-sort { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 .th-sort:hover { color: var(--accent); text-decoration: none; }
 .th-sort.is-active { color: var(--accent); }
-.th-sort__arrow { font-size: 9px; }
+.th-sort__arrow { font-size: 10px; }
 
 /* ---------------------------------------------------------------- 批量操作栏 */
 
@@ -1556,7 +1714,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
 }
 
 .bulk-bar.is-open { display: flex; }
-.bulk-bar strong { font-size: 12.5px; margin-right: 4px; }
+.bulk-bar strong { font-size: 13.5px; margin-right: 4px; }
 .bulk-bar strong span { font-family: var(--mono); color: var(--accent); }
 
 /* ---------------------------------------------------------------- 表格加载态 */
@@ -1588,7 +1746,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
 
 .stat__value {
     display: block;
-    font-size: 21px;
+    font-size: 22px;
     color: var(--accent);
     line-height: 1.15;
     font-variant-numeric: tabular-nums;
@@ -1598,7 +1756,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
     display: block;
     margin-top: 3px;
     font-family: var(--label);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--text-faint);
@@ -1610,7 +1768,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
     border-left: 2px solid var(--border);
     padding: 9px 0 9px 12px;
     margin-bottom: 9px;
-    font-size: 12.5px;
+    font-size: 13.5px;
 }
 
 .log-row:hover { border-left-color: var(--accent); }
@@ -1626,7 +1784,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
     gap: 8px;
     flex-wrap: wrap;
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: 12.5px;
 }
 
 .diff-list__field { color: var(--text-faint); min-width: 84px; }
@@ -1644,7 +1802,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
 
 .password-reveal {
     font-family: var(--mono);
-    font-size: 17px;
+    font-size: 18px;
     letter-spacing: .12em;
     text-align: center;
     padding: 14px;
@@ -1662,7 +1820,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
 
 .pagination__meta {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-faint);
     letter-spacing: .04em;
     border: none !important;
@@ -1705,7 +1863,7 @@ tr.is-trashed .user-cell__name { text-decoration: line-through; text-decoration-
         content: attr(data-label);
         flex: 0 0 auto;
         font-family: var(--label);
-        font-size: 10px;
+        font-size: 11px;
         letter-spacing: .12em;
         text-transform: uppercase;
         color: var(--text-faint);
@@ -1769,8 +1927,8 @@ img.avatar {
     padding: 0;
 }
 
-.avatar--sm { width: 24px; height: 24px; flex-basis: 24px; font-size: 11px; }
-.avatar--xl { width: 72px; height: 72px; flex-basis: 72px; font-size: 28px; }
+.avatar--sm { width: 34px; height: 34px; flex-basis: 34px; font-size: 16px; }
+.avatar--xl { width: 120px; height: 120px; flex-basis: 120px; font-size: 46px; }
 
 /* 头像上传区：点击整块即选图，选中后就地预览 */
 .dropzone {
@@ -1813,13 +1971,13 @@ img.avatar {
     flex: 0 0 auto;
     display: inline-grid;
     place-items: center;
-    min-width: 26px;
-    padding: 4px 6px;
+    min-width: 34px;
+    padding: 6px 8px;
     background: var(--bg-input);
     border: 1px solid var(--border-strong);
     color: var(--text-dim);
     font-family: var(--mono);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: .06em;
 }
 
@@ -1832,7 +1990,7 @@ img.avatar {
     padding: 8px 10px;
     background: var(--bg-input);
     border-left: 2px solid var(--border);
-    font-size: 12.5px;
+    font-size: 13.5px;
 }
 
 /* 登录页上的渠道按钮组 */
@@ -1888,12 +2046,12 @@ img.avatar {
     color: var(--text);
 }
 
-.world-switch__label { font-size: 13px; letter-spacing: .02em; }
+.world-switch__label { font-size: 14px; letter-spacing: .02em; }
 
 .world-switch__item[data-active='1'] .world-switch__label { color: var(--world-accent, var(--accent)); }
 
 .world-switch__meta {
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: .04em;
     text-transform: uppercase;
     color: var(--text-faint);
@@ -1906,37 +2064,42 @@ img.avatar {
 
 /* ---------------------------------------------------------------- 干员简介 */
 
-.main--wide { max-width: 1220px; margin: 0 auto; }
+.main--wide { max-width: 1320px; margin: 0 auto; }
 
 /* 概览里的人物首字方块：与头像同一语言，但不占用图片资源 */
 .operator-mark {
     flex: 0 0 auto;
     display: grid;
     place-items: center;
-    width: 52px;
-    height: 52px;
+    /* 120 是源图允许的上限附近：泰拉头像 180×180、塔卫二 303×386，
+       显示到 120 仍是下采样（0.67×），再往上就接近源尺寸、开始糊 */
+    width: 120px;
+    height: 120px;
     background: var(--bg-input);
     border: 1px solid var(--border-strong);
     color: var(--accent);
-    font-size: 22px;
+    font-size: 52px;
 }
 
 /* 详情页有真头像时替换首字方块：同一几何，只把绘制交给图片 */
 .operator-mark--img { object-fit: cover; }
 
+/* 卡片宽度随头像一起放宽：96px 头像 + 名字 + 代号，290px 会把长名字挤成两行 */
 .operator-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
 }
 
-/* 一张卡 = 一个人：名字 / 结构化标签 / 一行简介 / 两个出口（本页 + 维基） */
+/* 一张卡 = 一个实体：名字 / 结构化标签 / 一段说明 / 若干出口。
+   人员简介、组织、种族、词条共用这一张卡（词典页的说明不裁切，见 --full 修饰类）。
+   类名沿用 .operator-card 是历史命名 —— 改它会同时牵动磨砂玻璃、入场错峰与深链三处选择器 */
 .operator-card {
     display: flex;
     flex-direction: column;
-    gap: 9px;
-    padding: 12px 14px;
+    gap: 10px;
+    padding: 16px 18px;
     background: var(--bg-raised);
     border: 1px solid var(--border);
     border-left: 2px solid var(--border-strong);
@@ -1948,19 +2111,21 @@ img.avatar {
 .operator-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 
 /* 名字与头像并排：头像缺席时布局不塌，头部退化为纯文本的同一形状 */
+/* 头像长大之后按中线与文字块对齐：两行文字贴在 96px 方块的顶边会显得头重脚轻 */
 .operator-card__id {
     display: flex;
     flex: 1;
-    gap: 10px;
-    align-items: flex-start;
+    gap: 12px;
+    align-items: center;
     min-width: 0;
 }
 
-/* 头像与 .operator-mark 同一几何：方、硬边、无圆角（--radius: 0 的世界里没有圆头像） */
+/* 头像与 .operator-mark 同一几何：方、硬边、无圆角（--radius: 0 的世界里没有圆头像）。
+   卡片比详情页头略小一档：那里是主角，这里一张卡只是网格里的一格 */
 .operator-card__avatar {
     flex: 0 0 auto;
-    width: 52px;
-    height: 52px;
+    width: 96px;
+    height: 96px;
     object-fit: cover;
     background: var(--bg-input);
     border: 1px solid var(--border-strong);
@@ -1971,8 +2136,9 @@ img.avatar {
 /* 地名与组织的徽记（来源与关联规则见 app/Support/EntityEmblems，采集见 bin/fetch-emblems.py）。
    与头像同一几何 —— 直角、1px 描边、输入底色 —— 只有 object-fit 反过来：
    头像是人像照，裁掉边缘仍是那个人；徽记是标志，裁掉边缘就等于毁掉它，
-   所以用 contain 整幅放下（徽记自带留白，内容占画布中位数 0.86，缩到 26px 仍认得清）。
-   没有徽记是常态：维基只给了 47 枚，而地名有 164 个、阵营有 147 个，
+   所以用 contain 整幅放下（徽记自带留白，内容占画布中位数 0.86；源图 510×510，
+   显示到 52px 仍是大幅下采样，细节不会丢）。
+   没有徽记是常态：维基只给了 47 枚文件，而地名有 164 个、阵营有 147 个，
    因此这里**不留空位** —— 没有就不出现，读者看到的是纯文字行，
    而不是一个「缺了一块」的洞。 */
 .emblem {
@@ -1980,25 +2146,108 @@ img.avatar {
     /* 父级多半是 align-items: baseline（名称与全称按基线对齐），
        而图片的「基线」是它的下边缘 —— 照抄会吊在文字上方。单独按中线摆。 */
     align-self: center;
-    width: 26px;
-    height: 26px;
-    padding: 1px;
+    width: 52px;
+    height: 52px;
+    padding: 3px;
     object-fit: contain;
     background: var(--bg-input);
     border: 1px solid var(--border-strong);
 }
 
 /* 组织页用大档：那里一条就是读者扫读的单位，徽记是辨识的第一眼。 */
-.emblem--lg { width: 34px; height: 34px; }
+.emblem--lg { width: 72px; height: 72px; }
 
-/* 地名表的一行：徽记在左，名称 / 别名 / 下辖数 / 说明在右。
-   层级缩进仍由外层的 padding-left 负责，所以子地名的徽记会同名字一起右移。 */
-.place-row { display: flex; align-items: center; gap: 8px; }
+/* 地名表的一行：折叠钮、级别标记、徽记在左，名称 / 别名 / 下辖数 / 说明在右。
+   层级缩进由单元格的 padding-left 负责，所以整行（含徽记）会一起右移。 */
+.place-row { display: flex; align-items: center; gap: 10px; }
 
 .place-row__main { min-width: 0; }
 
+/* ---------------------------------------------------------------- 地名树 */
+
+/*
+ * 地名页的主体就是这棵树。四件事：
+ *   1. 折叠：字形沿用全站 details 的 `+ / −`（等宽），不是新造一套箭头 ——
+ *      同一个「展开/收起」在全站只该有一种长相；
+ *   2. 级别标记：颜色只编码**级别档位**（越宏观越亮、越微观越沉，与纪元色带同一族暖色），
+ *      真正的类型名由 Kind 列的文字承担 —— 颜色只负责让眼睛先扫到层级；
+ *      地理实体（landmark）不是行政层级上的一级，用虚线框区分；
+ *   3. 选中（点击行或深链落地）：与 :target 落点同一支笔 —— 淡黄底 + 首格左侧黄条；
+ *   4. 缩进走 --depth × --place-indent：窄屏改步长即可，不必逐个断点改内联样式。
+ */
+.place-tree { --place-indent: 14px; --place-pad: 12px; }
+
+/* 基准内边距 + 层级步长：直接写 calc(depth × 步长) 会把 td 原本的 10px 左内边距抹掉 */
+.place-tree td:first-child { padding-left: calc(var(--place-pad) + var(--depth, 0) * var(--place-indent)); }
+
+.place-toggle {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .12s, border-color .12s;
+}
+
+.place-toggle::before { content: '−'; }
+.place-toggle[aria-expanded='false']::before { content: '+'; }
+
+/* 悬停只给真按钮（限定 [data-place-toggle]）：裸的 .place-toggle:hover 会按类名命中，
+   任何共用该类的元素都会被点亮 */
+.place-toggle[data-place-toggle]:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 叶子行的占位：只负责让名称的左沿对齐，因此只有尺寸，没有边框、字形与光标。
+   刻意**不复用** .place-toggle —— 共用类名会让按钮的每一条样式都渗过来，
+   无下辖的地名一度在鼠标移上去时亮起一个空方框（那是「这里有个按钮」的假信号） */
+.place-gutter {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+}
+
+.place-kind {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+}
+
+.place-kind[data-kind='nation'] { background: var(--accent); border-color: var(--accent); }
+.place-kind[data-kind='kingdom'] { background: #c9a227; border-color: #c9a227; }
+.place-kind[data-kind='region'] { background: #9a7d18; border-color: #9a7d18; }
+.place-kind[data-kind='province'] { background: #7a6a20; border-color: #7a6a20; }
+.place-kind[data-kind='city'] { background: var(--text-dim); border-color: var(--text-dim); }
+.place-kind[data-kind='settlement'] { border-color: var(--text-faint); }
+.place-kind[data-kind='landmark'] { border-style: dashed; border-color: var(--text-faint); }
+
+/* 选中：与 :target 落点同一支笔 */
+.place-tree tbody tr.is-selected td { background: var(--accent-soft); }
+.place-tree tbody tr.is-selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* 筛选时把「命中」与「只是提供上下文的祖先」分开：祖先压暗一档，命中行保持原样 */
+.place-tree tbody tr[data-hit='0'] td { opacity: .55; }
+
+/* 行可点选：光标给出提示（行内的链接与折叠钮保持各自的光标） */
+.place-tree tbody tr[data-place-row] { cursor: pointer; }
+
+@media (max-width: 720px) {
+    /* 窄屏：缩进步长收小、政体列让位 —— 让层级与名称留住，附属信息可以舍 */
+    .place-tree { --place-indent: 10px; }
+    .place-tree .col-polity { display: none; }
+}
+
 .operator-card__name {
-    font-size: 15px;
+    font-size: 18px;
+    font-weight: 600;
     letter-spacing: .02em;
     color: var(--text);
     text-decoration: none;
@@ -2007,7 +2256,8 @@ img.avatar {
 .operator-card__name:hover { color: var(--accent); }
 
 .operator-card__code {
-    font-size: 11px;
+    font-size: 13px;
+    margin-top: 2px;
     letter-spacing: .04em;
     color: var(--text-faint);
 }
@@ -2017,7 +2267,7 @@ img.avatar {
 /* 简介固定三行高：卡片高度不随文案长短跳动，网格才不会参差 */
 .operator-card__profile {
     margin: 0;
-    font-size: 12.5px;
+    font-size: 13.5px;
     line-height: 1.75;
     color: var(--text-dim);
     display: -webkit-box;
@@ -2025,6 +2275,16 @@ img.avatar {
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
+
+/* 词典卡片（组织 / 种族 / 词条）的说明不裁切：它本身就是内容，不是「简介」。
+   缺口文案（来源没写）用同一个文本位、只淡一档 —— 位置一致，读者才知道这里本该有字 */
+.operator-card__profile--full {
+    display: block;
+    -webkit-line-clamp: none;
+    overflow: visible;
+}
+
+.operator-card__profile--missing { color: var(--text-faint); }
 
 .operator-card__foot { display: flex; gap: 7px; margin-top: auto; }
 
@@ -2034,8 +2294,8 @@ img.avatar {
 .event-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 10px;
+    gap: 12px;
+    padding: 11px 12px;
     border-bottom: 1px solid var(--border);
     color: var(--text);
     text-decoration: none;
@@ -2044,8 +2304,8 @@ img.avatar {
 
 .event-row:hover { background: var(--bg-panel); text-decoration: none; }
 
-.event-row__date { flex: 0 0 auto; font-size: 12px; color: var(--text-faint); min-width: 116px; }
-.event-row__title { flex: 1 1 200px; min-width: 0; font-size: 13px; }
+.event-row__date { flex: 0 0 auto; font-size: 13px; color: var(--text-faint); min-width: 116px; }
+.event-row__title { flex: 1 1 200px; min-width: 0; font-size: 14px; }
 
 /* ---------------------------------------------------------------- 标识 */
 
@@ -2090,18 +2350,19 @@ img.avatar {
    图标一律 currentColor：跟文字走色，不在此处、也不在模板里指定色值 ——
    语义色（ok/warn/danger/info）由 .badge--* 等既有类带入。 */
 .icon {
-    width: 1em;
-    height: 1em;
+    width: 1.2em;
+    height: 1.2em;
     flex: 0 0 auto;
-    vertical-align: -0.15em;
+    vertical-align: -0.18em;
 }
 
 /* 尺寸档位（基准 body 14px）：
-   sm = 徽章 / 表格行内 12px；lg = 顶栏导航与按钮 16px；xl = 空状态 / 页头 20px。
+   sm = 徽章 / 表格行内 15px；lg = 顶栏导航与按钮 20px；xl = 空状态 / 页头 26px。
+   一律用 em：图标随所在元素的字号缩放，徽章里的小字不会顶着一个大图标。
    父级有 display:flex 时 vertical-align 不生效也无妨，flex 对齐已覆盖。 */
-.icon--sm { width: .857em; height: .857em; }
-.icon--lg { width: 1.143em; height: 1.143em; }
-.icon--xl { width: 1.43em; height: 1.43em; vertical-align: -0.22em; }
+.icon--sm { width: 1.05em; height: 1.05em; }
+.icon--lg { width: 1.45em; height: 1.45em; }
+.icon--xl { width: 1.85em; height: 1.85em; vertical-align: -0.26em; }
 
 /* 高频嵌入场景的微调：
    按钮自身有 gap:7px，图标无需额外间距；

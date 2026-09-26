@@ -64,6 +64,22 @@
         setTimeout(() => node.remove(), kind === 'danger' ? 9000 : 5200);
     }
 
+    /**
+     * 把快速导航条里的一条滚到可见处（时间线与地名树共用）。
+     *
+     * 只动目录条自己的横向滚动，不碰页面纵向位置 —— 它是由滚动高亮触发的，
+     * 用 scrollIntoView 会把读者正在读的那一屏也一起拽走。
+     */
+    function centerInNav(item) {
+        const nav = item.closest('.quick-nav');
+        if (!nav || nav.scrollWidth <= nav.clientWidth) return;
+
+        nav.scrollTo({
+            left: item.offsetLeft - (nav.clientWidth - item.offsetWidth) / 2,
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        });
+    }
+
     /** 把后端返回的 422 校验错误摊平成人话。 */
     function validationMessage(payload) {
         if (!payload) return '请求失败。';
@@ -154,7 +170,18 @@
             lockTimer: null,
             pendingConflict: null,
             editing: false,
+            /**
+             * 收起来的纪元（分段 key）。
+             *
+             * 折叠状态活在这里而不是 DOM 上：列表是整块重建的（筛选、加载更多都会重建），
+             * 留在 DOM 里的话，读者收好的段落会在「加载更多」之后自己弹开。
+             */
+            folded: new Set(),
         };
+
+        // 目录条上的当前段（滚动时高亮）与它的观察器
+        let activeObserver = null;
+        let activeKey = null;
 
         /**
          * 当前世界的历法名。
@@ -194,6 +221,8 @@
 
         async function load({ append = false } = {}) {
             if (state.loading) return;
+            // 换筛选就是换一批结果，折叠跟着重来；「加载更多」只是续写，不该把读者收好的段落弹开
+            if (!append) state.folded.clear();
             state.loading = true;
             renderLoading();
 
@@ -244,6 +273,8 @@
             if (!state.events.length) {
                 host.innerHTML = '<div class="empty">没有符合条件的条目。<br>'
                     + '<span class="small">可以放宽筛选条件，或用「AI 梳理」从剧情原文里补齐。</span></div>';
+                // 没有条目就没有目录：留着上一批的条目只是几个跳不到的入口
+                renderEraNav([]);
                 return;
             }
 
@@ -285,37 +316,41 @@
                 return periodA === periodB ? orderA - orderB : periodA - periodB;
             });
 
+            // 先把分段算出来：正文与目录条用的是同一份数据，两处不该各算各的
             let lastPeriodId = null;
-
-            host.innerHTML = sortedKeys.map((key) => {
+            const segments = sortedKeys.map((key) => {
                 const items = groups.get(key);
-
-                if (key === 'unanchored') {
-                    lastPeriodId = null;
-
-                    return band('时间未定', `未能在文本中定位到${calendar()}区间，等待人工补全`, '#5c7189', items.length)
-                        + items.map(card).join('');
-                }
-
-                if (key === 'no-era') {
-                    lastPeriodId = null;
-
-                    return band('未归属纪元', '尚未挂载到任何时期', '#5c7189', items.length)
-                        + items.map(card).join('');
-                }
-
-                const era = items[0].era;
-                const period = era.period || null;
+                const era = key.startsWith('era:') ? items[0].era : null;
+                const period = era ? (era.period || null) : null;
                 // 只在时代变化时插一次分期标题，而不是每个纪元都重复一遍
-                const header = period && period.id !== lastPeriodId ? periodHeader(period) : '';
+                const header = period && period.id !== lastPeriodId ? period : null;
                 lastPeriodId = period ? period.id : null;
 
-                return header
-                    + band(era.name, `${era.date_label}${era.subtitle ? ' · ' + era.subtitle : ''}`, era.color, items.length)
-                    + items.map(card).join('');
-            }).join('') + (state.hasMore
-                ? `<div class="load-more"><button class="btn" id="load-more">加载更多（剩余 ${num(state.total - state.events.length)} 条）</button></div>`
-                : '');
+                return {
+                    key,
+                    name: era ? era.name : (key === 'unanchored' ? '时间未定' : '未归属纪元'),
+                    range: era
+                        ? `${era.date_label}${era.subtitle ? ' · ' + era.subtitle : ''}`
+                        : (key === 'unanchored'
+                            ? `未能在文本中定位到${calendar()}区间，等待人工补全`
+                            : '尚未挂载到任何时期'),
+                    color: era ? era.color : '#5c7189',
+                    count: items.length,
+                    header,
+                    cards: items.map(card).join(''),
+                };
+            });
+
+            // 一条主轴：轴画在 .tl-stack 上，分组体只是折叠用的容器（见 app.css）
+            host.innerHTML = '<div class="tl-stack">'
+                + segments.map(segment).join('')
+                + (state.hasMore
+                    ? `<div class="load-more"><button class="btn" id="load-more">加载更多（剩余 ${num(state.total - state.events.length)} 条）</button></div>`
+                    : '')
+                + '</div>';
+
+            renderEraNav(segments);
+            observeSegments();
         }
 
         /**
@@ -326,8 +361,8 @@
          * 界面上完全看不到 797–1101 那一段其实是一个整体。
          */
         function periodHeader(period) {
-            return `<div class="era-period">
-                <span class="era-period__bar" style="background:${esc(period.color)}"></span>
+            // 颜色以变量交给 CSS：时代与纪元一样，是主轴上的一个节点（见 app.css）
+            return `<div class="era-period" style="--era-color:${esc(period.color)}">
                 <span class="era-period__name">${esc(period.name)}</span>
                 <span class="era-period__range">${esc(period.date_label || '')}</span>
             </div>`;
@@ -351,13 +386,139 @@
                 + ` <span class="faint">（${esc(event.place.kind_label)}）</span>`;
         }
 
-        function band(name, range, color, count) {
-            return `<div class="era-band">
-                <span class="era-band__bar" style="background:${esc(color)}"></span>
-                <span class="era-band__name">${esc(name)}</span>
-                <span class="era-band__range">${esc(range)}</span>
-                <span class="era-band__count">CNT ${pad(count)}</span>
-            </div><div class="tl">`;
+        /**
+         * 一个分段：主轴上的纪元标记（同时是折叠开关）+ 它下面的条目。
+         *
+         * 时代标题也在主轴内 —— 它是分段的上级标签，但**不再包住**纪元：
+         * 主轴一路贯下去，不在任何一处分叉。
+         */
+        function segment(seg) {
+            const folded = state.folded.has(seg.key);
+            const hint = folded ? '展开这一段' : '收起这一段';
+
+            return (seg.header ? periodHeader(seg.header) : '')
+                + `<button type="button" class="era-band" data-era-fold="${esc(seg.key)}"
+                           aria-expanded="${folded ? 'false' : 'true'}"
+                           style="--era-color:${esc(seg.color)}" title="${hint}">
+                       <span class="era-band__fold" aria-hidden="true"></span>
+                       <span class="era-band__name">${esc(seg.name)}</span>
+                       <span class="era-band__range">${esc(seg.range)}</span>
+                       <span class="era-band__count">CNT ${pad(seg.count)}</span>
+                   </button>`
+                + `<div class="tl" data-era-body="${esc(seg.key)}"${folded ? ' hidden' : ''}>${seg.cards}</div>`;
+        }
+
+        /* ---------------- 折叠与快速导航 */
+
+        /**
+         * 收起 / 展开一个分段。
+         *
+         * 色带本身就是开关（按钮语义在标记里），这里只改状态、可见性与提示文案 ——
+         * 不重渲染整份列表：折叠是读者对「怎么读」的临时选择，重渲染会连滚动位置一起丢。
+         */
+        function toggleSegment(band) {
+            const key = band.dataset.eraFold;
+            const body = $(`#timeline-host [data-era-body="${key}"]`);
+            if (!body) return;
+
+            const folded = !state.folded.has(key);
+            if (folded) state.folded.add(key);
+            else state.folded.delete(key);
+
+            body.hidden = folded;
+            band.setAttribute('aria-expanded', folded ? 'false' : 'true');
+            band.title = folded ? '展开这一段' : '收起这一段';
+        }
+
+        /** 跳到某一段：收起的先展开再跳 —— 跳到一个空位置算不上导航。 */
+        function jumpToSegment(key) {
+            const band = $(`#timeline-host [data-era-fold="${key}"]`);
+            if (!band) return;
+
+            const body = $(`#timeline-host [data-era-body="${key}"]`);
+            if (body && body.hidden) toggleSegment(band);
+
+            // 落点让开顶栏与目录条：scroll-margin-top 已按 --anchor-offset + --era-nav-h 设好
+            band.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'start',
+            });
+        }
+
+        /**
+         * 快速导航条（主轴上的目录）。
+         *
+         * 按当前这批结果重建：筛选后一条不剩的纪元不该在目录里留一个跳不到的入口。
+         * 分段少于三条就不摆 —— 两条也要目次，那只是噪音。
+         */
+        function renderEraNav(segments) {
+            const nav = $('#era-nav');
+            if (!nav) return;
+
+            nav.hidden = segments.length < 3;
+            nav.innerHTML = segments.map((seg) => `
+                <button type="button" class="quick-nav__item" data-era-jump="${esc(seg.key)}"
+                        style="--nav-color:${esc(seg.color)}">
+                    <span class="quick-nav__dot" aria-hidden="true"></span>
+                    <span class="quick-nav__name">${esc(seg.name)}</span>
+                    <span class="quick-nav__count">${pad(seg.count)}</span>
+                </button>`).join('');
+
+            // 目录条压着落点：高度量出来写进变量，CSS 的 scroll-margin-top 直接用
+            document.documentElement.style.setProperty('--quick-nav-h', nav.hidden ? '0px' : `${nav.offsetHeight}px`);
+            activeKey = null;
+        }
+
+        /**
+         * 滚到哪一段，目录条里那一条就亮起来。
+         *
+         * 用 IntersectionObserver 而不是监听 scroll：后者每一帧都要读布局，
+         * 而这里只关心「哪一段的色带越过了顶部那两层面板」。
+         */
+        function observeSegments() {
+            activeObserver?.disconnect();
+            activeKey = null;
+
+            if (!('IntersectionObserver' in window)) return;
+
+            const offset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--anchor-offset')) || 78;
+            const navHeight = navBottom();
+
+            activeObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) setActiveSegment(entry.target.dataset.eraFold);
+                });
+            }, {
+                // 顶部让开顶栏与目录条，底部只留一条窄带：色带落进这条带子就算「当前段」
+                rootMargin: `-${offset + navHeight}px 0px -72% 0px`,
+            });
+
+            $$('#timeline-host .era-band').forEach((band) => activeObserver.observe(band));
+        }
+
+        /** 目录条占掉的高度（不显示时为 0）。 */
+        function navBottom() {
+            const nav = $('#era-nav');
+
+            return nav && !nav.hidden ? nav.offsetHeight : 0;
+        }
+
+        function setActiveSegment(key) {
+            if (!key || key === activeKey) return;
+            activeKey = key;
+
+            $$('#era-nav .quick-nav__item').forEach((item) => {
+                const current = item.dataset.eraJump === key;
+                item.classList.toggle('is-active', current);
+
+                if (current) {
+                    item.setAttribute('aria-current', 'true');
+                    // 高亮的那一条要在目录里看得见：分段多时它可能已经滚出滚动区
+                    centerInNav(item);
+                } else {
+                    item.removeAttribute('aria-current');
+                }
+            });
         }
 
         function card(event) {
@@ -1313,6 +1474,13 @@
             bindScrubber();
 
             $('#timeline-host').addEventListener('click', (e) => {
+                // 纪元色带：点它就是收起 / 展开这一段
+                const band = e.target.closest('[data-era-fold]');
+                if (band) {
+                    toggleSegment(band);
+                    return;
+                }
+
                 if (e.target.closest('#load-more')) {
                     state.page += 1;
                     load({ append: true });
@@ -1321,6 +1489,12 @@
 
                 const card = e.target.closest('.tl-card');
                 if (card) openEvent(Number(card.dataset.id));
+            });
+
+            // 目录条挂在宿主之外，单独绑定：点一条就跳到那一段（收起的先展开）
+            $('#era-nav')?.addEventListener('click', (e) => {
+                const item = e.target.closest('[data-era-jump]');
+                if (item) jumpToSegment(item.dataset.eraJump);
             });
 
             $('#drawer-close')?.addEventListener('click', closeDrawer);
@@ -2433,6 +2607,225 @@
         return { bind };
     })();
 
+    /* ------------------------------------------------------------------ 地名树 */
+
+    /*
+     * 地名树的折叠 / 定位 / 选中。
+     *
+     * 服务端把树拉平成「深度优先」的行序（父必在子前），因此这里不再建树：
+     *   折叠 —— 从某行起隐藏其后所有 depth 更大的行，直到遇到同级或更浅的一行；
+     *   定位 —— 深链（#place-…）沿 data-parent 链展开祖先，滚到视口中间并选中；
+     *   选中 —— 点击行（行内链接与折叠钮除外）高亮，并把地址栏 hash 换掉，便于分享。
+     *
+     * 事件全部委托在表上（一页几百行也只挂一个监听器）；显隐用一个线性扫描结算，
+     * 不做逐节点递归 —— 深层级在这里只是一串数字，不是一棵要在前端重建的树。
+     */
+    const Places = (() => {
+        let table = null;
+        let rows = [];
+        let bySlug = null;
+        let activeSlug = null;
+
+        const depthOf = (row) => Number(row.dataset.depth || 0);
+
+        /**
+         * 结算所有行的显隐。
+         *
+         * 行序是深度优先的，所以「栈里只要有一个祖先被折叠，本行就隐藏」，
+         * 遇到同深或更浅的一行时把栈弹到本层即可 —— 一趟线性扫描，无递归。
+         */
+        function apply() {
+            const stack = [];
+
+            rows.forEach((row) => {
+                stack.length = depthOf(row);
+                row.hidden = stack.some(Boolean);
+                stack.push(row.dataset.collapsed === '1');
+            });
+        }
+
+        function setCollapsed(row, collapsed) {
+            row.dataset.collapsed = collapsed ? '1' : '0';
+            row.querySelector('[data-place-toggle]')?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+
+        function select(row) {
+            rows.forEach((candidate) => candidate.classList.toggle('is-selected', candidate === row));
+            history.replaceState(null, '', '#place-'+row.dataset.slug);
+        }
+
+        /** 深链落点：展开祖先 → 选中 → 滚到视口中间。不在本页的名字静默放过。 */
+        function locate(slug) {
+            const row = bySlug.get(slug);
+
+            if (!row) return;
+
+            let cursor = row;
+
+            while (cursor) {
+                setCollapsed(cursor, false);
+                cursor = bySlug.get(cursor.dataset.parent || '');
+            }
+
+            apply();
+            select(row);
+            row.scrollIntoView({ block: 'center' });
+        }
+
+        /* ---------------- 快速导航（与时间线同款） */
+
+        /**
+         * 目录条：按顶层节点生成，粘在顶栏之下。
+         *
+         * 条目直接从**已经在 DOM 里的行**生成，而不是从数据里再算一遍 ——
+         * 筛选是服务端做的，行集就是当前的结果集，目录跟着它走，不可能对不上。
+         * 色块直接用级别标记本身（`.place-kind`）：那套配色只定义一次，
+         * 改一处两处都跟着变，连「地理实体用虚线框」这类差别也一并带进目录。
+         */
+        function renderNav() {
+            const nav = $('#place-nav');
+            if (!nav) return;
+
+            const roots = rows.filter((row) => depthOf(row) === 0);
+            // 顶层节点数就是这一页的分段数：太少就不摆（两条也要目次只是噪音）
+            nav.hidden = roots.length < 3;
+
+            // 下辖数：深度优先的行序里，一个顶层行之后、下一个顶层行之前的 depth=1 行就是它的直接下辖
+            const counts = new Map();
+            let current = null;
+
+            rows.forEach((row) => {
+                const depth = depthOf(row);
+
+                if (depth === 0) {
+                    current = row.dataset.slug;
+                    counts.set(current, 0);
+
+                    return;
+                }
+
+                if (depth === 1 && current) counts.set(current, counts.get(current) + 1);
+            });
+
+            nav.innerHTML = roots.map((row) => {
+                const kind = $('.place-kind', row);
+                const name = $('.place-row__main strong', row)?.textContent.trim() || row.dataset.slug;
+                const count = counts.get(row.dataset.slug) || 0;
+
+                return `<button type="button" class="quick-nav__item" data-place-jump="${esc(row.dataset.slug)}">
+                            <span class="place-kind quick-nav__kind" data-kind="${esc(kind?.dataset.kind || '')}"
+                                  aria-hidden="true"></span>
+                            <span class="quick-nav__name">${esc(name)}</span>
+                            ${count ? `<span class="quick-nav__count">${pad(count)}</span>` : ''}
+                        </button>`;
+            }).join('');
+
+            // 目录条压着落点：高度量出来写进变量，CSS 的 scroll-margin-top 直接用
+            document.documentElement.style.setProperty('--quick-nav-h', nav.hidden ? '0px' : `${nav.offsetHeight}px`);
+        }
+
+        function setActiveNav(slug) {
+            if (!slug || slug === activeSlug) return;
+            activeSlug = slug;
+
+            $$('#place-nav .quick-nav__item').forEach((item) => {
+                const current = item.dataset.placeJump === slug;
+                item.classList.toggle('is-active', current);
+
+                if (current) {
+                    item.setAttribute('aria-current', 'true');
+                    // 高亮的那一条要在目录里看得见：顶层节点多时它可能已经滚出滚动区
+                    centerInNav(item);
+                } else {
+                    item.removeAttribute('aria-current');
+                }
+            });
+        }
+
+        /**
+         * 滚到哪一段，目录里那一条就亮起来。
+         *
+         * 只观察顶层节点：读者的位置由「现在看的是哪个顶层节点」回答，
+         * 不必为几百行各挂一个观察目标。
+         */
+        function observeRows() {
+            if (!('IntersectionObserver' in window)) return;
+
+            const offset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--anchor-offset')) || 78;
+            const nav = $('#place-nav');
+            const navHeight = nav && !nav.hidden ? nav.offsetHeight : 0;
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) setActiveNav(entry.target.dataset.slug);
+                });
+            }, {
+                // 顶部让开顶栏与目录条，底部只留一条窄带：顶层行落进这条带子就算「当前段」
+                rootMargin: `-${offset + navHeight}px 0px -72% 0px`,
+            });
+
+            rows.filter((row) => depthOf(row) === 0).forEach((row) => observer.observe(row));
+        }
+
+        function boot() {
+            table = $('[data-place-tree]');
+            if (!table) return;
+
+            rows = $$('tbody tr[data-place-row]', table);
+            bySlug = new Map(rows.map((row) => [row.dataset.slug, row]));
+
+            table.addEventListener('click', (e) => {
+                const toggle = e.target.closest('[data-place-toggle]');
+
+                if (toggle) {
+                    const row = toggle.closest('tr');
+                    setCollapsed(row, row.dataset.collapsed !== '1');
+                    apply();
+
+                    return;
+                }
+
+                // 行内的链接与按钮各有各的去处，不抢它们的点击
+                if (e.target.closest('a, button')) return;
+
+                const row = e.target.closest('tr[data-place-row]');
+                if (row) select(row);
+            });
+
+            $$('[data-place-expand]').forEach((button) => button.addEventListener('click', () => {
+                rows.forEach((row) => setCollapsed(row, false));
+                apply();
+            }));
+
+            $$('[data-place-collapse]').forEach((button) => button.addEventListener('click', () => {
+                // 只折叠「有下辖」的行：全折成一列根节点就失去了树的形状，
+                // 而最外层本来就是读者要看的全貌
+                rows.forEach((row, index) => {
+                    setCollapsed(row, depthOf(rows[index + 1] ?? row) > depthOf(row));
+                });
+                apply();
+            }));
+
+            // 目录条：与时间线同款。点一条就走 locate —— 与深链、行点击是同一条路
+            renderNav();
+            observeRows();
+
+            $('#place-nav')?.addEventListener('click', (e) => {
+                const item = e.target.closest('[data-place-jump]');
+                if (item) locate(item.dataset.placeJump);
+            });
+
+            // 深链：首次进入与页内改 hash（如从条目页跳回来的浏览器回退）都要接住
+            if (location.hash.startsWith('#place-')) locate(location.hash.slice(7));
+
+            window.addEventListener('hashchange', () => {
+                if (location.hash.startsWith('#place-')) locate(location.hash.slice(7));
+            });
+        }
+
+        return { boot };
+    })();
+
     /* ------------------------------------------------------------------ 分派 */
 
     // 入场动效在解析时同步启动：脚本挨着 </body>，DOM 已就绪、首绘还没发生 ——
@@ -2445,6 +2838,7 @@
         NavFeedback.bind();
         Motion.bindChrome();
 
+        if (PAGE === 'places') Places.boot();
         if (PAGE === 'timeline') Timeline.boot();
         if (PAGE === 'proposals') Proposals.boot();
         if (PAGE === 'anomalies') Anomalies.boot();

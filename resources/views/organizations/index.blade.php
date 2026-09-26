@@ -89,25 +89,36 @@
                     @endif
                 </div>
             @endif
+        </div>
 
-            @foreach ($groups as $group)
-                <div class="section-label">{{ $group['kind']->label() }}</div>
+        {{--
+            与干员简介同一套块式：卡片网格（磨砂玻璃与入场错峰随 .operator-card 自动生效）。
+            网格必须在 .panel 之外 —— 面板是不透明底，卡片浮在上面时玻璃透不出背后的光。
+            类型分组仍用 section-label：分组本身是这一页的信息，不是列表装饰。
+        --}}
+        @foreach ($groups as $group)
+            <div class="section-label">{{ $group['kind']->label() }}</div>
 
+            <div class="operator-grid">
                 @foreach ($group['items'] as $org)
-                    <div class="card" id="org-{{ $org->slug }}">
-                        <div class="row" style="align-items:baseline">
-                            @if ($org->logoUrl())
-                                {{-- 徽记：来源维基的阵营标志。名字就在旁边，alt 留空免得读屏重复 --}}
-                                <img class="emblem emblem--lg" src="{{ $org->logoUrl() }}"
-                                     alt="" loading="lazy" width="34" height="34">
-                            @endif
-                            <strong>{{ $org->name }}</strong>
-                            @if (filled($org->full_name))
-                                <span class="faint small mono">{{ $org->full_name }}</span>
-                            @endif
-                        </div>
+                    <article class="operator-card" id="org-{{ $org->slug }}">
+                        <header class="operator-card__head">
+                            <div class="operator-card__id">
+                                @if ($org->logoUrl())
+                                    {{-- 徽记：来源维基的阵营标志。名字就在旁边，alt 留空免得读屏重复 --}}
+                                    <img class="emblem emblem--lg" src="{{ $org->logoUrl() }}"
+                                         alt="" loading="lazy" width="72" height="72">
+                                @endif
+                                <div style="min-width:0">
+                                    <strong class="operator-card__name">{{ $org->name }}</strong>
+                                    @if (filled($org->full_name))
+                                        <div class="operator-card__code mono">{{ $org->full_name }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        </header>
 
-                        <div class="chips" style="margin-top:6px">
+                        <div class="chips">
                             @if (filled($org->parent?->name))
                                 {{-- 归属只作事实陈述：组织的上级多半是政体，把它套进组织树只会把政体也拖进来 --}}
                                 <span class="chip">归属 {{ $org->parent->name }}</span>
@@ -132,16 +143,16 @@
                         </div>
 
                         @if (filled($org->description))
-                            <p class="muted small" style="margin:6px 0 0">{{ $org->description }}</p>
+                            <p class="operator-card__profile operator-card__profile--full">{{ $org->description }}</p>
                         @else
                             {{-- 缺口如实呈现：留白会让人以为「这个组织没什么可说的」 --}}
-                            <p class="faint small" style="margin:6px 0 0">
+                            <p class="operator-card__profile operator-card__profile--full operator-card__profile--missing">
                                 出处里没有给出这一组织的说明，本仓库只登记了名称与归属。
                             </p>
                         @endif
-                    </div>
+                    </article>
                 @endforeach
-            @endforeach
-        </div>
+            </div>
+        @endforeach
     </main>
 @endsection

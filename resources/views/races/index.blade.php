@@ -42,28 +42,42 @@
                     @endif
                 </div>
             @endif
+        </div>
 
+        {{--
+            与干员简介同一套块式：卡片网格（磨砂玻璃 + 入场错峰都随 .operator-card 自动生效）。
+            卡片必须放在 .panel 之外 —— 面板是不透明底，卡片浮在它上面时玻璃就透不出背后的光。
+            种族没有徽记也没有详情页：头部从名字开始，说明直接全文展示（它本身就是内容）。
+        --}}
+        <div class="operator-grid">
             @foreach ($races as $race)
-                <div class="card" id="race-{{ $race->slug }}">
-                    <div class="row" style="align-items:baseline">
-                        <strong>{{ $race->name }}</strong>
-                        @if (filled($race->english))
-                            <span class="faint small mono">{{ $race->english }}</span>
-                        @endif
-                        @if ($race->characters_count > 0)
+                <article class="operator-card" id="race-{{ $race->slug }}">
+                    <header class="operator-card__head">
+                        <div class="operator-card__id">
+                            <div style="min-width:0">
+                                <strong class="operator-card__name">{{ $race->name }}</strong>
+                                @if (filled($race->english))
+                                    <div class="operator-card__code mono">{{ $race->english }}</div>
+                                @endif
+                            </div>
+                        </div>
+                    </header>
+
+                    @if ($race->characters_count > 0)
+                        <div class="chips">
                             <span class="chip">{{ $race->characters_count }} 位人物</span>
-                        @endif
-                    </div>
+                        </div>
+                    @endif
 
                     @if (filled($race->description))
-                        <p class="muted small" style="margin:6px 0 0">{{ $race->description }}</p>
+                        <p class="operator-card__profile operator-card__profile--full">{{ $race->description }}</p>
                     @else
                         {{-- 缺口如实呈现，而不是留白：留白会让人以为「书里没有这个种族」 --}}
-                        <p class="faint small" style="margin:6px 0 0">
+                        <p class="operator-card__profile operator-card__profile--full operator-card__profile--missing">
                             书里第四章未为这一种族单独立目，本仓库只登记了名称与人物归属。
                         </p>
                     @endif
-                </div>
+                </article>
             @endforeach
         </div>
     </main>

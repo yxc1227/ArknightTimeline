@@ -208,6 +208,13 @@
             </div>
         </div>
 
+        {{--
+            主轴上的快速导航（目录条）。
+            粘在顶栏之下，内容由 JS 按当前结果重建 —— 筛选后一条不剩的纪元，
+            不该在目录里留一个跳不到的入口；分段太少时整条收起来。
+        --}}
+        <nav class="quick-nav" id="era-nav" aria-label="纪元快速导航" hidden></nav>
+
         <div id="timeline-host"></div>
     </main>
 

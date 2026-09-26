@@ -11,14 +11,14 @@
                 @if ($character->avatarUrl())
                     {{-- 有真头像就用真头像：与首字方块同一几何，只是把绘制交给图片；名字就在旁边，alt 留空 --}}
                     <img class="operator-mark operator-mark--img" src="{{ $character->avatarUrl() }}"
-                         alt="" width="52" height="52">
+                         alt="" width="120" height="120">
                 @else
                     <span class="operator-mark" aria-hidden="true">{{ mb_substr($character->name, 0, 1) }}</span>
                 @endif
 
                 <div style="flex:1;min-width:0">
                     <div class="row" style="align-items:center;gap:9px;flex-wrap:wrap">
-                        <h1 style="margin:0;font-size:19px;letter-spacing:.02em">{{ $character->name }}</h1>
+                        <h1 style="margin:0;font-size:24px;letter-spacing:.02em">{{ $character->name }}</h1>
                         @if (filled($character->codename))
                             <span class="mono faint">{{ $character->codename }}</span>
                         @endif

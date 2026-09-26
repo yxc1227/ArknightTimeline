@@ -321,6 +321,55 @@ class TimelinePageTest extends TestCase
             ->assertSee('selected', false);
     }
 
+    /**
+     * 时间线是**一条主轴**：纪元只是轴上的分段标记，分组体不再各起一条虚线。
+     *
+     * 这条只能静态校验（正文由 JS 渲染，测试里也没有浏览器）：一旦有人把轴画回 `.tl`，
+     * 每个纪元就又分叉出一条自己的轴 —— 整页看起来会从年表变回一棵树。
+     * 顺带锁住折叠与快速导航两个挂点：它们在 JS 里生成，没有服务端标记可断言。
+     */
+    public function test_the_timeline_keeps_a_single_axis_with_fold_and_quick_nav(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+        $this->assertStringContainsString('id="era-nav"', $html);
+
+        // 注释里会讨论这些选择器本身，先剥掉注释再匹配规则
+        $css = (string) preg_replace(
+            '#/\*.*?\*/#s',
+            '',
+            (string) file_get_contents(public_path('assets/app.css')),
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/\.tl-stack\s*\{[^}]*position:\s*relative/s',
+            $css,
+            '主轴容器 .tl-stack 没有定位，虚线无从画起',
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/\.tl-stack::before\s*\{[^}]*repeating-linear-gradient/s',
+            $css,
+            '主轴虚线没有画在 .tl-stack 上',
+        );
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/\.tl::before/',
+            $css,
+            '分组体 .tl 又各自画了一条轴 —— 主轴会在每个纪元处分叉',
+        );
+
+        $this->assertStringContainsString(
+            'var(--quick-nav-h',
+            $css,
+            '时间线的落点没让开粘着的快速导航条',
+        );
+
+        $js = (string) file_get_contents(public_path('assets/app.js'));
+
+        $this->assertStringContainsString('data-era-fold', $js, '纪元色带不再是折叠开关');
+        $this->assertStringContainsString('data-era-jump', $js, '快速导航条没有跳转挂点');
+    }
+
     /** 通过信息源语料生成一条真实提案，供页面渲染用。 */
     private function synthesizeOneProposal(): void
     {

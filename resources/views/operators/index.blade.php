@@ -137,7 +137,7 @@
                                 @if ($character->avatarUrl())
                                     {{-- 头像是来源维基的头像图：名字就在旁边，alt 留空免得读屏重复 --}}
                                     <img class="operator-card__avatar" src="{{ $character->avatarUrl() }}"
-                                         alt="" loading="lazy" width="52" height="52">
+                                         alt="" loading="lazy" width="96" height="96">
                                 @endif
                                 <div style="min-width:0">
                                     <a class="operator-card__name" href="{{ route('operators.show', $character) }}">
