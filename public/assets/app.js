@@ -214,6 +214,9 @@
             state.unanchored = data.unanchored_count || 0;
 
             renderTimeline();
+            // 新内容进场：首屏 / 筛选（整批更换）时视口内的块错峰落位、视口外的滚到时揭示；
+            // 「加载更多」只是尾部续写，屏内已有的块不重播动画（revealOnly）
+            Motion.mark($('#timeline-host'), { revealOnly: Boolean(append) });
             renderScrubber();
         }
 
@@ -2195,6 +2198,200 @@
         return { boot };
     })();
 
+    /* ------------------------------------------------------------------ 动效 */
+
+    /*
+     * 入场与滚动揭示。
+     *
+     * 服务端渲染没有「页面切换」事件可用，能做的就两件事：
+     *   1. 载入时给首屏内的块一个短促的落位动画（按容器错峰，样式见 CSS「动效」段）；
+     *   2. 首屏外的块先挂起（data-reveal），滚进视口时由观察器点亮。
+     *
+     * 由 JS 全权挂载：没有 JS 时页面立即完整 —— 动画是增强，不是内容显示的前提；
+     * 系统开了「减弱动态效果」时整个模块不启动（CSS 侧还有一层兜底）。
+     *
+     * boot() 在脚本解析时同步执行（脚本挨着 </body>，DOM 已就绪、首绘尚未发生）——
+     * 首屏外元素的「隐藏态」必须赶在第一次绘制前挂好，否则会先闪一下再被藏起来。
+     */
+    const Motion = (() => {
+        // 参与者都是会成批复现的块。表格行刻意不进：它们都在 .panel 里，
+        // 外层已经要动一次，再给行加一层就成了动两次。
+        // .login-card 带上：登录/注册页没有 .panel，卡片本身就是那儿唯一的块
+        const SELECTOR = '.sidebar, .panel, .operator-card, .tl-item, .login-card';
+
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+        let observer = null;
+        // 正在等待揭示的元素：整块换内容（时间线重新渲染）后要能从观察器上摘掉旧节点
+        const waiting = new Set();
+
+        /** 同一批里最外层已经要动，就不再给嵌套的子元素挂动画（否则动两次）。 */
+        function nested(el, root) {
+            const ancestor = el.parentElement ? el.parentElement.closest(SELECTOR) : null;
+
+            return ancestor !== null && root.contains(ancestor);
+        }
+
+        /** 挂起等待揭示：先藏起来，滚进视口时点亮。 */
+        function reveal(el) {
+            el.setAttribute('data-reveal', '');
+            waiting.add(el);
+            observer.observe(el);
+        }
+
+        /**
+         * @param {Document|Element|null} root 扫描范围（时间线在每次渲染后重新标一轮）
+         * @param {{revealOnly?: boolean}} opts revealOnly：只给视口下方的新内容挂揭示，
+         *        屏内已有内容不重播动画（加载更多这类「尾部续写」场景）
+         */
+        function mark(root = document, { revealOnly = false } = {}) {
+            if (reduced.matches || !root) return;
+
+            if (!observer) {
+                observer = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (!entry.isIntersecting) return;
+
+                        const el = entry.target;
+                        el.classList.add('is-revealed');
+                        observer.unobserve(el);
+                        waiting.delete(el);
+
+                        // 动画结束后摘掉揭示标记：留着这条规则会一直压住悬停位移（如卡片的上浮）
+                        window.setTimeout(() => {
+                            el.classList.remove('is-revealed');
+                            el.removeAttribute('data-reveal');
+                        }, 640);
+                    });
+                }, { rootMargin: '0px 0px -8% 0px' });
+            }
+
+            // 整块换内容后旧节点已不在 DOM：先从观察器上摘掉，避免长会话里越挂越多
+            waiting.forEach((el) => {
+                if (el.isConnected) return;
+                observer.unobserve(el);
+                waiting.delete(el);
+            });
+
+            // 错峰序号按父容器各排各的队：主栏里的块与网格里的卡互不牵连
+            const counted = new Map();
+
+            $$(SELECTOR, root).forEach((el) => {
+                if (el.dataset.motion || nested(el, root)) return;
+
+                el.dataset.motion = '1';
+
+                const inView = el.getBoundingClientRect().top < window.innerHeight * 0.98;
+
+                if (revealOnly) {
+                    // 尾部续写：只挂载视口下方的新内容，屏内的已有内容原样保留
+                    if (!inView) reveal(el);
+
+                    return;
+                }
+
+                if (inView) {
+                    const parent = el.parentElement;
+                    const index = counted.get(parent) || 0;
+                    counted.set(parent, index + 1);
+                    el.style.animationDelay = Math.min(index * 40, 150) + 'ms';
+                    el.classList.add('motion-enter');
+
+                    return;
+                }
+
+                reveal(el);
+            });
+        }
+
+        function boot() {
+            // 没有 IntersectionObserver 的老浏览器直接跳过：内容原样完整，只是不动画
+            if (reduced.matches || !('IntersectionObserver' in window)) return;
+
+            document.documentElement.classList.add('motion');
+            mark();
+        }
+
+        /**
+         * 顶栏「已滚动」状态。
+         *
+         * 与动效偏好无关 —— 阴影是状态而不是动画，减弱动态时只是切换得干脆一点。
+         * scroll 用 rAF 节流 + passive：滚动期间只做一次类名切换，不读布局。
+         */
+        function bindChrome() {
+            let ticking = false;
+
+            const sync = () => {
+                ticking = false;
+                document.body.classList.toggle('is-scrolled', window.scrollY > 6);
+            };
+
+            window.addEventListener('scroll', () => {
+                if (ticking) return;
+                ticking = true;
+                requestAnimationFrame(sync);
+            }, { passive: true });
+
+            sync();
+        }
+
+        return { boot, mark, bindChrome };
+    })();
+
+    /*
+     * 导航反馈：站内跳转（链接点击 / 表单提交）时拉一条顶部进度线，直到下一页接管 ——
+     * 服务端渲染的整页跳转之间本是「无反馈空窗」：快时不觉得，慢时读者会怀疑没点上。
+     *
+     * 只处理**真的会离开当前页**的导航：新标签页、修饰键、下载、同页深链
+     * （词典四页的 `#place-…` 就是一路）与外站链接一律放过。
+     */
+    const NavFeedback = (() => {
+        let timer = null;
+
+        function signal() {
+            document.body.classList.add('is-navigating');
+
+            // 兜底：我们跑在冒泡末端，若之后的处理器取消了这次导航，
+            // 进度线不能一直挂在顶上
+            clearTimeout(timer);
+            timer = setTimeout(() => document.body.classList.remove('is-navigating'), 6000);
+        }
+
+        function navigatesAway(link) {
+            if (link.hasAttribute('download') || link.target === '_blank') return false;
+
+            const url = new URL(link.href, location.href);
+
+            if (url.origin !== location.origin) return false;
+
+            // 同址链接（只差片段）不发生整页跳转
+            return !(url.pathname === location.pathname && url.search === location.search);
+        }
+
+        function bind() {
+            document.addEventListener('click', (e) => {
+                if (e.defaultPrevented || e.button !== 0) return;
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+                const link = e.target.closest('a[href]');
+
+                if (link && navigatesAway(link)) signal();
+            });
+
+            // 原生表单提交（筛选 GET、退出 POST）同样是一次整页跳转；
+            // 被模块接管的提交（fetch 落库）在自己的处理器里同步 preventDefault，这里放过
+            document.addEventListener('submit', (e) => {
+                if (!e.defaultPrevented) signal();
+            });
+
+            // 从往返缓存回来时页面还是离开前的样子：进度线必须收掉
+            window.addEventListener('pageshow', (e) => {
+                if (e.persisted) document.body.classList.remove('is-navigating');
+            });
+        }
+
+        return { bind, signal };
+    })();
+
     /* ------------------------------------------------------------------ 服务端筛选侧栏 */
 
     // 账号管理开创、现在全部列表页共用的形态：GET 表单包住三段式侧栏，
@@ -2212,6 +2409,8 @@
 
                 const submit = () => {
                     loading?.classList.add('is-loading');
+                    // form.submit() 不触发 submit 事件，导航进度线在这里手动接上
+                    NavFeedback.signal();
                     form.submit();
                 };
 
@@ -2236,9 +2435,15 @@
 
     /* ------------------------------------------------------------------ 分派 */
 
+    // 入场动效在解析时同步启动：脚本挨着 </body>，DOM 已就绪、首绘还没发生 ——
+    // 首屏外元素的隐藏态必须赶在第一次绘制前挂好，否则会先闪一下再被藏起来
+    Motion.boot();
+
     document.addEventListener('DOMContentLoaded', () => {
         // 侧栏表单先于页面模块统一绑定，各模块不再重复实现
         SidebarForms.bind();
+        NavFeedback.bind();
+        Motion.bindChrome();
 
         if (PAGE === 'timeline') Timeline.boot();
         if (PAGE === 'proposals') Proposals.boot();

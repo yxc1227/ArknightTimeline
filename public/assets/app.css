@@ -56,9 +56,44 @@
 
     /* 微标签统一用等宽 —— 零依赖地拿到「技术化」观感 */
     --label: var(--mono);
+
+    /* ---- 动效：三档时长 + 一条统一缓动 ----
+       不用回弹（overshoot）：仪表化的界面里，回弹读起来像玩具。
+       时长封顶 420ms —— 再长就从「利落」变成「拖沓」。 */
+    --dur-fast: .16s;
+    --dur-base: .26s;
+    --dur-slow: .42s;
+    --ease: cubic-bezier(.22, .61, .36, 1);
+
+    /* ---- 磨砂玻璃：条目块的表面 ----
+       底色比 --bg-raised 略亮一点：背景几乎是纯黑，玻璃若再压暗就看不出层次了。
+       透明度与模糊是一组：越透越要靠模糊托住文字可读性，调一个记得看另一个。
+       收在变量里：以后要给别的块上玻璃，改的是这一处而不是散落的 rgba。 */
+    --glass: rgba(24, 24, 24, 0.52);
+    --glass-hover: rgba(31, 31, 31, 0.74);
+    --glass-blur: 10px;
 }
 
 * { box-sizing: border-box; }
+
+/*
+ * 系统级「减弱动态效果」：装饰性动画与过渡一刀切。
+ * 唯一的例外是 .spinner —— 它是功能性指示器，冻结的转圈只会让人以为页面卡死。
+ * 入场与滚动揭示不必在这里单独处理：那个模块在 JS 侧看到该偏好就不启动，
+ * html.motion 根本不会挂上。
+ */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+    }
+
+    .spinner {
+        animation-duration: .7s !important;
+        animation-iteration-count: infinite !important;
+    }
+}
 
 html, body {
     margin: 0;
@@ -136,6 +171,81 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 ::selection { background: var(--accent); color: var(--accent-ink); }
 
+/* ---------------------------------------------------------------- 动效 */
+
+/*
+ * 入场与滚动揭示（两态，一套语言）：
+ *   1. `.motion-enter` —— 首屏内的块，载入时自下 7px 落位，同容器内错峰（delay 由 JS 挂）；
+ *   2. `[data-reveal]` —— 首屏外的块，滚进视口时点亮。
+ * 两者都只在 `html.motion` 下存在（由 JS 挂载）：没有 JS 时页面立即完整 ——
+ * 动画是增强，不是内容显示的前提；开了「减弱动态效果」时这个 class 根本不会出现。
+ *
+ * 只用 opacity / transform：两者都能交给合成器，滚动与入场都不触发重排重绘。
+ */
+@keyframes rise-in {
+    from { opacity: 0; transform: translateY(7px); }
+    to { opacity: 1; transform: none; }
+}
+
+html.motion .motion-enter { animation: rise-in var(--dur-base) var(--ease) backwards; }
+
+/* 揭示用略深的位移（10px）：它出现在视口正中，幅度太小会像「没做」 */
+html.motion [data-reveal] { opacity: 0; transform: translateY(10px); }
+
+html.motion [data-reveal].is-revealed {
+    opacity: 1;
+    transform: none;
+    transition: opacity var(--dur-slow) var(--ease), transform var(--dur-slow) var(--ease);
+}
+
+/* 图片（头像）载入淡入：本地资产几乎瞬间完成，只为避免「空格子 → 突现」的跳变 */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+html.motion .operator-card__avatar,
+html.motion .operator-mark--img,
+html.motion .avatar {
+    animation: fade-in .36s var(--ease);
+}
+
+/* 列表换数据：半透明之外补一点呼吸 ——「正在取数」比「变灰了」更明确 */
+@keyframes load-pulse { 50% { opacity: .55; } }
+
+html.motion .table-wrap.is-loading { animation: load-pulse 1.1s ease-in-out infinite; }
+
+/*
+ * 顶栏「已滚动」状态：往下滚之后压深底色、补一道阴影，
+ * 导航与内容之间始终有一条可读的边。切类名只触发合成，滚动时零重排。
+ */
+body.is-scrolled .topbar {
+    background: rgba(13, 13, 13, 0.97);
+    box-shadow: 0 10px 24px -18px #000;
+}
+
+/*
+ * 导航进度线：站内跳转时在顶部拉一条 2px 的仪表黄线，扫到 90% 后停住等下一页接管。
+ * 「LOADING」语汇的整站版本（见文件头：编号与进度计数是这套设计的地基之一）——
+ * 服务端渲染的整页跳转之间本是「无反馈空窗」：快时不觉得，慢时读者会怀疑没点上。
+ */
+body.is-navigating::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    z-index: 60;
+    background: linear-gradient(90deg, transparent, var(--accent) 35%, var(--accent));
+    transform-origin: left;
+    pointer-events: none;
+    animation: nav-progress 1.2s var(--ease) forwards;
+}
+
+@keyframes nav-progress {
+    from { transform: scaleX(0); opacity: 1; }
+    60% { transform: scaleX(.8); }
+    to { transform: scaleX(.9); opacity: .85; }
+}
+
 /* ---------------------------------------------------------------- 微标签母题 */
 
 /* 「ENGLISH // 中文」双语标签：整套系统里所有栏目标题、页签、分组标题共用这一个母题 */
@@ -165,6 +275,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
     background: rgba(13, 13, 13, 0.92);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
+    transition: background var(--dur-fast) var(--ease), box-shadow var(--dur-base) var(--ease);
 }
 
 /* 顶栏下沿的斜纹警示条：品牌感最强的一处细节 */
@@ -505,8 +616,11 @@ select {
     letter-spacing: 0.06em;
     cursor: pointer;
     white-space: nowrap;
-    transition: background .12s, border-color .12s, color .12s;
+    transition: background .12s, border-color .12s, color .12s, transform var(--dur-fast) var(--ease);
 }
+
+/* 按下去的 1px 位移：比任何颜色变化都更直接地回答「点到了吗」 */
+.btn:active:not(:disabled) { transform: translateY(1px); }
 
 .btn:hover:not(:disabled) {
     background: var(--bg-panel);
@@ -740,6 +854,9 @@ select {
 .tl-card[data-anchored='0'] { border-left-color: var(--text-faint); opacity: .8; }
 .tl-card[data-anomaly='1'] { border-left-color: var(--danger); }
 .tl-card[data-frozen='1'] { border-left-color: var(--warn); }
+
+/* 条目块 / 人员卡 / 词典行的磨砂玻璃统一在文件末尾的「磨砂玻璃」段定义 ——
+   那里是唯一信息源（表面 + 光源 + 纪律），这里只留指针，避免两处漂移。 */
 
 .tl-card__head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
 
@@ -1822,10 +1939,10 @@ img.avatar {
     background: var(--bg-raised);
     border: 1px solid var(--border);
     border-left: 2px solid var(--border-strong);
-    transition: border-color .15s, background .15s;
+    transition: border-color .15s, background .15s, transform var(--dur-fast) var(--ease);
 }
 
-.operator-card:hover { border-left-color: var(--accent); background: var(--bg-panel); }
+.operator-card:hover { border-left-color: var(--accent); background: var(--bg-panel); transform: translateY(-1px); }
 
 .operator-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 
@@ -1973,3 +2090,68 @@ img.avatar {
 .world-switch__item { align-items: center; text-align: center; }
 .world-switch__item .icon { margin-bottom: 3px; opacity: .85; }
 .world-switch__item[data-active='1'] .icon { opacity: 1; }
+
+/* ---------------------------------------------------------------- 磨砂玻璃 */
+
+/*
+ * 内容卡片的磨砂玻璃：条目块（.tl-card）/ 人员卡（.operator-card）/ 词典行（.card）。
+ *
+ * 背景是固定层（技术网格 + 等高线 + 顶部暖光），卡片浮在其上：半透明深底 + 背景模糊，
+ * 地形会从卡片底下隐约透出来，而不是被一块死黑盖住。
+ *
+ * 玻璃由三件东西组成，缺一件就不成立（踩过一次：只做第 1 件，用户反馈「没有透明效果」）：
+ *   1. 卡片表面 —— 下面的 @supports 块；
+ *   2. **背后的光** —— `.shell::before`。近黑底上，卡片背后也是近黑，没有东西可透，
+ *      透明度在视觉上等于不存在；这一层是给玻璃透的光；
+ *   3. 退回路径 —— 不支持模糊的浏览器保持原有实心底，没有模糊的半透明只会更花。
+ *
+ * 纪律：
+ *   - 只给「内容卡片」，不上面板（.panel）、侧栏与表格 —— 它们是框架；且面板常包着
+ *     卡片，两层玻璃叠在一起谁都读不出来；
+ *   - 透明度停在「隐约透出」一档：要的是质感，不是透明。
+ */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .tl-card,
+    .operator-card,
+    .card {
+        background: var(--glass);
+        -webkit-backdrop-filter: blur(var(--glass-blur));
+        backdrop-filter: blur(var(--glass-blur));
+        /* 顶边一道极淡的亮线：玻璃的「厚度」由它给出；越透越要它撑住上沿的边界。
+           不加圆角、不做斜向高光 —— 那套 iOS 语汇与仪表面板不搭。
+           词典行被 :target 标记时由那条更具体的规则接管（深链落点优先） */
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+    }
+
+    /* 悬停是「浮起来」：底色变实一档，而不是换一个颜色。
+       本段位于文件末尾，源顺序上盖过各自的基础悬停 */
+    .tl-card:hover,
+    .operator-card:hover { background: var(--glass-hover); }
+}
+
+/*
+ * 玻璃的「光源」。
+ *
+ * 只有半透明 + 模糊是不够的：页面底色近黑，卡片背后也是近黑，透过去仍是近黑 ——
+ * 没有东西可透，玻璃就不存在。这一层是全站、视口锚定的一束柔光
+ * （暖黄 + 冷青，站点仅有的两个信号色，外加一层极广的白纱打底）：
+ * 卡片浮在光上，模糊把光晕化成雾面；滚动时光不动、卡在动，
+ * 「透过玻璃看见背后」这才成立。
+ *
+ * 用 position: fixed 而不是 background-attachment: fixed —— 后者在移动端滚动时
+ * 按老规矩重绘；整层 z-index: -1 藏在 `.shell`（它的层叠上下文）所有内容之下，
+ * 不遮挡、不拦截任何东西。
+ */
+.shell::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(70% 52% at 30% 16%, rgba(255, 212, 0, .055), transparent 100%),
+        radial-gradient(62% 46% at 82% 78%, rgba(87, 199, 212, .04), transparent 100%),
+        /* 白纱打底：保证每一张卡无论滚到哪里，身下都有一点光，
+           而不是只有两团光斑附近的卡片才「有玻璃」 */
+        radial-gradient(120% 90% at 50% 50%, rgba(255, 255, 255, .012), transparent 100%);
+}
