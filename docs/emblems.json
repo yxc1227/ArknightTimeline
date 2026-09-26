@@ -1,0 +1,389 @@
+{
+  "prts": {
+    "site": "PRTS wiki（明日方舟）· 泰拉大典",
+    "page": "https://prts.wiki/w/泰拉大典:地理 · 泰拉大典:组织",
+    "filePattern": "Logo <名>.<png|svg>",
+    "note": "泰拉大典的地理/组织条目徽记。file 是相对 public/ 的路径，与 places.logo / factions.logo 存的值同形。终末地侧无对应来源。",
+    "count": 47,
+    "items": [
+      {
+        "name": "S.W.E.E.P.",
+        "file": "assets/emblems/S.W.E.E.P..png",
+        "wikiFile": "Logo_S.W.E.E.P..png",
+        "sourceUrl": "https://media.prts.wiki/e/e0/Logo_S.W.E.E.P..png",
+        "dims": "510x510",
+        "bytes": 21188
+      },
+      {
+        "name": "东",
+        "file": "assets/emblems/东.png",
+        "wikiFile": "Logo_东.png",
+        "sourceUrl": "https://media.prts.wiki/c/c5/Logo_%E4%B8%9C.png",
+        "dims": "510x510",
+        "bytes": 22464
+      },
+      {
+        "name": "乌萨斯",
+        "file": "assets/emblems/乌萨斯.png",
+        "wikiFile": "Logo_乌萨斯.png",
+        "sourceUrl": "https://media.prts.wiki/d/d8/Logo_%E4%B9%8C%E8%90%A8%E6%96%AF.png",
+        "dims": "510x510",
+        "bytes": 27350
+      },
+      {
+        "name": "乌萨斯学生自治团",
+        "file": "assets/emblems/乌萨斯学生自治团.png",
+        "wikiFile": "Logo_乌萨斯学生自治团.png",
+        "sourceUrl": "https://media.prts.wiki/3/3a/Logo_%E4%B9%8C%E8%90%A8%E6%96%AF%E5%AD%A6%E7%94%9F%E8%87%AA%E6%B2%BB%E5%9B%A2.png",
+        "dims": "510x510",
+        "bytes": 72733
+      },
+      {
+        "name": "企鹅物流",
+        "file": "assets/emblems/企鹅物流.png",
+        "wikiFile": "Logo_企鹅物流.png",
+        "sourceUrl": "https://media.prts.wiki/2/2b/Logo_%E4%BC%81%E9%B9%85%E7%89%A9%E6%B5%81.png",
+        "dims": "510x510",
+        "bytes": 36545
+      },
+      {
+        "name": "伊比利亚",
+        "file": "assets/emblems/伊比利亚.png",
+        "wikiFile": "Logo_伊比利亚.png",
+        "sourceUrl": "https://media.prts.wiki/b/b6/Logo_%E4%BC%8A%E6%AF%94%E5%88%A9%E4%BA%9A.png",
+        "dims": "510x510",
+        "bytes": 21022
+      },
+      {
+        "name": "使徒",
+        "file": "assets/emblems/使徒.png",
+        "wikiFile": "Logo_使徒.png",
+        "sourceUrl": "https://media.prts.wiki/3/38/Logo_%E4%BD%BF%E5%BE%92.png",
+        "dims": "510x510",
+        "bytes": 27637
+      },
+      {
+        "name": "卡西米尔",
+        "file": "assets/emblems/卡西米尔.png",
+        "wikiFile": "Logo_卡西米尔.png",
+        "sourceUrl": "https://media.prts.wiki/5/5f/Logo_%E5%8D%A1%E8%A5%BF%E7%B1%B3%E5%B0%94.png",
+        "dims": "510x510",
+        "bytes": 26994
+      },
+      {
+        "name": "叙拉古",
+        "file": "assets/emblems/叙拉古.png",
+        "wikiFile": "Logo_叙拉古.png",
+        "sourceUrl": "https://media.prts.wiki/0/03/Logo_%E5%8F%99%E6%8B%89%E5%8F%A4.png",
+        "dims": "510x510",
+        "bytes": 63564
+      },
+      {
+        "name": "哥伦比亚",
+        "file": "assets/emblems/哥伦比亚.png",
+        "wikiFile": "Logo_哥伦比亚.png",
+        "sourceUrl": "https://media.prts.wiki/3/3c/Logo_%E5%93%A5%E4%BC%A6%E6%AF%94%E4%BA%9A.png",
+        "dims": "510x510",
+        "bytes": 50772
+      },
+      {
+        "name": "喀兰贸易",
+        "file": "assets/emblems/喀兰贸易.png",
+        "wikiFile": "Logo_喀兰贸易.png",
+        "sourceUrl": "https://media.prts.wiki/a/a0/Logo_%E5%96%80%E5%85%B0%E8%B4%B8%E6%98%93.png",
+        "dims": "510x510",
+        "bytes": 63103
+      },
+      {
+        "name": "塔拉",
+        "file": "assets/emblems/塔拉.png",
+        "wikiFile": "Logo_塔拉.png",
+        "sourceUrl": "https://media.prts.wiki/c/cb/Logo_%E5%A1%94%E6%8B%89.png",
+        "dims": "510x510",
+        "bytes": 20533
+      },
+      {
+        "name": "塞壬唱片",
+        "file": "assets/emblems/塞壬唱片.svg",
+        "wikiFile": "Logo_塞壬唱片.svg",
+        "sourceUrl": "https://media.prts.wiki/d/df/Logo_%E5%A1%9E%E5%A3%AC%E5%94%B1%E7%89%87.svg",
+        "dims": "512x129",
+        "bytes": 6306
+      },
+      {
+        "name": "巴别塔",
+        "file": "assets/emblems/巴别塔.png",
+        "wikiFile": "Logo_巴别塔.png",
+        "sourceUrl": "https://media.prts.wiki/b/b9/Logo_%E5%B7%B4%E5%88%AB%E5%A1%94.png",
+        "dims": "510x510",
+        "bytes": 34221
+      },
+      {
+        "name": "彩虹小队",
+        "file": "assets/emblems/彩虹小队.png",
+        "wikiFile": "Logo_彩虹小队.png",
+        "sourceUrl": "https://media.prts.wiki/7/76/Logo_%E5%BD%A9%E8%99%B9%E5%B0%8F%E9%98%9F.png",
+        "dims": "512x512",
+        "bytes": 97516
+      },
+      {
+        "name": "拉特兰",
+        "file": "assets/emblems/拉特兰.png",
+        "wikiFile": "Logo_拉特兰.png",
+        "sourceUrl": "https://media.prts.wiki/e/e9/Logo_%E6%8B%89%E7%89%B9%E5%85%B0.png",
+        "dims": "510x510",
+        "bytes": 36953
+      },
+      {
+        "name": "整合运动",
+        "file": "assets/emblems/整合运动.png",
+        "wikiFile": "Logo_整合运动_黑底.png",
+        "sourceUrl": "https://media.prts.wiki/9/9a/Logo_%E6%95%B4%E5%90%88%E8%BF%90%E5%8A%A8_%E9%BB%91%E5%BA%95.png",
+        "dims": "512x512",
+        "bytes": 30721,
+        "normalized": "去黑底（整幅不透明，抠掉亮度<40 的底板像素）"
+      },
+      {
+        "name": "格拉斯哥帮",
+        "file": "assets/emblems/格拉斯哥帮.png",
+        "wikiFile": "Logo_格拉斯哥帮.png",
+        "sourceUrl": "https://media.prts.wiki/7/70/Logo_%E6%A0%BC%E6%8B%89%E6%96%AF%E5%93%A5%E5%B8%AE.png",
+        "dims": "510x510",
+        "bytes": 56240
+      },
+      {
+        "name": "汐斯塔",
+        "file": "assets/emblems/汐斯塔.png",
+        "wikiFile": "Logo_汐斯塔.png",
+        "sourceUrl": "https://media.prts.wiki/2/2d/Logo_%E6%B1%90%E6%96%AF%E5%A1%94.png",
+        "dims": "510x510",
+        "bytes": 31626
+      },
+      {
+        "name": "深池",
+        "file": "assets/emblems/深池.png",
+        "wikiFile": "Logo_深池.png",
+        "sourceUrl": "https://media.prts.wiki/6/62/Logo_%E6%B7%B1%E6%B1%A0.png",
+        "dims": "510x510",
+        "bytes": 20533
+      },
+      {
+        "name": "深海猎人",
+        "file": "assets/emblems/深海猎人.png",
+        "wikiFile": "Logo_深海猎人.png",
+        "sourceUrl": "https://media.prts.wiki/c/cf/Logo_%E6%B7%B1%E6%B5%B7%E7%8C%8E%E4%BA%BA.png",
+        "dims": "510x510",
+        "bytes": 37884
+      },
+      {
+        "name": "炎-岁",
+        "file": "assets/emblems/炎-岁.png",
+        "wikiFile": "Logo_炎-岁.png",
+        "sourceUrl": "https://media.prts.wiki/a/af/Logo_%E7%82%8E-%E5%B2%81.png",
+        "dims": "510x510",
+        "bytes": 64039
+      },
+      {
+        "name": "炎-龙门",
+        "file": "assets/emblems/炎-龙门.png",
+        "wikiFile": "Logo_炎-龙门.png",
+        "sourceUrl": "https://media.prts.wiki/f/f8/Logo_%E7%82%8E-%E9%BE%99%E9%97%A8.png",
+        "dims": "510x510",
+        "bytes": 51111
+      },
+      {
+        "name": "炎",
+        "file": "assets/emblems/炎.png",
+        "wikiFile": "Logo_炎.png",
+        "sourceUrl": "https://media.prts.wiki/0/0c/Logo_%E7%82%8E.png",
+        "dims": "510x510",
+        "bytes": 57156
+      },
+      {
+        "name": "玻利瓦尔",
+        "file": "assets/emblems/玻利瓦尔.png",
+        "wikiFile": "Logo_玻利瓦尔.png",
+        "sourceUrl": "https://media.prts.wiki/5/5a/Logo_%E7%8E%BB%E5%88%A9%E7%93%A6%E5%B0%94.png",
+        "dims": "512x512",
+        "bytes": 20024
+      },
+      {
+        "name": "米诺斯",
+        "file": "assets/emblems/米诺斯.png",
+        "wikiFile": "Logo_米诺斯.png",
+        "sourceUrl": "https://media.prts.wiki/7/72/Logo_%E7%B1%B3%E8%AF%BA%E6%96%AF.png",
+        "dims": "512x512",
+        "bytes": 60108
+      },
+      {
+        "name": "红松骑士团",
+        "file": "assets/emblems/红松骑士团.png",
+        "wikiFile": "Logo_红松骑士团.png",
+        "sourceUrl": "https://media.prts.wiki/7/7b/Logo_%E7%BA%A2%E6%9D%BE%E9%AA%91%E5%A3%AB%E5%9B%A2.png",
+        "dims": "510x510",
+        "bytes": 19520
+      },
+      {
+        "name": "终末地工业",
+        "file": "assets/emblems/终末地工业.png",
+        "wikiFile": "Logo_终末地工业.png",
+        "sourceUrl": "https://media.prts.wiki/8/8d/Logo_%E7%BB%88%E6%9C%AB%E5%9C%B0%E5%B7%A5%E4%B8%9A.png",
+        "dims": "430x372",
+        "bytes": 69858,
+        "normalized": "取反（不透明像素亮度 p90=23 < 128，深色描线在黑底上不可见）"
+      },
+      {
+        "name": "维多利亚",
+        "file": "assets/emblems/维多利亚.png",
+        "wikiFile": "Logo_维多利亚.png",
+        "sourceUrl": "https://media.prts.wiki/1/14/Logo_%E7%BB%B4%E5%A4%9A%E5%88%A9%E4%BA%9A.png",
+        "dims": "510x510",
+        "bytes": 53334
+      },
+      {
+        "name": "罗德岛-精英干员",
+        "file": "assets/emblems/罗德岛-精英干员.png",
+        "wikiFile": "Logo_罗德岛-精英干员.png",
+        "sourceUrl": "https://media.prts.wiki/0/0f/Logo_%E7%BD%97%E5%BE%B7%E5%B2%9B-%E7%B2%BE%E8%8B%B1%E5%B9%B2%E5%91%98.png",
+        "dims": "510x510",
+        "bytes": 52802
+      },
+      {
+        "name": "罗德岛",
+        "file": "assets/emblems/罗德岛.png",
+        "wikiFile": "Logo_罗德岛.png",
+        "sourceUrl": "https://media.prts.wiki/4/41/Logo_%E7%BD%97%E5%BE%B7%E5%B2%9B.png",
+        "dims": "510x510",
+        "bytes": 39608
+      },
+      {
+        "name": "莱塔尼亚",
+        "file": "assets/emblems/莱塔尼亚.png",
+        "wikiFile": "Logo_莱塔尼亚.png",
+        "sourceUrl": "https://media.prts.wiki/3/32/Logo_%E8%8E%B1%E5%A1%94%E5%B0%BC%E4%BA%9A.png",
+        "dims": "510x510",
+        "bytes": 47765
+      },
+      {
+        "name": "莱欧斯小队",
+        "file": "assets/emblems/莱欧斯小队.png",
+        "wikiFile": "Logo_莱欧斯小队.png",
+        "sourceUrl": "https://media.prts.wiki/9/9e/Logo_%E8%8E%B1%E6%AC%A7%E6%96%AF%E5%B0%8F%E9%98%9F.png",
+        "dims": "510x510",
+        "bytes": 59265
+      },
+      {
+        "name": "莱茵生命",
+        "file": "assets/emblems/莱茵生命.png",
+        "wikiFile": "Logo_莱茵生命.png",
+        "sourceUrl": "https://media.prts.wiki/b/b4/Logo_%E8%8E%B1%E8%8C%B5%E7%94%9F%E5%91%BD.png",
+        "dims": "510x510",
+        "bytes": 20730
+      },
+      {
+        "name": "萨尔贡",
+        "file": "assets/emblems/萨尔贡.png",
+        "wikiFile": "Logo_萨尔贡.png",
+        "sourceUrl": "https://media.prts.wiki/8/8e/Logo_%E8%90%A8%E5%B0%94%E8%B4%A1.png",
+        "dims": "510x510",
+        "bytes": 20440
+      },
+      {
+        "name": "萨米",
+        "file": "assets/emblems/萨米.png",
+        "wikiFile": "Logo_萨米.png",
+        "sourceUrl": "https://media.prts.wiki/6/60/Logo_%E8%90%A8%E7%B1%B3.png",
+        "dims": "510x510",
+        "bytes": 57244
+      },
+      {
+        "name": "行动组A4",
+        "file": "assets/emblems/行动组A4.png",
+        "wikiFile": "Logo_行动组A4.png",
+        "sourceUrl": "https://media.prts.wiki/d/db/Logo_%E8%A1%8C%E5%8A%A8%E7%BB%84A4.png",
+        "dims": "510x510",
+        "bytes": 57605
+      },
+      {
+        "name": "行动预备组A1",
+        "file": "assets/emblems/行动预备组A1.png",
+        "wikiFile": "Logo_行动预备组A1.png",
+        "sourceUrl": "https://media.prts.wiki/4/4d/Logo_%E8%A1%8C%E5%8A%A8%E9%A2%84%E5%A4%87%E7%BB%84A1.png",
+        "dims": "510x510",
+        "bytes": 33454
+      },
+      {
+        "name": "行动预备组A4",
+        "file": "assets/emblems/行动预备组A4.png",
+        "wikiFile": "Logo_行动预备组A4.png",
+        "sourceUrl": "https://media.prts.wiki/b/b4/Logo_%E8%A1%8C%E5%8A%A8%E9%A2%84%E5%A4%87%E7%BB%84A4.png",
+        "dims": "510x510",
+        "bytes": 33431
+      },
+      {
+        "name": "行动预备组A6",
+        "file": "assets/emblems/行动预备组A6.png",
+        "wikiFile": "Logo_行动预备组A6.png",
+        "sourceUrl": "https://media.prts.wiki/4/48/Logo_%E8%A1%8C%E5%8A%A8%E9%A2%84%E5%A4%87%E7%BB%84A6.png",
+        "dims": "510x510",
+        "bytes": 34886
+      },
+      {
+        "name": "谢拉格",
+        "file": "assets/emblems/谢拉格.png",
+        "wikiFile": "Logo_谢拉格.png",
+        "sourceUrl": "https://media.prts.wiki/d/d8/Logo_%E8%B0%A2%E6%8B%89%E6%A0%BC.png",
+        "dims": "510x510",
+        "bytes": 55807
+      },
+      {
+        "name": "贾维团伙",
+        "file": "assets/emblems/贾维团伙.png",
+        "wikiFile": "Logo_贾维团伙.png",
+        "sourceUrl": "https://media.prts.wiki/5/58/Logo_%E8%B4%BE%E7%BB%B4%E5%9B%A2%E4%BC%99.png",
+        "dims": "510x510",
+        "bytes": 76363
+      },
+      {
+        "name": "阿戈尔",
+        "file": "assets/emblems/阿戈尔.png",
+        "wikiFile": "Logo_阿戈尔.png",
+        "sourceUrl": "https://media.prts.wiki/5/5e/Logo_%E9%98%BF%E6%88%88%E5%B0%94.png",
+        "dims": "510x510",
+        "bytes": 31613
+      },
+      {
+        "name": "雷姆必拓",
+        "file": "assets/emblems/雷姆必拓.png",
+        "wikiFile": "Logo_雷姆必拓.png",
+        "sourceUrl": "https://media.prts.wiki/e/ee/Logo_%E9%9B%B7%E5%A7%86%E5%BF%85%E6%8B%93.png",
+        "dims": "510x510",
+        "bytes": 21152
+      },
+      {
+        "name": "鲤氏侦探事务所",
+        "file": "assets/emblems/鲤氏侦探事务所.png",
+        "wikiFile": "Logo_鲤氏侦探事务所.png",
+        "sourceUrl": "https://media.prts.wiki/6/6d/Logo_%E9%B2%A4%E6%B0%8F%E4%BE%A6%E6%8E%A2%E4%BA%8B%E5%8A%A1%E6%89%80.png",
+        "dims": "510x510",
+        "bytes": 42032
+      },
+      {
+        "name": "黑钢国际",
+        "file": "assets/emblems/黑钢国际.png",
+        "wikiFile": "Logo_黑钢国际.png",
+        "sourceUrl": "https://media.prts.wiki/8/8f/Logo_%E9%BB%91%E9%92%A2%E5%9B%BD%E9%99%85.png",
+        "dims": "510x510",
+        "bytes": 12339
+      },
+      {
+        "name": "龙门近卫局",
+        "file": "assets/emblems/龙门近卫局.png",
+        "wikiFile": "Logo_龙门近卫局.png",
+        "sourceUrl": "https://media.prts.wiki/c/c3/Logo_%E9%BE%99%E9%97%A8%E8%BF%91%E5%8D%AB%E5%B1%80.png",
+        "dims": "510x510",
+        "bytes": 63107
+      }
+    ]
+  }
+}

@@ -22,15 +22,28 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 #[Fillable([
     'name', 'slug', 'world', 'codename', 'birth_place', 'birth_place_id', 'race_id',
     'kind', 'title', 'reign_start_index', 'reign_end_index',
-    'description', 'wiki_slug', 'avatar', 'sort_order',
+    'description', 'wiki_slug', 'avatar', 'splashes', 'sort_order',
 ])]
 class Character extends Model
 {
+    /**
+     * 立绘的变体号 → 展示名。
+     *
+     * 键与来源一一对应（PRTS 的 `立绘_<干员>_1.png` / `_2.png`），因此这一列里存的是
+     * 键而不是「精英二」这三个字：换一种说法只改这里，数据不必动。时装按 `skinN`
+     * 命名，展示名在 `splashVariantLabel()` 里拼 —— 它有无穷多个，不适合进常量表。
+     */
+    public const SPLASH_VARIANTS = [
+        '1' => '精英1',
+        '2' => '精英2',
+    ];
+
     protected function casts(): array
     {
         return [
             'world' => World::class,
             'kind' => CharacterKind::class,
+            'splashes' => 'array',
         ];
     }
 
@@ -259,6 +272,78 @@ class Character extends Model
     public function avatarUrl(): ?string
     {
         return filled($this->avatar) ? asset((string) $this->avatar) : null;
+    }
+
+    /* ------------------------------------------------------------------ 立绘 */
+
+    /**
+     * 立绘清单，已排好序并转成可用 URL。
+     *
+     * 视图直接拿来渲染，不需要自己解析那列 JSON、也不需要自己排序 —— 摆放顺序
+     * （精英一 → 精英二 → 时装）是数据的性质，不是某一页的排版偏好。
+     *
+     * 空数组是常态：塔卫二的人员在来源侧没有立绘，历史人物根本不在干员名单里。
+     * 视图据此整块不渲染，而不是渲染一张碎图。
+     *
+     * @return list<array{key: string, label: string, url: string}>
+     */
+    public function splashList(): array
+    {
+        $list = [];
+
+        foreach ($this->splashes ?? [] as $key => $relative) {
+            if (! filled($relative)) {
+                continue;
+            }
+
+            $key = (string) $key;
+
+            $list[] = [
+                'key' => $key,
+                'label' => self::splashVariantLabel($key),
+                'url' => asset((string) $relative),
+            ];
+        }
+
+        usort($list, fn (array $a, array $b) => self::splashVariantSortKey($a['key'])
+            <=> self::splashVariantSortKey($b['key']));
+
+        return $list;
+    }
+
+    /** 是否有立绘可展示。 */
+    public function hasSplash(): bool
+    {
+        return $this->splashList() !== [];
+    }
+
+    /** 变体号的展示名。`2` → 精英2；`skin3` → 时装3；认不出就原样返回。 */
+    public static function splashVariantLabel(string $key): string
+    {
+        if (isset(self::SPLASH_VARIANTS[$key])) {
+            return self::SPLASH_VARIANTS[$key];
+        }
+
+        return preg_match('/^skin(\d+)$/', $key, $m) === 1 ? '时装'.$m[1] : $key;
+    }
+
+    /**
+     * 排序键。精英化状态在前、时装在后，各自按序号；认不出的键排在最后且按名字排。
+     *
+     * 拼成字符串而不是返回数组：PHP 用 `<=>` 比数组是先比长度再逐元素，
+     * 在这里会把「时装1」排到「精英2」前面。
+     */
+    public static function splashVariantSortKey(string $key): string
+    {
+        if (isset(self::SPLASH_VARIANTS[$key])) {
+            return sprintf('0-%03d', (int) $key);
+        }
+
+        if (preg_match('/^skin(\d+)$/', $key, $m) === 1) {
+            return sprintf('1-%03d', (int) $m[1]);
+        }
+
+        return '2-'.$key;
     }
 
     /* ------------------------------------------------------------------ 查询 */

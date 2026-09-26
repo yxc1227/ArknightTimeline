@@ -184,6 +184,33 @@ Artisan::command('bg:contours', function () {
 })->purpose('生成终末地风格等高线全站背景（App\Support\ContourField）');
 
 /*
+|--------------------------------------------------------------------------
+| 干员立绘：导出「库里存在」的泰拉人物名，供采集脚本清理孤儿图
+|--------------------------------------------------------------------------
+|
+| 立绘清单由 bin/fetch-splashes.py 从 PRTS 枚举全部 `立绘_*` 图片生成，
+| 而 PRTS 的名单比本仓库大 —— 未实装的干员（F91、郁金香…）、卫戍协议形态、
+| 建制的无名单位（预备干员-XX）、制作组彩蛋（海猫、小色）…… 这些「库里没有的人」
+| 会以孤儿文件的形式混进仓库。采集脚本用本命令的输出把它们挡在门外。
+|
+| 判定口径与 App\Support\CharacterSplashes::associate() **完全一致**：
+| 按 world()->value + 名字精确匹配，不做模糊推断。这里导出的就是「会被关联上」
+| 的那批名字 —— 多一个少一个，两边的名单都会对不上。
+*/
+Artisan::command('splashes:names', function () {
+    $names = \App\Models\Character::query()->get()
+        ->filter(fn (\App\Models\Character $c) => $c->world()->value === \App\Enums\World::Terra->value)
+        ->pluck('name')
+        ->unique()
+        ->sort()
+        ->values();
+
+    $this->line($names->join("\n"));
+
+    return self::SUCCESS;
+})->purpose('输出泰拉侧全部人物名，供立绘采集脚本过滤「库里不存在」的人物');
+
+/*
 | 巡检频率的选择依据：时间线内容的写入是低频的（日均几十次），
 | 而全量巡检随条目数线性增长，因此按小时而非按分钟执行；
 | 写入时的即时体检已经覆盖了「新问题立刻可见」的需求。
