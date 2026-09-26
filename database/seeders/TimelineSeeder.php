@@ -723,9 +723,11 @@ class TimelineSeeder extends Seeder
             ['歌蕾蒂娅', 'Gladiia', '深海猎人', null],
 
             // ---- 塔卫二（《明日方舟：终末地》）----
-            // 代号与种族一律留空：社区资料给的是中文名与转写，没有可靠出处，
-            // 按本文件既有原则「拿不准的字段宁可缺失，也不要写错」处理。
-            // 管理员与佩丽卡的英文写法在社区里就有多种转写，同样不猜。
+            // 代号与种族一律留空：写库时没有可靠出处，按本文件既有原则
+            // 「拿不准的字段宁可缺失，也不要写错」处理。
+            // 英文名随后由名单的 nameEn **只补不覆盖**（fillMissingFacts）——
+            // 那是来源（fz.wiki）给的写法，照抄而不是自己转写；
+            // 阿伯莉不在干员名单里（她不是可玩干员），因此保持空。
             ['管理员', null, '终末地工业', null, '终末地工业协议回收部门的负责人，塔罗斯历 152 年于帝江号苏醒时失去记忆。', null, 'talos'],
             ['佩丽卡', null, '终末地工业', null, '终末地工业的技术监督。', null, 'talos'],
             ['陈千语', null, '终末地工业', null, '终末地工业的特勤干员。', null, 'talos'],
@@ -2384,6 +2386,14 @@ TXT,
         $character->factions()->syncWithoutDetaching($entry['affiliations']);
 
         $fill = [];
+
+        // 代号空着 ≠ 人工核过：名单给的英文名（PRTS 的 en / fz 的 nameEn）是**来源写法**，
+        // 照抄而不是自己转写 —— 手工批次当初对「管理员」这类社区转写存疑而留空，
+        // 名单接入后有了可靠出处，这里只补空、绝不覆盖已填写的代号。
+        // 不在名单里的人物（历史人物、剧情人物，以及塔卫二的阿伯莉）没有来源，保持空。
+        if (blank($character->codename) && $entry['codename'] !== null) {
+            $fill['codename'] = $entry['codename'];
+        }
 
         if (blank($character->race_id) && $entry['race'] !== null && isset($races[$entry['race']])) {
             $fill['race_id'] = $races[$entry['race']];
