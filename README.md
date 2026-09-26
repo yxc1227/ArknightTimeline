@@ -136,7 +136,7 @@ docker exec -w /app <容器名> php artisan migrate:fresh --seed
 php artisan migrate:fresh --seed      # 重建数据库 + 灌入起始语料
                                       # 种子对条目是「已存在就整批跳过」：改了种子内容要用 fresh，
                                       # 单跑 db:seed 只会刷新字典
-php artisan test                      # 全量测试（339 项 / 3181 断言）
+php artisan test                      # 全量测试（339 项 / 3207 断言）
 ./vendor/bin/pint                     # 代码风格（Laravel 官方风格）
 
 php artisan timeline:scan             # 全量一致性体检 → 异常收件箱
@@ -314,7 +314,7 @@ reviewer 锁定后 editor 完全不可写、出处归属（`source_user`）限�
 ## 测试
 
 ```bash
-php artisan test                      # 339 项 / 3181 断言
+php artisan test                      # 339 项 / 3207 断言
 ```
 
 <details>

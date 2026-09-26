@@ -18,6 +18,8 @@ use App\Models\Race;
 use App\Models\Term;
 use App\Models\User;
 use App\Models\UserIdentity;
+use App\Support\CharacterAvatars;
+use App\Support\CharacterSplashes;
 use App\Support\CorpusLocator;
 use App\Support\EntityEmblems;
 use App\Support\TerraDate;
@@ -560,9 +562,88 @@ class SeederIntegrityTest extends TestCase
      */
     public function test_dictionary_dimensions_are_consistent(): void
     {
-        // 种族：《大地巡旅》第四章立目的那些必须带概要
-        $this->assertGreaterThanOrEqual(16, Race::count(), '种族字典未覆盖书里立目的种族');
-        $this->assertGreaterThan(0, Race::whereNotNull('description')->count());
+        /*
+         * 种族：《大地巡旅》第四章立目的那些必须带概要。
+         *
+         * 第四章立目 32 个（另有温迪戈 / 鬼 / 阿纳萨只在萨卡兹条目里带过一句，也各自写明了）。
+         * 门槛卡在 32 而不是「大于 0」：这一栏曾经烂在「16 个有概要、另 20 个留空」上，
+         * 理由写的是「书上没立目」——而那是检索失误：后半章的标题丢了 `#` 前缀，
+         * 书名号里的目录结构对了，条目却数漏了。
+         */
+        $this->assertGreaterThanOrEqual(32, Race::whereNotNull('description')->count(), '书里立目的种族应当都有概要');
+        $this->assertGreaterThanOrEqual(36, Race::count(), '种族字典未覆盖书里立目的种族');
+
+        /*
+         * 核心机制词条要写够：源石与天灾这一层是全书写「泰拉怎么运转」的地方，
+         * 2026-09-26 依书把它们从「一句话定义」加厚到 80 字以上 —— 这条防的是退回一句话。
+         */
+        foreach (['天灾', '源石自然灾害', '源石尘降', '晶体外壳', '源石原矿', '固化源石结晶'] as $core) {
+            $term = Term::where('name', $core)->first();
+
+            $this->assertNotNull($term, "核心词条「{$core}」不在字典里");
+            $this->assertGreaterThanOrEqual(
+                80,
+                mb_strlen((string) $term->definition),
+                "核心词条「{$core}」的定义又变回一句话了",
+            );
+        }
+
+        /*
+         * 地名里「国家」这一层要写够：《大地巡旅》第五章给每个国家都写了整卷
+         * （概览 + 历史 + 地理 + 政治 + 结语）。2026-09-26 依书把这一层加厚过一轮 ——
+         * 这里卡的是**平均数**（个别国家本来就短），防的是整体退回一句话。
+         */
+        $this->assertGreaterThanOrEqual(
+            100,
+            (int) Place::where('world', 'terra')->where('kind', 'nation')->get()
+                ->avg(fn ($place) => mb_strlen((string) $place->description)),
+            '国家级的说明又退回一句话了',
+        );
+
+        /*
+         * 地名整体也要写够：2026-09-26 依书加厚过两轮（国家 42→143、王国 30→153、城市 28→53）。
+         * 同样卡平均 —— 省级、村级与莱塔尼亚九大区这类条目本来就只有一行注记（并列清单式），
+         * 强求逐条只会让它们掺水。
+         */
+        $this->assertGreaterThanOrEqual(
+            50,
+            (int) Place::where('world', 'terra')->get()
+                ->avg(fn ($place) => mb_strlen((string) $place->description)),
+            '泰拉地名的说明整体又变薄了',
+        );
+
+        /*
+         * 第六章「组织卷」的九个主打条目（含补篇罗德岛）要写够：它们在书里各自有专节
+         * （莱茵生命、黑钢国际、喀兰贸易、锈锤、雷神工业、太阳谷机械工业、企鹅物流、
+         * 鲤氏侦探事务所、罗德岛）。2026-09-26 依书把这一卷逐个加厚过一轮。
+         * 其余组织不在此列 —— 见下面「政体必须有说明」那条的注脚。
+         */
+        foreach ([
+            '莱茵生命', '黑钢国际', '喀兰贸易', '锈锤', '雷神工业',
+            '太阳谷机械工业', '企鹅物流', '鲤氏侦探事务所', '罗德岛',
+        ] as $name) {
+            $faction = Faction::where('name', $name)->first();
+
+            $this->assertNotNull($faction, "第六章组织卷的「{$name}」不在阵营库里");
+            $this->assertGreaterThanOrEqual(
+                100,
+                mb_strlen((string) $faction?->description),
+                "第六章组织卷的「{$name}」说明过薄",
+            );
+        }
+
+        /*
+         * 政体必须有说明：《大地巡旅》第五章给每个国家都写了整卷（概览 + 历史 + 地理 + 政治），
+         * 因此「某个国家没有说明」只可能是漏了，不可能是书里没有。
+         * 组织则不强求 —— 罗德岛的内部编制、塔卫二的组织与联动单位都不在这本书里，留空是诚实的。
+         */
+        $this->assertSame(
+            0,
+            Faction::where('kind', 'polity')
+                ->where(fn ($q) => $q->whereNull('description')->orWhere('description', ''))
+                ->count(),
+            '有政体没有说明：书里逐卷写过国家，这一栏不该有空',
+        );
         $this->assertSame(0, Character::whereNotNull('race_id')->whereDoesntHave('race')->count());
         $this->assertGreaterThan(0, Character::has('race')->count(), '没有任何人物挂上种族字典，链接等于没用');
 
@@ -644,6 +725,145 @@ class SeederIntegrityTest extends TestCase
         $this->assertSame([], $stats['unknown'], '清单里有字典之外的名字');
         $this->assertGreaterThan(0, $stats['places'], '没有一枚徽记落到地名上');
         $this->assertGreaterThan(0, $stats['factions'], '没有一枚徽记落到阵营上');
+    }
+
+    /**
+     * 立绘路径必须指向真的存在的文件，变体号要认得出来。
+     *
+     * 与徽记同一条理由：立绘也是「锦上添花」的字段，烂掉时页面只会安静地不显示那一张，
+     * 或者更糟 —— 渲染一张碎图。因此断言的是**路径与文件的一致性**，
+     * 而不是「有多少张」；覆盖面的边界另见下一个用例。
+     */
+    public function test_splashes_resolve_to_files_that_exist(): void
+    {
+        $characters = Character::whereNotNull('splashes')->get();
+
+        $this->assertGreaterThan(0, $characters->count(), '没有任何人物挂上立绘，这一列等于没用');
+
+        $images = 0;
+
+        foreach ($characters as $character) {
+            foreach ($character->splashes as $key => $relative) {
+                $images++;
+
+                // 变体号决定展示名，认不出的键会写进库里却没有任何标签可用
+                $this->assertMatchesRegularExpression(
+                    '/^([12]|skin\d+)$/',
+                    (string) $key,
+                    $character->name.' 的立绘变体号无法识别：'.$key,
+                );
+
+                // 目录按**世界**分（与头像同一规矩）：来源是采集期的事，运行期只按世界落盘
+                $this->assertStringStartsWith(
+                    'assets/splashes/'.$character->world()->value.'/',
+                    $relative,
+                    $character->name.' 的立绘不在所属世界的目录里：'.$relative,
+                );
+
+                $this->assertFileExists(
+                    public_path($relative),
+                    $character->name.' 的立绘指向了不存在的文件：'.$relative,
+                );
+
+                // 库里存相对路径、界面上是 URL —— 两者都要能成立
+                foreach ($character->splashList() as $art) {
+                    $this->assertStringStartsWith('http', $art['url']);
+                    $this->assertNotSame('', $art['label']);
+                }
+            }
+        }
+
+        // 一个人可以有多张：合并计数应当不少于有立绘的人数
+        $this->assertGreaterThanOrEqual($characters->count(), $images);
+
+        // 立绘按**精英一 → 精英二 → 时装**排；顺序错了页面上的标签与图会对不上
+        foreach ($characters->take(20) as $character) {
+            $keys = array_column($character->splashList(), 'key');
+            $sorted = $keys;
+            usort($sorted, fn ($a, $b) => Character::splashVariantSortKey($a)
+                <=> Character::splashVariantSortKey($b));
+            $this->assertSame($sorted, $keys, $character->name.' 的立绘清单没有按变体排序');
+        }
+    }
+
+    /**
+     * 立绘清单要能落到实处，且三类「空」各有各的性质，不能混为一谈。
+     *
+     *  - 塔卫二整侧为空：fz.wiki 的干员条目只有文字与图标，**来源侧就没有立绘**
+     *    （见 bin/fetch-splashes.py 的说明）。写成断言是为了让将来的人一眼看到
+     *    「这不是漏抓」—— 少一条断言，下次就会有人去补一个补不出来的东西。
+     *  - 历史人物为空：他们根本不在干员名单里，没有立绘是应当的。
+     *  - 「清单之外的名字」应为空：清单入库前已经过 `bin/fetch-splashes.py --prune-missing`
+     *    清理 —— 来源名单比本仓库大的那一批（未实装的、卫戍协议形态、建制的无名单位）
+     *    不会以孤儿文件的形式进仓库，因此这里出现任何「清单之外」都是真的脱节，必须查。
+     */
+    public function test_splash_manifest_links_every_entry(): void
+    {
+        $manifest = base_path('docs/splashes.json');
+
+        // 清单随仓库分发（记的是相对 public/ 的路径，与头像那份 ignore 掉的外部清单相反），
+        // 所以本地不该缺它
+        $this->assertFileExists($manifest, 'docs/splashes.json 随仓库分发，不应缺失');
+
+        $stats = CharacterSplashes::associate($manifest, public_path());
+
+        $this->assertNotNull($stats);
+        $this->assertSame(0, $stats['missing_file'], '清单里的立绘有文件缺失');
+        $this->assertGreaterThan(0, $stats['characters'], '没有一位人物关联上立绘');
+
+        /*
+         * 「清单之外的名字」应当为空 —— 这与徽记那份同一标准，而不是放宽。
+         *
+         * 立绘清单在入库前已经过 `bin/fetch-splashes.py --prune-missing`：PRTS 的
+         * 立绘名单比本仓库大（未实装的 F91、卫戍协议形态、预备干员-XX 建制单位、
+         * 制作组彩蛋），这些「库里没有的人」连同孤儿文件一起被清掉，不会进仓库。
+         * 因此这里一旦出现任何「清单之外」，都是真的脱节（要么清单忘了清理、
+         * 要么字典漏了该收录的人），而不是「来源本来就没有」的正当差异 ——
+         * 那种差异已经被采集层的清理吸收掉了。
+         *
+         * 断言的是「空」而不是「某份名字清单」，因为那份清单已经不存在了；
+         * 若要新增人名，正路是改字典（数据库），不是在这里追加例外。
+         */
+        $this->assertSame(
+            [],
+            $stats['unknown'],
+            '清单里出现了库里不存在的人物 —— 先跑 bin/fetch-splashes.py --prune-missing，'
+                .'再核对是否漏收了该人物',
+        );
+
+        // 有立绘的人里，绝大多数应当**两档都有**（精英一与精英二）；全库一个双档的
+        // 人都没有，说明多变体从清单到页面这一整条链断在某一处，而不是来源本来就没有
+        $this->assertGreaterThan(
+            0,
+            Character::whereNotNull('splashes')->get()
+                ->filter(fn (Character $c) => count((array) $c->splashes) > 1)
+                ->count(),
+            '没有任何人物挂上两档立绘，多变体这条路等于没走通',
+        );
+
+        // 覆盖率：泰拉干员里应当有八成以上拿得到立绘。这条比「清单之外有几个」更能
+        // 说明问题 —— 清单抓漏、关联退化都会先在这里掉下去。
+        $terraOperators = Character::ofWorld(World::Terra)->where('kind', CharacterKind::Operator);
+        $total = $terraOperators->count();
+        $covered = $terraOperators->whereNotNull('splashes')->count();
+
+        $this->assertGreaterThan(
+            (int) ($total * 0.8),
+            $covered,
+            "泰拉干员的立绘覆盖率低于八成（{$covered}/{$total}）",
+        );
+
+        $this->assertSame(
+            0,
+            Character::ofWorld(World::Talos)->whereNotNull('splashes')->count(),
+            '塔卫二在来源侧没有立绘，这一列应当整侧为空',
+        );
+
+        $this->assertSame(
+            0,
+            Character::where('kind', CharacterKind::Historical)->whereNotNull('splashes')->count(),
+            '历史人物不在干员名单里，不该有立绘',
+        );
     }
 
     /**
