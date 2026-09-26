@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * `location` 保留为**展示原文**，`place_id` 是结构化链接：前者永远不会丢，
  * 后者让「按地区层级聚合」成为可能。
  */
-#[Fillable(['name', 'slug', 'parent_id', 'kind', 'faction_id', 'world', 'description', 'sort_order'])]
+#[Fillable(['name', 'slug', 'parent_id', 'kind', 'faction_id', 'world', 'description', 'logo', 'sort_order'])]
 class Place extends Model
 {
     /** 层级类型（书里出现过的那些）。 */
@@ -122,6 +122,20 @@ class Place extends Model
         return implode(' · ', $names);
     }
 
+    /* ------------------------------------------------------------------ 徽记 */
+
+    /**
+     * 徽记地址。
+     *
+     * 库里存的是相对路径，这里负责变成可用的 URL。绝大多数地名没有徽记 ——
+     * 维基只给了 47 枚，而地名有 164 个 —— 为 null 时视图退回纯文字，
+     * 绝不渲染一张碎图出来。
+     */
+    public function logoUrl(): ?string
+    {
+        return filled($this->logo) ? asset((string) $this->logo) : null;
+    }
+
     public function toApiArray(): array
     {
         return [
@@ -133,6 +147,7 @@ class Place extends Model
             'parent_id' => $this->parent_id,
             'faction_id' => $this->faction_id,
             'world' => $this->world instanceof World ? $this->world->value : World::default()->value,
+            'logo' => $this->logoUrl(),
         ];
     }
 }

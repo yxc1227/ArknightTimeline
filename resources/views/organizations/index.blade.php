@@ -96,6 +96,11 @@
                 @foreach ($group['items'] as $org)
                     <div class="card" id="org-{{ $org->slug }}">
                         <div class="row" style="align-items:baseline">
+                            @if ($org->logoUrl())
+                                {{-- 徽记：来源维基的阵营标志。名字就在旁边，alt 留空免得读屏重复 --}}
+                                <img class="emblem emblem--lg" src="{{ $org->logoUrl() }}"
+                                     alt="" loading="lazy" width="34" height="34">
+                            @endif
                             <strong>{{ $org->name }}</strong>
                             @if (filled($org->full_name))
                                 <span class="faint small mono">{{ $org->full_name }}</span>

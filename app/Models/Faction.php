@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'slug', 'parent_id', 'full_name', 'color', 'description', 'sort_order', 'kind'])]
+#[Fillable(['name', 'slug', 'parent_id', 'full_name', 'color', 'description', 'logo', 'sort_order', 'kind'])]
 class Faction extends Model
 {
     public function parent(): BelongsTo
@@ -133,6 +133,19 @@ class Faction extends Model
         return 'slug';
     }
 
+    /* ------------------------------------------------------------------ 徽记 */
+
+    /**
+     * 徽记地址。
+     *
+     * 库里存的是相对路径，这里负责变成可用的 URL。维基只给了少数阵营的徽记，
+     * 内部部门这类没有 —— 为 null 时视图退回纯文字，绝不渲染一张碎图出来。
+     */
+    public function logoUrl(): ?string
+    {
+        return filled($this->logo) ? asset((string) $this->logo) : null;
+    }
+
     public function toApiArray(): array
     {
         return [
@@ -144,6 +157,7 @@ class Faction extends Model
             'parent_id' => $this->parent_id,
             'kind' => $this->kind->value,
             'kind_label' => $this->kind->label(),
+            'logo' => $this->logoUrl(),
         ];
     }
 }

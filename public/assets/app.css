@@ -203,6 +203,7 @@ html.motion [data-reveal].is-revealed {
 
 html.motion .operator-card__avatar,
 html.motion .operator-mark--img,
+html.motion .emblem,
 html.motion .avatar {
     animation: fade-in .36s var(--ease);
 }
@@ -1964,6 +1965,37 @@ img.avatar {
     background: var(--bg-input);
     border: 1px solid var(--border-strong);
 }
+
+/* ---------------------------------------------------------------- 徽记 */
+
+/* 地名与组织的徽记（来源与关联规则见 app/Support/EntityEmblems，采集见 bin/fetch-emblems.py）。
+   与头像同一几何 —— 直角、1px 描边、输入底色 —— 只有 object-fit 反过来：
+   头像是人像照，裁掉边缘仍是那个人；徽记是标志，裁掉边缘就等于毁掉它，
+   所以用 contain 整幅放下（徽记自带留白，内容占画布中位数 0.86，缩到 26px 仍认得清）。
+   没有徽记是常态：维基只给了 47 枚，而地名有 164 个、阵营有 147 个，
+   因此这里**不留空位** —— 没有就不出现，读者看到的是纯文字行，
+   而不是一个「缺了一块」的洞。 */
+.emblem {
+    flex: 0 0 auto;
+    /* 父级多半是 align-items: baseline（名称与全称按基线对齐），
+       而图片的「基线」是它的下边缘 —— 照抄会吊在文字上方。单独按中线摆。 */
+    align-self: center;
+    width: 26px;
+    height: 26px;
+    padding: 1px;
+    object-fit: contain;
+    background: var(--bg-input);
+    border: 1px solid var(--border-strong);
+}
+
+/* 组织页用大档：那里一条就是读者扫读的单位，徽记是辨识的第一眼。 */
+.emblem--lg { width: 34px; height: 34px; }
+
+/* 地名表的一行：徽记在左，名称 / 别名 / 下辖数 / 说明在右。
+   层级缩进仍由外层的 padding-left 负责，所以子地名的徽记会同名字一起右移。 */
+.place-row { display: flex; align-items: center; gap: 8px; }
+
+.place-row__main { min-width: 0; }
 
 .operator-card__name {
     font-size: 15px;

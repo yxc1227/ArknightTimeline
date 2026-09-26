@@ -19,6 +19,7 @@ use App\Models\Term;
 use App\Models\User;
 use App\Models\UserIdentity;
 use App\Support\CorpusLocator;
+use App\Support\EntityEmblems;
 use App\Support\TerraDate;
 use App\Support\TerraDateParser;
 use App\Support\TerraTourCorpus;
@@ -584,6 +585,65 @@ class SeederIntegrityTest extends TestCase
         $this->assertGreaterThan(0, Term::count());
         $this->assertSame(0, Term::whereRaw("coalesce(definition, '') = ''")->count());
         $this->assertSame(0, Term::whereNotIn('category', array_keys(Term::CATEGORIES))->count());
+    }
+
+    /**
+     * 徽记路径必须指向真的存在的文件，且路径形状统一。
+     *
+     * 徽记是「锦上添花」的字段：绝大多数实体没有它，页面照常工作 —— 所以它烂掉时
+     * 最不容易被发现。列里写了值、文件名写错，页面只会安静地不显示那一枚，
+     * 或者更糟：渲染一张碎图。因此这里断言的是**路径与文件的一致性**，
+     * 而不是「有多少枚」。
+     */
+    public function test_emblems_resolve_to_files_that_exist(): void
+    {
+        $entities = Place::whereNotNull('logo')->get()
+            ->merge(Faction::whereNotNull('logo')->get());
+
+        $this->assertGreaterThan(0, $entities->count(), '没有任何实体挂上徽记，这一列等于没用');
+
+        foreach ($entities as $entity) {
+            $this->assertFileExists(
+                public_path($entity->logo),
+                $entity->name.' 的徽记指向了不存在的文件：'.$entity->logo,
+            );
+
+            // 落盘一律扁平地放在 assets/emblems/ 下：同一枚徽记常同时属于同名的
+            // 一行地名与一行政体，按世界分目录反而要把同一张图放两处。
+            $this->assertStringStartsWith('assets/emblems/', $entity->logo);
+            $this->assertStringNotContainsString(
+                '/',
+                substr($entity->logo, strlen('assets/emblems/')),
+                $entity->name.' 的徽记不在 assets/emblems/ 的平铺层里：'.$entity->logo,
+            );
+
+            // 库里存相对路径、界面上是 URL —— 两者都要能成立
+            $this->assertStringStartsWith('http', (string) $entity->logoUrl());
+        }
+    }
+
+    /**
+     * 徽记清单必须能把**每一条**都落到实处。
+     *
+     * 清单随仓库分发（与头像清单不同，它记的是相对路径），所以本地不该缺它。
+     * 三类缺口都要报错而不只是跳过：
+     *  - 清单不在 → 关联整段失效，页面上所有徽记一起消失；
+     *  - 文件缺失 → 那是一条注定 404 的路径；
+     *  - 字典之外的名字 → 清单与字典开始脱节，该重新对一遍。
+     */
+    public function test_emblem_manifest_links_every_entry(): void
+    {
+        $manifest = base_path('docs/emblems.json');
+
+        $this->assertFileExists($manifest, 'docs/emblems.json 随仓库分发，不应缺失');
+
+        $stats = EntityEmblems::associate($manifest, public_path());
+
+        $this->assertNotNull($stats);
+        $this->assertSame(0, $stats['missing_file'], '清单里的徽记有文件缺失');
+        $this->assertSame([], $stats['unknown'], '清单里有字典之外的名字');
+        $this->assertGreaterThan(0, $stats['places'], '没有一枚徽记落到地名上');
+        $this->assertGreaterThan(0, $stats['factions'], '没有一枚徽记落到阵营上');
     }
 
     /**

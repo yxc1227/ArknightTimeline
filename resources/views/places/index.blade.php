@@ -99,29 +99,37 @@
                         <tr>
                             {{-- 按深度缩进：层级是这一栏存在的理由，压平成一样的缩进就白做了 --}}
                             <td id="place-{{ $place->slug }}">
-                                <div style="padding-left:{{ $node['depth'] * 14 }}px">
-                                    @if ($node['depth'] > 0)
-                                        <span class="faint mono">└</span>
+                                <div class="place-row" style="padding-left:{{ $node['depth'] * 14 }}px">
+                                    @if ($place->logoUrl())
+                                        {{-- 徽记：来源维基的国徽 / 地区标志。名字就在旁边，alt 留空免得读屏重复 --}}
+                                        <img class="emblem" src="{{ $place->logoUrl() }}"
+                                             alt="" loading="lazy" width="26" height="26">
                                     @endif
-                                    <strong>{{ $place->name }}</strong>
-                                    {{-- 别名是数据而不是匹配规则，因此要摆在读者看得见的地方：
-                                         条目里写「乌萨斯」时，读者得能认出它就是这里说的「乌萨斯帝国」 --}}
-                                    @if (filled($place->aliases))
-                                        <span class="faint small">又称 {{ implode('、', $place->aliases) }}</span>
-                                    @endif
-                                    @if ($node['depth'] === 0 && $place->children->isNotEmpty())
-                                        @unless ($filtered)
-                                            {{-- 这个数字说的是「全部下辖」；树被筛过之后行数对不上它，
-                                                 与其让读者对着行数数不齐，不如在筛选中把它收起来 --}}
-                                            <span class="faint small">（{{ $place->children->count() }} 个下辖）</span>
-                                        @endunless
-                                    @endif
-                                </div>
-                                @if (filled($place->description))
-                                    <div class="faint small" style="padding-left:{{ $node['depth'] * 14 }}px">
-                                        {{ $place->description }}
+
+                                    <div class="place-row__main">
+                                        @if ($node['depth'] > 0)
+                                            <span class="faint mono">└</span>
+                                        @endif
+                                        <strong>{{ $place->name }}</strong>
+                                        {{-- 别名是数据而不是匹配规则，因此要摆在读者看得见的地方：
+                                             条目里写「乌萨斯」时，读者得能认出它就是这里说的「乌萨斯帝国」 --}}
+                                        @if (filled($place->aliases))
+                                            <span class="faint small">又称 {{ implode('、', $place->aliases) }}</span>
+                                        @endif
+                                        @if ($node['depth'] === 0 && $place->children->isNotEmpty())
+                                            @unless ($filtered)
+                                                {{-- 这个数字说的是「全部下辖」；树被筛过之后行数对不上它，
+                                                     与其让读者对着行数数不齐，不如在筛选中把它收起来 --}}
+                                                <span class="faint small">（{{ $place->children->count() }} 个下辖）</span>
+                                            @endunless
+                                        @endif
+
+                                        @if (filled($place->description))
+                                            {{-- 说明跟着名称走，不再单独补缩进：它已经在被缩进的那一列里了 --}}
+                                            <div class="faint small">{{ $place->description }}</div>
+                                        @endif
                                     </div>
-                                @endif
+                                </div>
                             </td>
                             <td><span class="badge">{{ \App\Models\Place::KINDS[$place->kind] ?? $place->kind }}</span></td>
                             <td class="small">{{ $place->faction?->name ?? '—' }}</td>
