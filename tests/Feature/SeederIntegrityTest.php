@@ -925,11 +925,12 @@ class SeederIntegrityTest extends TestCase
      */
     public function test_talos_roster_is_imported_from_the_endfield_wiki(): void
     {
-        // 已有条目不被覆盖：管理员的人工简介与归属都还在
+        // 已有条目不被覆盖：管理员的人工简介与归属都还在；
+        // 代号是**空字段** —— 由名单的 nameEn 照来源写法补上（只补空，不覆盖既有值）
         $endministrator = Character::where('name', '管理员')->firstOrFail();
         $this->assertStringContainsString('失去记忆', (string) $endministrator->description);
         $this->assertSame('终末地工业', $endministrator->factions->first()->name);
-        $this->assertNull($endministrator->codename);
+        $this->assertSame('Endministrator', $endministrator->codename);
 
         // 性别变体没有变成独立的三行
         $this->assertSame(1, Character::where('name', 'like', '管理员%')->count());
@@ -944,12 +945,15 @@ class SeederIntegrityTest extends TestCase
         // 清波寨既是地名树里的聚落、也是名单里的势力 —— 两个维度各自回答不同的问题
         $this->assertSame('清波寨', Character::where('name', '汤汤')->firstOrFail()->factions->first()->name);
 
-        // 名单给出的种族全部对得上字典（「■■」这类遮盖写法不算数，但管理员那两条已归并）
+        // 名单给出的种族全部对得上字典（「■■」这类遮盖写法不算数，但管理员那两条已归并）。
+        // 例外集必须**恰好**是「管理员」：Wiki 对它的种族写着遮盖符「■■」——
+        // 来源自己说「不公开」，留空才是正确行为，不是导入把数据丢了
         $this->assertSame(
-            0,
+            ['管理员'],
             Character::ofWorld(World::Talos)->where('kind', 'operator')
-                ->whereNotNull('codename')->whereNull('race_id')->count(),
-            '有带代号的人员没有对上种族字典',
+                ->whereNotNull('codename')->whereNull('race_id')
+                ->orderBy('name')->pluck('name')->all(),
+            '除来源标注「不公开」的人之外，带代号的人员都必须对上种族字典',
         );
 
         // 名单里的势力要在组织页上看得见 —— 只进库不上页，等于没完善
